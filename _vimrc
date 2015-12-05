@@ -65,6 +65,7 @@ function! s:mkdir(dir, force)
     call mkdir(iconv(a:dir, &encoding, &termencoding), 'p')
   endif
 endfunction
+
 " 保存されていないファイルがある時は、終了前に保存確認
 set confirm
 " 保存されていないファイルがある時でも、別のファイルを開ける
@@ -82,4 +83,7 @@ set sidescrolloff=10
 " 文字のないところにカーソル移動を可能にする
 set virtualedit=block
 
-""test
+"""""キーバインド"""""
+" insert mode 時、Ctrl + j で Esc
+imap <C-j> <Esc>
+

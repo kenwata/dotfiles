@@ -1,0 +1,1 @@
+/Users/watanabekenta/dotfiles/_gvimrc
