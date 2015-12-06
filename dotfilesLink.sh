@@ -1,4 +1,6 @@
 #!/bin/bash
 ln -s ~/dotfiles/.vimrc ~/.vimrc
 ln -s ~/dotfiles/.gvim ~/.gvimrc
-ls -s ~/dotfiles/.gitconfig ~/.gitconfig
+ln -s ~/dotfiles/.gitconfig ~/.gitconfig
+ln -s ~/dotfiles/zsh/.zshrc ~/.zshrc
+
