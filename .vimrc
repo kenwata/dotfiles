@@ -18,7 +18,23 @@ call neobundle#begin(expand('~/.vim/bundle/'))
 NeoBundleFetch 'Shougo/neobundle.vim'
 
 " My Bundle Here:
+" ファイルオープンを便利にできる
 NeoBundle 'Shougo/unite.vim'
+
+" ファイルのtree表示
+NeoBundle 'scrooloose/nerdtree'
+" VimからGitの操作ができる
+NeoBundle 'tpope/vim-fugitive'
+"" 設定
+" grep検索の実行後にQuickFix Listを表示
+autocmd QuickFixCmdPost *grep* cwindow
+" ステータス行に現在のgitブランチを表示する
+set statusline+=%{fugitive#statusline()}
+
+" カラーテーマ(solarized)
+NeoBundle 'altercation/vim-colors-solarized'
+
+" and more...
 
 call neobundle#end()
 
@@ -58,7 +74,14 @@ set wrap
 set title
 
 " コードの色分け
-syntax on
+syntax enable
+" 背景色
+set background=light
+" カラースキーマ指定
+colorscheme solarized
+
+" 入力中のコマンドを表示
+set showcmd
 
 " 一行の文字数が多くてもきちんと描画する
 set display=lastline
@@ -155,3 +178,5 @@ inoremap <C-k> <Up>
 inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
+" その他設定(後で変える)
+""set background=dark
