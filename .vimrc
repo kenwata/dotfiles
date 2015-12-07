@@ -1,3 +1,36 @@
+"**************************************************
+" プラグイン管理(NeoBundle)
+"**************************************************
+if has('vim_starting')
+    if &compatible
+        set nocompatible
+    endif
+
+    " Required:
+    set runtimepath+=~/.vim/bundle/neobundle.vim/
+endif
+
+" Required:
+call neobundle#begin(expand('~/.vim/bundle/'))
+
+" Let NeoBundle manage NeoBundle
+" Required:
+NeoBundleFetch 'Shougo/neobundle.vim'
+
+" My Bundle Here:
+NeoBundle 'Shougo/unite.vim'
+
+call neobundle#end()
+
+" Required:
+filetype plugin indent on
+
+" vim起動時にインストールされていないプラグインがあれば
+" 起動時にインストールする
+NeoBundleCheck
+
+"****************************************************************
+
 "********** vi 互換ではなく Vim のデフォルト設定にする **********
 set nocompatible
 
