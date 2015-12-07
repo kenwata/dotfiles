@@ -31,6 +31,10 @@ autocmd QuickFixCmdPost *grep* cwindow
 " ステータス行に現在のgitブランチを表示する
 set statusline+=%{fugitive#statusline()}
 
+" カラーテーマ(solarized)
+NeoBundle 'altercation/vim-colors-solarized'
+
+
 call neobundle#end()
 
 " Required:
@@ -69,7 +73,11 @@ set wrap
 set title
 
 " コードの色分け
-syntax on
+syntax enable
+" 背景色
+set background=light
+" カラースキーマ指定
+colorscheme solarized
 
 " 入力中のコマンドを表示
 set showcmd
