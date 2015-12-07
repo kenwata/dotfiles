@@ -67,9 +67,12 @@ set display=lastline
 "********** ハイライト表示 **********
 " 対応括弧をハイライト表示する
 set showmatch
+
 " 対応括弧のハイライト時間を短くする(0.1秒)
 set matchtime=1
 
+" 行をハイライト
+set cursorline
 
 "********** 補完 **********
 " 
