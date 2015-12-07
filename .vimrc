@@ -34,6 +34,7 @@ set statusline+=%{fugitive#statusline()}
 " カラーテーマ(solarized)
 NeoBundle 'altercation/vim-colors-solarized'
 
+" and more...
 
 call neobundle#end()
 
