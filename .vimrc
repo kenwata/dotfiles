@@ -152,6 +152,9 @@ set virtualedit=block
 inoremap <silent> jj <Esc>
 inoremap <silent> <C-j> j
 
+" ; と : を入れ替え
+noremap ; :
+
 " カーソル移動
 inoremap <C-j> <Down>
 inoremap <C-k> <Up>
