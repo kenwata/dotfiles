@@ -149,5 +149,12 @@ set virtualedit=block
 "********** キーバインド **********
 "+++++ insert mode +++++ 
 " Ctrl + j で Esc
-imap <C-j> <Esc>
+inoremap <silent> jj <Esc>
+inoremap <silent> <C-j> j
+
+" カーソル移動
+inoremap <C-j> <Down>
+inoremap <C-k> <Up>
+inoremap <C-h> <Left>
+inoremap <C-l> <Right>
 
