@@ -1,7 +1,6 @@
 "**************************************************
 " プラグイン管理(NeoBundle)
 "**************************************************
-"
 if has('vim_starting')
     if &compatible
         set nocompatible
@@ -54,6 +53,28 @@ NeoBundle 'altercation/vim-colors-solarized'
 NeoBundle 'Shougo/neocomplcache'
 NeoBundle 'Shougo/neosnippet'
 NeoBundle 'Shougo/neosnippet-snippets'
+
+" 画面を分割してプログラムを実行などする時
+NeoBundle 'thinca/vim-quickrun'
+
+" 各種言語のリファレンスを参照する
+"""" git cloneが必要
+"""" git clone https://github.com/thinca/vim-ref.git
+"""" NeoBundle 'thinca/vim-ref'
+"""" cabal install hoogleが必要
+"----- Haskellプラグイン -----
+" インデントプラグイン
+NeoBundle 'kana/vim-filetype-haskell'
+" 外部コマンドghc(コンパイルコマンド)をvimから使えるように
+NeoBundle 'eagletmt/ghcmod-vim'
+" Haskellの補完プラグイン
+NeoBundle 'ujihisa/neco-ghc'
+" シンタックスチェック
+" なんかが足らない
+"NeoBundle 'osyo-manga/vim-watchdogs'
+"""""" import文用
+"""""" hoogleが必要
+""""""NeoBundle 'ujihisa/unite-haskellimport'
 
 call neobundle#end()
 
