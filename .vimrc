@@ -31,10 +31,6 @@ autocmd QuickFixCmdPost *grep* cwindow
 " ステータス行に現在のgitブランチを表示する
 set statusline+=%{fugitive#statusline()}
 
-" カラーテーマ
-
-" and more...
-
 call neobundle#end()
 
 " Required:
