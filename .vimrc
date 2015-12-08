@@ -46,6 +46,14 @@ set statusline+=%{fugitive#statusline()}
    \     },
    \ }
 
+" カラーテーマ(solarized)
+NeoBundle 'altercation/vim-colors-solarized'
+
+" 補完系
+NeoBundle 'Shougo/neocomplcache'
+NeoBundle 'Shougo/neosnippet'
+NeoBundle 'Shougo/neosnippet-snippets'
+
 call neobundle#end()
 
 " Required:
@@ -84,12 +92,11 @@ set wrap
 set title
 
 " コードの色分け
-"syntax enable
-syntax on
+syntax enable
 " 背景色
-"set background=light
+set background=light
 " カラースキーマ指定
-"colorscheme solarized
+colorscheme solarized
 
 " 入力中のコマンドを表示
 set showcmd
