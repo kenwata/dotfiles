@@ -23,6 +23,10 @@ NeoBundle 'Shougo/unite.vim'
 
 " ファイルのtree表示
 NeoBundle 'scrooloose/nerdtree'
+" 設定
+let NERDTreeShowHidden = 1
+nnoremap <silent><C-e> :NERDTreeToggle<CR>
+
 " VimからGitの操作ができる
 NeoBundle 'tpope/vim-fugitive'
 "" 設定
@@ -82,6 +86,9 @@ set showcmd
 " 一行の文字数が多くてもきちんと描画する
 set display=lastline
 
+" terminalで256色表示を使う
+set t_Co=256
+
 "********** ハイライト表示 **********
 " 対応括弧をハイライト表示する
 set showmatch
@@ -127,6 +134,10 @@ set autoindent
 
 " 改行時に入力された行の末尾に合わせて次のインデントを増減させる
 set smartindent
+
+" TAB,EFOなどを可視化
+set list
+set listchars=tab:>.,trail:_,eol:↲,extends:>,precedes:<,nbsp:%
 
 "********** ファイル処理関連 ********** 
 " :e などでファイルを開く際にフォルダが存在しない場合は自動作成
@@ -174,5 +185,14 @@ inoremap <C-k> <Up>
 inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
-" その他設定(後で変える)
-""set background=dark
+"+++++ normal mode +++++
+" 分割ウィンドウ移動 
+noremap <C-H> <C-W>h
+noremap <C-J> <C-W>j
+noremap <C-K> <C-W>k
+noremap <C-L> <C-W>l
+
+"********** その他設定(後で変える) **********
+" terminal接続を高速にする
+set ttyfast
+
