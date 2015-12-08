@@ -39,12 +39,12 @@ set statusline+=%{fugitive#statusline()}
 " vimproc (vimの非同期処理のためのもの)
  NeoBundle 'Shougo/vimproc', {
    \ 'build' : {
-       \ 'windows' : 'make -f make_mingw32.mak',
-           \ 'cygwin' : 'make -f make_cygwin.mak',
-               \ 'mac' : 'make -f make_mac.mak',
-                   \ 'unix' : 'make -f make_unix.mak',
-                     \ },
-                       \ }
+   \     'windows' : 'make -f make_mingw32.mak',
+   \     'cygwin' : 'make -f make_cygwin.mak',
+   \     'mac' : 'make -f make_mac.mak',
+   \     'unix' : 'make -f make_unix.mak',
+   \     },
+   \ }
 
 call neobundle#end()
 
@@ -230,3 +230,4 @@ set ttyfast
  noremap <C-Z> :Unite file_mru<CR>
 " sourcesを「今開いているファイルのディレクトリ」とする
 noremap :uff :<C-u>UniteWithBufferDir file -buffer-name=file<CR>
+
