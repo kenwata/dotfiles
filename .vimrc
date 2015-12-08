@@ -20,6 +20,8 @@ NeoBundleFetch 'Shougo/neobundle.vim'
 " My Bundle Here:
 " ファイルオープンを便利にできる
 NeoBundle 'Shougo/unite.vim'
+" Unite.vimで最近使ったファイルを表示できるようにする
+NeoBundle 'Shougo/neomru.vim'
 
 " ファイルのtree表示
 NeoBundle 'scrooloose/nerdtree'
@@ -33,6 +35,16 @@ NeoBundle 'tpope/vim-fugitive'
 autocmd QuickFixCmdPost *grep* cwindow
 " ステータス行に現在のgitブランチを表示する
 set statusline+=%{fugitive#statusline()}
+
+" vimproc (vimの非同期処理のためのもの)
+ NeoBundle 'Shougo/vimproc', {
+   \ 'build' : {
+       \ 'windows' : 'make -f make_mingw32.mak',
+           \ 'cygwin' : 'make -f make_cygwin.mak',
+               \ 'mac' : 'make -f make_mac.mak',
+                   \ 'unix' : 'make -f make_unix.mak',
+                     \ },
+                       \ }
 
 call neobundle#end()
 
@@ -207,3 +219,14 @@ nnoremap sQ :<C-u>bd<CR>
 " terminal接続を高速にする
 set ttyfast
 
+"" uniteの設定
+" 入力モードで開始する
+ let g:unite_enable_start_insert=1
+" バッファ一覧
+ noremap <C-P> :Unite buffer<CR>
+" ファイル一覧
+ noremap <C-N> :Unite -buffer-name=file file<CR>
+" 最近使ったファイルの一覧
+ noremap <C-Z> :Unite file_mru<CR>
+" sourcesを「今開いているファイルのディレクトリ」とする
+noremap :uff :<C-u>UniteWithBufferDir file -buffer-name=file<CR>
