@@ -25,7 +25,6 @@ NeoBundle 'Shougo/unite.vim'
 NeoBundle 'scrooloose/nerdtree'
 " 設定
 let NERDTreeShowHidden = 1
-nnoremap <silent><C-e> :NERDTreeToggle<CR>
 
 " VimからGitの操作ができる
 NeoBundle 'tpope/vim-fugitive'
@@ -191,6 +190,18 @@ noremap <C-H> <C-W>h
 noremap <C-J> <C-W>j
 noremap <C-K> <C-W>k
 noremap <C-L> <C-W>l
+
+" Ctrl + e でNERDTree表示、非表示
+nnoremap <silent> <C-e> :NERDTreeToggle<CR>
+
+" ウィンドウを水平に分割
+nnoremap ss :<C-u>sp<CR>
+" ウィンドウを垂直に分割
+nnoremap sv :<C-u>vs<CR>
+" ウィンドウを閉じる
+nnoremap sq :<C-u>q<CR>
+" バッファを閉じる
+nnoremap sQ :<C-u>bd<CR>
 
 "********** その他設定(後で変える) **********
 " terminal接続を高速にする
