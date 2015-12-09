@@ -150,6 +150,12 @@ set smartindent
 set list
 set listchars=tab:>.,trail:_,eol:↲,extends:>,precedes:<,nbsp:%
 
+"********** コピペなど **********
+" クリップボードを利用する設定
+set guioptions+=a
+" yankしたテキストをクリップボードに格納
+set clipboard=unnamed,autoselect
+
 "********** ファイル処理関連 ********** 
 " :e などでファイルを開く際にフォルダが存在しない場合は自動作成
 function! s:mkdir(dir, force)
@@ -173,7 +179,7 @@ set nobackup
 
 "********** カーソル移動関連の設定 ********** 
 " 上下4行の視界を確保
-set scrolloff=4
+set scrolloff=8
 
 " 左右スクロール時の視界を確保
 set sidescrolloff=10
@@ -230,4 +236,6 @@ set ttyfast
  noremap <C-Z> :Unite file_mru<CR>
 " sourcesを「今開いているファイルのディレクトリ」とする
 noremap :uff :<C-u>UniteWithBufferDir file -buffer-name=file<CR>
+
+set background=dark
 
