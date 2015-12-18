@@ -210,7 +210,9 @@ set listchars=tab:>.,trail:_,eol:↲,extends:>,precedes:<,nbsp:%
 set guioptions+=a
 
 " yankしたテキストをクリップボードに格納
-set clipboard=unnamed,autoselect 
+" linux環境ではunnamedplus、その他環境はunnamedで設定するらしい
+set clipboard=unnamedplus,autoselect 
+"set clipboard=unnamedplus,autoselect 
 
 " クリップボードにコピーしたものをvimで編集しているものに貼り付けた時、
 " 自動的にset pasteモードに入り、自動インデントをしないようにする
