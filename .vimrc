@@ -188,10 +188,10 @@ endfunction
 set expandtab
 
 " タブの文字数を4つの空白にする
-set tabstop=4
+set tabstop=2
 
 " 自動インデントでずれる幅を空白4つ分に設定
-set shiftwidth=4
+set shiftwidth=2
 
 " 改行時に前のインデントを継続させる
 set autoindent
