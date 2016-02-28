@@ -33,11 +33,9 @@ NeoBundle 'tpope/vim-fugitive'
 "" 設定
 " grep検索の実行後にQuickFix Listを表示
 " autocmd QuickFixCmdPost *grep* cwindow
-" ステータス行に現在のgitブランチを表示する
-"set statusline+=%{fugitive#statusline()}
 
 " vimproc (vimの非同期処理のためのもの)
- NeoBundle 'Shougo/vimproc', {
+NeoBundle 'Shougo/vimproc', {
    \ 'build' : {
    \     'windows' : 'make -f make_mingw32.mak',
    \     'cygwin' : 'make -f make_cygwin.mak',
@@ -110,6 +108,8 @@ let g:Powerline_symbols = 'fancy'
 
 set laststatus=2
 
+NeoBundle 'nathanaelkane/vim-indent-guides'
+
 call neobundle#end()
 
 " Required:
@@ -133,6 +133,7 @@ set fileencoding=utf-8
 
 
 scriptencoding utf-8
+
 "********** ウィンドウ表示 **********
 " 行番号を表示
 set number
@@ -152,7 +153,7 @@ set title
 " コードの色分け
 syntax enable
 " 背景色
-set background=light
+set background=dark
 " カラースキーマ指定
 colorscheme solarized
 
@@ -332,7 +333,7 @@ let g:lightline = {
         \   'charcode': 'MyCharCode',
         \   'gitgutter': 'MyGitGutter',
         \ },
-        \ 'separator': { 'left': "", 'right': "" },
+        \ 'separator': { 'left': " ", 'right': " " },
         \ 'subseparator': {'left': "", 'right': "" }
         \ }
 
@@ -437,3 +438,9 @@ function! MyCharCode()
   return "'". char ."' ". nr
 endfunction
 
+" インデントプラグインの設定
+let g:indent_guides_auto_colors=0
+autocmd VimEnter,Colorscheme * :hi IndentGuidesOdd   ctermbg=110
+autocmd VimEnter,Colorscheme * :hi IndentGuidesEven  ctermbg=140
+let g:indent_guides_enable_on_vim_startup=1
+let g:indent_guides_guide_size=1
