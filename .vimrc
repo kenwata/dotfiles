@@ -51,7 +51,6 @@ NeoBundle 'kana/vim-submode'
 " vim-powerline (フォントをこの中から取得し、パッチを当てる)
 NeoBundle 'Lokaltog/vim-powerline'
 
-
 " ステータスラインのカスタマイズのためのプラグイン
 NeoBundle 'itchyny/lightline.vim'
 " lightline.vimと連携しているgitプラグイン
@@ -82,6 +81,9 @@ let g:Powerline_symbols = 'fancy'
 " let g:Powerline_symbols = 'compatible'
 
 set laststatus=2
+
+" カラースキーマ(会社用)
+NeoBundle 'nanotech/jellybeans.vim'
 
 NeoBundle 'nathanaelkane/vim-indent-guides'
 call neobundle#end()
@@ -131,6 +133,8 @@ syntax on
 set background=dark
 " カラースキーマ指定
 "colorscheme solarized
+" 会社ではこちらで。。。
+colorscheme jellybeans
 
 " 入力中のコマンドを表示
 set showcmd
@@ -156,6 +160,8 @@ set cursorline
 " 検索結果をハイライト
 set hlsearch
 
+" ESC二回押しでハイライトを消す
+nmap <silent> <Esc><Esc> :nohlsearch<CR>
 
 "**************************************************
 "   補完
@@ -177,49 +183,6 @@ set smartcase
 
 " 置換時、gオプションをデフォルトで有効にする
 set gdefault
-
-"**************************************************
-"   ステータスライン
-"**************************************************
-"" ステータスラインを表示
-"set laststatus=2
-
-"" ステータスラインにファイル名を表示
-"set statusline+=%<%F
-"
-"" 現在行を表示
-"set statusline+=[%p%%]
-"
-"" 挿入モード時、ステータスラインの色を変更
-"let g:hi_insert = 'highlight StatusLine guifg=darkblue guibg=darkyellow gui=none ctermfg=blue ctermbg=yellow cterm=none'
-"
-"if has('syntax')
-"  augroup InsertHook
-"    autocmd!
-"    autocmd InsertEnter * call s:StatusLine('Enter')
-"    autocmd InsertLeave * call s:StatusLine('Leave')
-"  augroup END
-"endif
-"
-"let s:slhlcmd = ''
-"function! s:StatusLine(mode)
-"  if a:mode == 'Enter'
-"    silent! let s:slhlcmd = 'highlight ' . s:GetHighlight('StatusLine')
-"    silent exec g:hi_insert
-"  else
-"    highlight clear StatusLine
-"    silent exec s:slhlcmd
-"  endif
-"endfunction
-"
-"function! s:GetHighlight(hi)
-"  redir => hl
-"  exec 'highlight '.a:hi
-"  redir END
-"  let hl = substitute(hl, '[\r\n]', '', 'g')
-"  let hl = substitute(hl, 'xxx', '', '')
-"  return hl
-"endfunction
 
 "**************************************************
 "   タブ/インデントの設定
@@ -252,7 +215,6 @@ set guioptions+=a
 " yankしたテキストをクリップボードに格納
 " linux環境ではunnamedplus、その他環境はunnamedで設定するらしい
 set clipboard=unnamedplus,autoselect 
-"set clipboard=unnamedplus,autoselect 
 
 " クリップボードにコピーしたものをvimで編集しているものに貼り付けた時、
 " 自動的にset pasteモードに入り、自動インデントをしないようにする
@@ -372,8 +334,6 @@ noremap <C-Z> :Unite file_mru<CR>
 " sourcesを「今開いているファイルのディレクトリ」とする
 noremap :uff :<C-u>UniteWithBufferDir file -buffer-name=file<CR>
 
-set background=dark
-
 "*************************************************
 " vim-submodeの設定
 "*************************************************
@@ -430,8 +390,8 @@ let g:lightline = {
         \   'charcode': 'MyCharCode',
         \   'gitgutter': 'MyGitGutter',
         \ },
-        \ 'separator': { 'left': "", 'right': "" },
-        \ 'subseparator': {'left': "|", 'right': "|" }
+        \ 'separator': { 'left': "\ue0b0", 'right': "\ue0b2" },
+        \ 'subseparator': {'left': "\ue0b1", 'right': "\ue0b3" }
         \ }
 
 function! MyModified()
@@ -439,7 +399,7 @@ function! MyModified()
 endfunction
 
 function! MyReadonly()
-  return &ft !~? 'help\|vimfiler\|gundo' && &ro ? "" : ''
+  return &ft !~? 'help\|vimfiler\|gundo' && &ro ? "\ue0a2" : ''
 endfunction
 
 function! MyFilename()
@@ -455,7 +415,7 @@ function! MyFugitive()
   try
     if &ft !~? 'vimfiler\|gundo' && exists('*fugitive#head')
       let _ = fugitive#head()
-      return strlen(_) ? ""._ : ''
+      return strlen(_) ? " \ue0a0 "._ : ''
     endif
   catch
   endtry
