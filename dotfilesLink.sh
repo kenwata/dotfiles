@@ -5,4 +5,6 @@ ln -s ~/dotfiles/.gvim ~/.gvimrc
 # もう入っている場合はいらない
 #mkdir ~/.vim/bundle
 #git clone https://github.com/Shougo/neobundle.vim.git ~/.vim/bundle/neobundle.vim
+#mkdir ~/.vim/after/ftplugin
+#cp ~/dotfiles/.ftplugin/* ~/.vim/after/ftplugin/
 
