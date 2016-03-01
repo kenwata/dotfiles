@@ -261,14 +261,14 @@ set virtualedit=block
 inoremap <silent> jj <Esc>
 inoremap <silent> <C-j> j
 
-" ; と : を入れ替え
-noremap ; :
-
 " カーソル移動
 inoremap <C-j> <Down>
 inoremap <C-k> <Up>
 inoremap <C-h> <Left>
 inoremap <C-l> <Right>
+
+" 行末まで一気に移動
+inoremap <C-e> <END>
 
 "+++++ normal mode +++++
 " 分割ウィンドウ移動 
@@ -288,6 +288,9 @@ nnoremap sv :<C-u>vs<CR>
 nnoremap sq :<C-u>q<CR>
 " バッファを閉じる
 nnoremap sQ :<C-u>bd<CR>
+
+" ; と : を入れ替え
+noremap ; :
 
 "********** その他設定(後で変える) **********
 " terminal接続を高速にする
