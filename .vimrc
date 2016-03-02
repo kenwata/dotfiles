@@ -108,9 +108,37 @@ let g:Powerline_symbols = 'fancy'
 " "文字化けするならこっち使う
 " let g:Powerline_symbols = 'compatible'
 
-set laststatus=2
-
+" インデントを表示
 NeoBundle 'nathanaelkane/vim-indent-guides'
+
+" テキストオブジェクトで置換
+NeoBundle 'kana/vim-operator-replace.git'
+NeoBundle 'kana/vim-operator-user.git'
+NeoBundle 'kana/vim-textobj-user'
+
+" なんだろう？
+NeoBundle 'rhysd/vim-operator-surround'
+
+""""""""""""""""""""""""""""
+" Python plugins
+""""""""""""""""""""""""""""
+" IDEのようなオムニ補完をしてくれる
+NeoBundle 'davidhalter/jedi-vim'
+" 静的検査やスタイルチェックをかけてくれる
+NeoBundle 'andviro/flake8-vim'
+" vim標準のインデントは挙動が不審で、普通に書いていると
+" pep8に違反してしまう為、このpluginでインデント補助
+NeoBundle 'hynek/vim-python-pep8-indent'
+" vim内のPython環境と、virtualenvを連動してくれる
+NeoBundle 'jmcantrell/vim-virtualenv'
+" 編集している関数の内、ローカル変数をハイライトしてくれる
+NeoBundle 'hachibeeDI/python_hl_lvar.vim'
+" インデント単位でテキストオブジェクトを使えるようになる
+NeoBundle 'kana/vim-textobj-indent'
+" Pythonの関数やクラスをテキストオブジェクトとして扱えるようになる
+NeoBundle 'bps/vim-textobj-python'
+" 使わなかったらけす。smartinputの拡張？
+NeoBundle 'kana/vim-smartinput'
 
 call neobundle#end()
 
@@ -272,10 +300,10 @@ inoremap <C-e> <END>
 
 "+++++ normal mode +++++
 " 分割ウィンドウ移動 
-noremap <C-H> <C-W>h
-noremap <C-J> <C-W>j
-noremap <C-K> <C-W>k
-noremap <C-L> <C-W>l
+noremap sh <C-W>h
+noremap sj <C-W>j
+noremap sk <C-W>k
+noremap sl <C-W>l
 
 " Ctrl + e でNERDTree表示、非表示
 nnoremap <silent> <C-e> :NERDTreeToggle<CR>
@@ -309,6 +337,7 @@ noremap <C-Z> :Unite file_mru<CR>
 noremap :uff :<C-u>UniteWithBufferDir file -buffer-name=file<CR>
 
 "*********ステータスラインの設定**********
+set laststatus=2
 
 let g:gitgutter_sign_added = '✚ '
 let g:gitgutter_sign_modified = '➜ '
@@ -459,4 +488,7 @@ let g:indent_guides_enable_on_vim_startup=1
 let g:indent_guides_guide_size=1
 " 自動カラーを無効にする
 " let g:indent_guides_auto_colors=0
+
+" テキストオブジェクトで置換
+map R <Plug>(operator-replace)
 
