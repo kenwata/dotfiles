@@ -371,7 +371,7 @@ let g:lightline = {
         \   'charcode': 'MyCharCode',
         \   'gitgutter': 'MyGitGutter',
         \ },
-        \ 'separator': { 'left': " ", 'right': " " },
+        \ 'separator': { 'left': "", 'right': "" },
         \ 'subseparator': {'left': "", 'right': "" }
         \ }
 
@@ -491,4 +491,8 @@ let g:indent_guides_guide_size=1
 
 " テキストオブジェクトで置換
 map R <Plug>(operator-replace)
+
+" 全角記号を半角2文字分として表示
+" ※ターミナルでの設定も必要
+set ambiwidth=double
 
