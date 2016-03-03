@@ -46,8 +46,9 @@ NeoBundle 'Shougo/vimproc', {
     \     },
     \ }
 
-" カラーテーマ(solarized)
+" カラーテーマ
 NeoBundle 'altercation/vim-colors-solarized'
+NeoBundle 'w0ng/vim-hybrid'
 
 " 補完系
 NeoBundle 'Shougo/neocomplcache'
@@ -185,7 +186,7 @@ syntax enable
 " 背景色
 set background=dark
 " カラースキーマ指定
-colorscheme solarized
+colorscheme hybrid
 
 " 入力中のコマンドを表示
 set showcmd
@@ -396,7 +397,7 @@ function! MyFugitive()
   try
     if &ft !~? 'vimfiler\|gundo' && exists('*fugitive#head')
       let _ = fugitive#head()
-      return strlen(_) ? " "._ : ''
+      return strlen(_) ? ""._ : ''
     endif
   catch
   endtry
