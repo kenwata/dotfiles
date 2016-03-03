@@ -141,6 +141,30 @@ NeoBundle 'bps/vim-textobj-python'
 " 使わなかったらけす。smartinputの拡張？
 NeoBundle 'kana/vim-smartinput'
 
+"""""""""""javascript""""""""""
+NeoBundle 'moll/vim-node'
+NeoBundle 'mattn/jscomplete-vim'
+NeoBundle 'myhere/vim-nodejs-complete'
+
+autocmd FileType javascript :setl omnifunc=jscomplete#CompleteJS
+
+NeoBundleLazy 'jelera/vim-javascript-syntax', {'autoload':{'filetypes':['javascript']}}
+
+NeoBundle 'scrooloose/syntastic'
+let g:syntastic_enable_signs=1
+let g:syntastic_auto_loc_list=2
+
+let g:syntastic_javascript_checker = "jshint"
+
+" ドキュメントジェネレータ
+NeoBundle 'heavenshell/vim-jsdoc'
+
+NeoBundle 'guileen/vim-node-dict'
+au FileType javascript set dictionary+=$HOME/.vim/bundle/vim-node-dict/dict/node.dict
+"""""""""""""ここまでjavascript""""""""""""""
+
+NeoBundle 'kana/vim-submode'
+
 call neobundle#end()
 
 " Required:
@@ -274,6 +298,8 @@ set noswapfile
 " ファイル保存時にバックアップファイルを作らない
 set nobackup
 
+set nowritebackup
+
 "********** カーソル移動関連の設定 ********** 
 " 上下4行の視界を確保
 set scrolloff=4
@@ -321,6 +347,19 @@ nnoremap sQ :<C-u>bd<CR>
 " ; と : を入れ替え
 noremap ; :
 
+nnoremap so <C-w>_<C-w>|
+nnoremap sO <C-w>=
+
+" submoduleで連続入力補助を使った設定
+call submode#enter_with('bufmove', 'n', '', 's>', '<C-w>>')
+call submode#enter_with('bufmove', 'n', '', 's<', '<C-w><')
+call submode#enter_with('bufmove', 'n', '', 's+', '<C-w>+')
+call submode#enter_with('bufmove', 'n', '', 's-', '<C-w>-')
+call submode#map('bufmove', 'n', '', '>', '<C-w>>')
+call submode#map('bufmove', 'n', '', '<', '<C-w><')
+call submode#map('bufmove', 'n', '', '+', '<C-w>+')
+call submode#map('bufmove', 'n', '', '-', '<C-w>-')
+
 "********** その他設定(後で変える) **********
 " terminal接続を高速にする
 set ttyfast
@@ -337,6 +376,13 @@ noremap <C-Z> :Unite file_mru<CR>
 " sourcesを「今開いているファイルのディレクトリ」とする
 noremap :uff :<C-u>UniteWithBufferDir file -buffer-name=file<CR>
 
+" スクリーンベルを無効化
+set t_vb=
+set novisualbell
+
+" j,kによる移動を折り返されたテキストでも自然にふるまう
+nnoremap j gj
+nnoremap k gk
 "*********ステータスラインの設定**********
 set laststatus=2
 
@@ -480,9 +526,9 @@ endfunction
 " インデントプラグインの設定
 let g:indent_guides_auto_colors=0
 " 奇数インデントのカラー
-autocmd VimEnter,Colorscheme * :hi IndentGuidesOdd   ctermbg=23
+autocmd VimEnter,Colorscheme * :hi IndentGuidesOdd   ctermbg=235
 " 偶数インデントのカラー
-autocmd VimEnter,Colorscheme * :hi IndentGuidesEven  ctermbg=30
+autocmd VimEnter,Colorscheme * :hi IndentGuidesEven  ctermbg=237
 " vim立ち上げたときに、自動的にvim-indent-guidesをオンにする
 let g:indent_guides_enable_on_vim_startup=1
 " ガイドをスタートするインデントの
