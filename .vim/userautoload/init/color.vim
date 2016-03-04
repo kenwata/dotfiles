@@ -21,8 +21,5 @@ syntax enable
 " 背景色
 set background=dark
 
-" カラースキーマ指定
-colorscheme hybrid
-
 " terminalで256色表示を使う
 set t_Co=256
