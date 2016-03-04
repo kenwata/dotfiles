@@ -27,8 +27,6 @@ NeoBundle "ctrlpvim/ctrlp.vim"
 
 " ファイルのtree表示
 NeoBundle 'scrooloose/nerdtree'
-" 設定
-let NERDTreeShowHidden = 1
 
 " VimからGitの操作ができる
 NeoBundle 'tpope/vim-fugitive'
@@ -58,25 +56,6 @@ NeoBundle 'Shougo/neosnippet-snippets'
 " 画面を分割してプログラムを実行などする時
 NeoBundle 'thinca/vim-quickrun'
 
-" 各種言語のリファレンスを参照する
-"""" git cloneが必要
-"""" git clone https://github.com/thinca/vim-ref.git
-"""" NeoBundle 'thinca/vim-ref'
-"""" cabal install hoogleが必要
-"----- Haskellプラグイン -----
-" インデントプラグイン
-NeoBundle 'kana/vim-filetype-haskell'
-" 外部コマンドghc(コンパイルコマンド)をvimから使えるように
-NeoBundle 'eagletmt/ghcmod-vim'
-" Haskellの補完プラグイン
-NeoBundle 'ujihisa/neco-ghc'
-" シンタックスチェック
-" なんかが足らない
-"NeoBundle 'osyo-manga/vim-watchdogs'
-"""""" import文用
-"""""" hoogleが必要
-""""""NeoBundle 'ujihisa/unite-haskellimport'
-
 " vim-powerline (フォントをこの中から取得し、パッチを当てる)
 NeoBundle 'Lokaltog/vim-powerline'
 
@@ -105,7 +84,7 @@ NeoBundle 'Lokaltog/powerline-fontpatcher'
 " fontpatcher $HOME/.font/Ricty-Regular.ttf
 
 " Powerlineの設定
-let g:Powerline_symbols = 'fancy'
+"let g:Powerline_symbols = 'fancy'
 " "文字化けするならこっち使う
 " let g:Powerline_symbols = 'compatible'
 
@@ -120,9 +99,12 @@ NeoBundle 'kana/vim-textobj-user'
 " なんだろう？
 NeoBundle 'rhysd/vim-operator-surround'
 
-""""""""""""""""""""""""""""
-" Python plugins
-""""""""""""""""""""""""""""
+" 連続入力補助
+NeoBundle 'kana/vim-submode'
+
+""""""""""""""""""""""""""""""""""""""""
+" Python Plugins
+""""""""""""""""""""""""""""""""""""""""
 " IDEのようなオムニ補完をしてくれる
 NeoBundle 'davidhalter/jedi-vim'
 " 静的検査やスタイルチェックをかけてくれる
@@ -141,29 +123,43 @@ NeoBundle 'bps/vim-textobj-python'
 " 使わなかったらけす。smartinputの拡張？
 NeoBundle 'kana/vim-smartinput'
 
-"""""""""""javascript""""""""""
+""""""""""""""""""""""""""""""""""""""""
+" javascript Plugins
+""""""""""""""""""""""""""""""""""""""""
 NeoBundle 'moll/vim-node'
 NeoBundle 'mattn/jscomplete-vim'
 NeoBundle 'myhere/vim-nodejs-complete'
 
-autocmd FileType javascript :setl omnifunc=jscomplete#CompleteJS
-
 NeoBundleLazy 'jelera/vim-javascript-syntax', {'autoload':{'filetypes':['javascript']}}
 
 NeoBundle 'scrooloose/syntastic'
-let g:syntastic_enable_signs=1
-let g:syntastic_auto_loc_list=2
-
-let g:syntastic_javascript_checker = "jshint"
 
 " ドキュメントジェネレータ
 NeoBundle 'heavenshell/vim-jsdoc'
 
 NeoBundle 'guileen/vim-node-dict'
-au FileType javascript set dictionary+=$HOME/.vim/bundle/vim-node-dict/dict/node.dict
-"""""""""""""ここまでjavascript""""""""""""""
 
-NeoBundle 'kana/vim-submode'
+""""""""""""""""""""""""""""""""""""""""
+" Haskell Plugins
+""""""""""""""""""""""""""""""""""""""""
+" 各種言語のリファレンスを参照する
+"""" git cloneが必要
+"""" git clone https://github.com/thinca/vim-ref.git
+"""" NeoBundle 'thinca/vim-ref'
+"""" cabal install hoogleが必要
+"----- Haskellプラグイン -----
+" インデントプラグイン
+NeoBundle 'kana/vim-filetype-haskell'
+" 外部コマンドghc(コンパイルコマンド)をvimから使えるように
+NeoBundle 'eagletmt/ghcmod-vim'
+" Haskellの補完プラグイン
+NeoBundle 'ujihisa/neco-ghc'
+" シンタックスチェック
+" なんかが足らない
+"NeoBundle 'osyo-manga/vim-watchdogs'
+"""""" import文用
+"""""" hoogleが必要
+""""""NeoBundle 'ujihisa/unite-haskellimport'
 
 call neobundle#end()
 
