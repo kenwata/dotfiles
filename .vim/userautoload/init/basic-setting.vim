@@ -100,7 +100,7 @@ set nowritebackup
 
 "********** カーソル移動関連の設定 ********** 
 " 上下4行の視界を確保
-set scrolloff=4
+set scrolloff=10
 
 " 左右スクロール時の視界を確保
 set sidescrolloff=10
