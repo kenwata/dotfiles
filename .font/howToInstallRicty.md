@@ -18,3 +18,10 @@ cd path/to/git/clone/ricty
 
 # 以下、サイト参照
 http://blog.pg1x.com/entry/2014/08/10/025902-mac-iterm2-and-powerline
+
+
+
+migu-1m-*.ttfと、Inconsolate-*.ttf計4ファイルを
+ricty_generatorにぶち込んで上記shellを実行すればok!
+あとはシステムフォントファイルなんかにコピーして
+キャッシュすれば使えるはず！
