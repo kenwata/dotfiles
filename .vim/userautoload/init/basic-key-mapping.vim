@@ -10,6 +10,7 @@ inoremap <C-k> <Up>
 inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
+inoremap ,w <Esc>:<C-u>w<CR>
 "+++++ normal mode +++++
 " 分割ウィンドウ移動 
 noremap sh <C-W>h
@@ -38,7 +39,4 @@ nnoremap k gk
 
 " <Space>s で置換
 noremap <Space>s :%s/
-
-" ,wでファイルを編集したファイルを保存
-nnoremap ,w :<C-u>w<CR>
 

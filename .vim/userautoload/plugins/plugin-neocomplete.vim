@@ -28,7 +28,8 @@ if neobundle#is_installed('neocomplete')
     " <TAB>: completion.
     inoremap <expr><TAB>  pumvisible() ? "\<C-n>" : "\<TAB>"
     " <C-u>, <BS>: close popup and delete backword char.
-    "inoremap <expr><C-h> neocomplete#smart_close_popup()."\<C-u>"
+    " ctrl + u で、インデント開始まで削除
+    inoremap <expr><C-u> neocomplete#smart_close_popup()."\<C-u>"
     "inoremap <expr><BS> neocomplete#smart_close_popup()."\<C-u>"
     "inoremap <expr><C-y>  neocomplete#close_popup()
     "inoremap <expr><C-e>  neocomplete#cancel_popup()

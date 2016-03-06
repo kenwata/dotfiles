@@ -14,7 +14,7 @@ set cursorline
 set hlsearch
 
 " ESC二回押しでハイライトを消す
-nmap <silent> <Esc><Esc> :nohlsearch<CR>
+nmap <silent> <Space><Space> :nohlsearch<CR>
 
 " コードの色分け
 syntax enable
