@@ -49,7 +49,8 @@ NeoBundle 'altercation/vim-colors-solarized'
 NeoBundle 'w0ng/vim-hybrid'
 
 " 補完系
-NeoBundle 'Shougo/neocomplcache'
+" if_luaが有効ならneocompleteを使う
+NeoBundle has('lua') ? 'Shougo/neocomplete' : 'Shougo/neocomplcache'
 NeoBundle 'Shougo/neosnippet'
 NeoBundle 'Shougo/neosnippet-snippets'
 
@@ -105,24 +106,26 @@ NeoBundle 'kana/vim-submode'
 """"""""""""""""""""""""""""""""""""""""
 " Python Plugins
 """"""""""""""""""""""""""""""""""""""""
-" IDEのようなオムニ補完をしてくれる
+"" IDEのようなオムニ補完をしてくれる
 NeoBundle 'davidhalter/jedi-vim'
-" 静的検査やスタイルチェックをかけてくれる
-NeoBundle 'andviro/flake8-vim'
-" vim標準のインデントは挙動が不審で、普通に書いていると
-" pep8に違反してしまう為、このpluginでインデント補助
+"" 静的検査やスタイルチェックをかけてくれる
+"NeoBundle 'andviro/flake8-vim'
+"" vim標準のインデントは挙動が不審で、普通に書いていると
+"" pep8に違反してしまう為、このpluginでインデント補助
 NeoBundle 'hynek/vim-python-pep8-indent'
-" vim内のPython環境と、virtualenvを連動してくれる
-NeoBundle 'jmcantrell/vim-virtualenv'
-" 編集している関数の内、ローカル変数をハイライトしてくれる
+"" vim内のPython環境と、virtualenvを連動してくれる
+"NeoBundle 'jmcantrell/vim-virtualenv'
+"" 編集している関数の内、ローカル変数をハイライトしてくれる
 NeoBundle 'hachibeeDI/python_hl_lvar.vim'
-" インデント単位でテキストオブジェクトを使えるようになる
+"" インデント単位でテキストオブジェクトを使えるようになる
 NeoBundle 'kana/vim-textobj-indent'
-" Pythonの関数やクラスをテキストオブジェクトとして扱えるようになる
+"" Pythonの関数やクラスをテキストオブジェクトとして扱えるようになる
 NeoBundle 'bps/vim-textobj-python'
-" 使わなかったらけす。smartinputの拡張？
-NeoBundle 'kana/vim-smartinput'
-
+"" 使わなかったらけす。smartinputの拡張？
+"NeoBundle 'kana/vim-smartinput'
+NeoBundle 'scrooloose/syntastic'
+" Flake8
+NeoBundle 'Flake8-vim'
 """"""""""""""""""""""""""""""""""""""""
 " javascript Plugins
 """"""""""""""""""""""""""""""""""""""""
@@ -132,7 +135,8 @@ NeoBundle 'myhere/vim-nodejs-complete'
 
 NeoBundleLazy 'jelera/vim-javascript-syntax', {'autoload':{'filetypes':['javascript']}}
 
-NeoBundle 'scrooloose/syntastic'
+" Pythonでinstall済み
+"NeoBundle 'scrooloose/syntastic'
 
 " ドキュメントジェネレータ
 NeoBundle 'heavenshell/vim-jsdoc'

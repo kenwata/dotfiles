@@ -122,3 +122,7 @@ set laststatus=2
 " ※ターミナルでの設定も必要
 set ambiwidth=double
 
+" バックスペースを有効化？
+"set backspace=indent,eol,start
+set backspace=start,indent,eol
+

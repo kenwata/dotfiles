@@ -36,3 +36,9 @@ nnoremap sO <C-w>=
 nnoremap j gj
 nnoremap k gk
 
+" <Space>s で置換
+noremap <Space>s :%s/
+
+" ,wでファイルを編集したファイルを保存
+nnoremap ,w :<C-u>w<CR>
+
