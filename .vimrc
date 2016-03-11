@@ -7,7 +7,7 @@ if has('vim_starting')
     endif
 
     " Required:
-    set runtimepath+=~/.vim/bundle/neobundle.vim/
+    set runtimepath+=~/.vim/bundle/neobundle.vim/,~/dotfiles/ftplugin/after
 endif
 
 " Required:
@@ -84,6 +84,7 @@ set laststatus=2
 
 " カラースキーマ(会社用)
 NeoBundle 'nanotech/jellybeans.vim'
+NeoBundle 'w0ng/vim-hybrid'
 
 NeoBundle 'nathanaelkane/vim-indent-guides'
 call neobundle#end()
@@ -134,7 +135,7 @@ set background=dark
 " カラースキーマ指定
 "colorscheme solarized
 " 会社ではこちらで。。。
-colorscheme jellybeans
+colorscheme hybrid
 
 " 入力中のコマンドを表示
 set showcmd
@@ -200,7 +201,9 @@ set shiftwidth=4
 set autoindent
 
 " 改行時に入力された行の末尾に合わせて次のインデントを増減させる
-set smartindent
+" TODO 要らなくなるかもしれないので。。下の方に変更必要？？
+"set smartindent
+set nosmartindent
 
 " TAB,EFOなどを可視化
 set list
@@ -364,7 +367,7 @@ let g:gitgutter_sign_removed = '✘ '
 
 " lightline.vim
 let g:lightline = {
-        \ 'colorscheme': 'landscape',
+        \ 'colorscheme': 'jellybeans',
         \ 'mode_map': {'c': 'NORMAL'},
         \ 'active': {
         \   'left': [
@@ -507,4 +510,6 @@ let g:indent_guides_enable_on_vim_startup=1
 let g:indent_guides_guide_size=1
 " 自動カラーを無効にする
 " let g:indent_guides_auto_colors=0
+
+set ambiwidth=double
 
