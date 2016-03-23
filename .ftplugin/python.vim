@@ -53,3 +53,6 @@ let b:current_after_syntax = 'python'
 let &cpo = s:cpo_save
 unlet s:cpo_save
 
+" 画面の上部に勝手にポップアップが出ないようにする
+setlocal completeopt-=preview
+

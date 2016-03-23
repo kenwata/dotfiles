@@ -13,7 +13,7 @@ set cursorline
 " 検索結果をハイライト 
 set hlsearch
 
-" ESC二回押しでハイライトを消す
+" space二回押しでハイライトを消す
 nmap <silent> <Space><Space> :nohlsearch<CR>
 
 " コードの色分け

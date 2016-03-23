@@ -96,12 +96,20 @@ NeoBundle 'nathanaelkane/vim-indent-guides'
 NeoBundle 'kana/vim-operator-replace.git'
 NeoBundle 'kana/vim-operator-user.git'
 NeoBundle 'kana/vim-textobj-user'
+" カッコやダブルクオートなどで囲まれているものの操作
+NeoBundle 'tpope/vim-surround'
 
-" なんだろう？
+" ????
 NeoBundle 'rhysd/vim-operator-surround'
 
 " 連続入力補助
 NeoBundle 'kana/vim-submode'
+
+" vimからウェブブラウザを開く
+NeoBundle 'open-browser.vim'
+
+" プログラムを書くにあたって、毎回書く部分をテンプレート化する
+NeoBundle "thinca/vim-template"
 
 """"""""""""""""""""""""""""""""""""""""
 " Python Plugins

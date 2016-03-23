@@ -40,3 +40,5 @@ nnoremap k gk
 " <Space>s で置換
 noremap <Space>s :%s/
 
+noremap <Space><Space> <Esc>
+
