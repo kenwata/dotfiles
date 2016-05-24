@@ -24,9 +24,9 @@ NeoBundle 'Shougo/unite.vim'
 NeoBundle 'Shougo/neomru.vim'
 
 " ファイルのtree表示
-NeoBundle 'scrooloose/nerdtree'
+"NeoBundle 'scrooloose/nerdtree'
 " 設定
-let NERDTreeShowHidden = 1
+"let NERDTreeShowHidden = 1
 
 " VimからGitの操作ができる
 NeoBundle 'tpope/vim-fugitive'
@@ -87,6 +87,25 @@ NeoBundle 'nanotech/jellybeans.vim'
 NeoBundle 'w0ng/vim-hybrid'
 
 NeoBundle 'nathanaelkane/vim-indent-guides'
+
+" ファイラー
+NeoBundle 'ctrlpvim/ctrlp.vim'
+" vimfiler(nerdtreeから移行してみる)
+NeoBundle 'Shougo/vimfiler'
+
+"""""""""""""""" JavaScript """"""""""""""""""
+
+NeoBundle 'pangloss/vim-javascript'
+NeoBundle 'mxw/vim-jsx'
+
+""""""""""""""""""""""""""""""""""""""""""""""
+
+""""""""""""""""" MarkDown """""""""""""""""""
+NeoBundle 'plasticboy/vim-markdown'
+NeoBundle 'kannokanno/previm'
+NeoBundle 'tyru/open-browser.vim'
+
+""""""""""""""""""""""""""""""""""""""""""""""
 call neobundle#end()
 
 " Required:
