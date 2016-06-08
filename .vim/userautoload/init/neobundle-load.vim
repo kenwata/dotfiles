@@ -23,6 +23,9 @@ NeoBundle 'Shougo/unite.vim'
 " Unite.vimで最近使ったファイルを表示できるようにする
 NeoBundle 'Shougo/neomru.vim'
 
+" テキストオブジェクト操作
+NeoBundle 'tpope/vim-surround'
+
 " ファイルのtree表示
 "NeoBundle 'scrooloose/nerdtree'
 " 設定
