@@ -7,7 +7,7 @@ if has('vim_starting')
     endif
 
     " Required:
-    set runtimepath+=~/.vim/bundle/neobundle.vim/
+    set runtimepath+=~/.vim/bundle/neobundle.vim/,~/dotfiles/ftplugin/after
 endif
 
 " Required:
@@ -22,11 +22,11 @@ NeoBundleFetch 'Shougo/neobundle.vim'
 NeoBundle 'Shougo/unite.vim'
 " Unite.vimで最近使ったファイルを表示できるようにする
 NeoBundle 'Shougo/neomru.vim'
-" 候補絞り込み検索ファイラ
-NeoBundle "ctrlpvim/ctrlp.vim"
 
 " ファイルのtree表示
-NeoBundle 'scrooloose/nerdtree'
+"NeoBundle 'scrooloose/nerdtree'
+" 設定
+"let NERDTreeShowHidden = 1
 
 " VimからGitの操作ができる
 NeoBundle 'tpope/vim-fugitive'
@@ -64,6 +64,7 @@ NeoBundle 'Lokaltog/vim-powerline'
 NeoBundle 'itchyny/lightline.vim'
 " lightline.vimと連携しているgitプラグイン
 NeoBundle 'airblade/vim-gitgutter'
+
 " powerlineがないと、lightlineで使う
 " separatorとかのフォントが対応していないので
 " 以下のプログインを入れる
@@ -104,9 +105,6 @@ NeoBundle 'rhysd/vim-operator-surround'
 
 " 連続入力補助
 NeoBundle 'kana/vim-submode'
-
-" vimからウェブブラウザを開く
-NeoBundle 'open-browser.vim'
 
 " プログラムを書くにあたって、毎回書く部分をテンプレート化する
 NeoBundle "thinca/vim-template"
@@ -151,6 +149,9 @@ NeoBundle 'heavenshell/vim-jsdoc'
 
 NeoBundle 'guileen/vim-node-dict'
 
+NeoBundle 'pangloss/vim-javascript'
+NeoBundle 'mxw/vim-jsx'
+
 """"""""""""""""""""""""""""""""""""""""
 " Haskell Plugins
 """"""""""""""""""""""""""""""""""""""""
@@ -161,17 +162,31 @@ NeoBundle 'guileen/vim-node-dict'
 """" cabal install hoogleが必要
 "----- Haskellプラグイン -----
 " インデントプラグイン
-NeoBundle 'kana/vim-filetype-haskell'
+" NeoBundle 'kana/vim-filetype-haskell'
 " 外部コマンドghc(コンパイルコマンド)をvimから使えるように
-NeoBundle 'eagletmt/ghcmod-vim'
+" NeoBundle 'eagletmt/ghcmod-vim'
 " Haskellの補完プラグイン
-NeoBundle 'ujihisa/neco-ghc'
+" NeoBundle 'ujihisa/neco-ghc'
 " シンタックスチェック
 " なんかが足らない
 "NeoBundle 'osyo-manga/vim-watchdogs'
 """""" import文用
 """""" hoogleが必要
 """"""NeoBundle 'ujihisa/unite-haskellimport'
+
+""""""""""""""""" MarkDown """""""""""""""""""
+NeoBundle 'plasticboy/vim-markdown'
+NeoBundle 'kannokanno/previm'
+NeoBundle 'tyru/open-browser.vim'
+
+""""""""""""""""""""""""""""""""""""""""""""""
+
+" ?????? なぜここにある？
+" set laststatus=2
+" ファイラー
+NeoBundle 'ctrlpvim/ctrlp.vim'
+" vimfiler(nerdtreeから移行してみる)
+NeoBundle 'Shougo/vimfiler'
 
 call neobundle#end()
 
