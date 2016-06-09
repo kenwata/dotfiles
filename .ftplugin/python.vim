@@ -1,4 +1,4 @@
-if exists('b:did_ftplugin_python')
+if e
         finish
     endif
     let b:did_ftplugin_python = 1
