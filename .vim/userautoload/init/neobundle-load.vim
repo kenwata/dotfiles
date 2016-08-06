@@ -173,6 +173,13 @@ NeoBundle 'ujihisa/neco-ghc'
 """""" hoogleが必要
 """"""NeoBundle 'ujihisa/unite-haskellimport'
 
+""""""""""""""""""""""""""""""""""""""""
+" markdown Plugins
+""""""""""""""""""""""""""""""""""""""""
+NeoBundle 'plasticboy/vim-markdown'
+NeoBundle 'kannokanno/previm'
+NeoBundle 'tyru/open-browser.vim'
+
 call neobundle#end()
 
 " Required:
