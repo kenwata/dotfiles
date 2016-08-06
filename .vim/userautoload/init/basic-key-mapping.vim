@@ -39,6 +39,9 @@ nnoremap k gk
 
 " <Space>s で置換
 noremap <Space>s :%s/
-
+" <Space><Space>でエスケープ
 noremap <Space><Space> <Esc>
-
+" <Space>l で行末に移動
+noremap <Space>l $
+" <Space>h で行の先頭に移動
+noremap <Space>h 0
