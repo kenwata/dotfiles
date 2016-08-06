@@ -42,5 +42,3 @@ noremap <Space>s :%s/
 
 noremap <Space><Space> <Esc>
 
-" テスト
-" コメントアウト
