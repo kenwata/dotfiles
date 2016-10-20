@@ -8,9 +8,7 @@ repo = 'Shougo/dein.vim'
 repo = 'Shougo/vimproc.vim'
 hook_post_pudate = '''
   if dein#util#_is_windows()
-    let cmd = 'tools\\update-dll-mingw'
-  elseif dein#util#_is_cygwin()
-    let cmd = 'make -f make_cygwin()'
+    let cmd = 'tools\\update-dll-mingw' elseif dein#util#_is_cygwin() let cmd = 'make -f make_cygwin()'
   elseif executable('gmake')
     let cmd = 'gmake'
   else
@@ -19,7 +17,52 @@ hook_post_pudate = '''
   let g:dein#plugin.build = cmd
 '''
 
+# Unite
+[[plugins]]
+repo = 'Shougo/unite.vim'
+
+# Git操作
+[[plugins]]
+repo = 'tpope/vim-fugitive'
+
 # カラーテーマ
 [[plugins]]
 repo = 'w0ng/vim-hybrid'
+
+# パワーライン等の設定
+# vim-powerline (フォントをこの中から取得し、パッチを当てる)
+[[plugins]]
+repo = 'Lokaltog/vim-powerline'
+# ステータスラインのカスタマイズのためのプラグイン
+[[plugins]]
+repo = 'itchyny/lightline.vim'
+# lightline.vimと連携しているgitプラグイン
+[[plugins]]
+repo = 'airblade/vim-gitgutter'
+
+# インデント行を可視化するプラグイン
+[[plugins]]
+repo = 'nathanaelkane/vim-indent-guides'
+
+# 連続入力を補助するプラグイン
+# ウィンドウサイズの調整などに使用
+[[plugins]]
+repo = 'kana/vim-submode'
+
+# シンタックスプラグイン
+[[plugins]]
+repo = 'scrooloose/syntastic'
+
+# ファイラー系
+[[plugins]]
+repo = 'Shougo/vimfiler'
+[[plugins]]
+repo = 'ctrlpvim/ctrlp.vim'
+
+# Markdown用のプラグイン
+# Markdownプレビューができるプラグイン
+[[plugins]]
+repo = 'kannokanno/previm'
+[[plugins]]
+repo = 'tyru/open-browser.vim'
 
