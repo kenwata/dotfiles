@@ -59,6 +59,14 @@ repo = 'Shougo/vimfiler'
 [[plugins]]
 repo = 'ctrlpvim/ctrlp.vim'
 
+# テキストオブジェクト操作
+[[plugins]]
+repo = 'kana/vim-operator-replace.git'
+[[plugins]]
+repo = 'kana/vim-operator-user.git'
+[[plugins]]
+repo = 'kana/vim-textobj-user'
+
 # Markdown用のプラグイン
 # Markdownプレビューができるプラグイン
 [[plugins]]

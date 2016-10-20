@@ -1,0 +1,55 @@
+# 必ずしも起動時に必要でないプラグインは
+# 利用条件と共にこちらで入れる
+
+# 補完プラグイン
+# インサートモード時に呼び出す
+[[plugins]]
+repo = 'Shougo/neocomplete'
+on_i = 1
+
+# 特定のファイルタイプで読み込む
+## Markdown
+[[plugins]]
+repo = 'plasticboy/vim-markdown'
+on_ft = ['markdown']
+
+# JavaScript
+## ES6のシンタックスを当てる
+[[plugins]]
+repo = 'jelera/vim-javascript-syntax'
+on_ft = ['javascript']
+
+## jsの補完プラグイン
+[[plugins]]
+repo = 'mattn/jscomplete-vim'
+on_ft = ['javascript']
+
+## gfでrequire()のモジュールにジャンプ
+[[plugins]]
+repo = 'moll/vim-node'
+on_ft = ['javascript']
+
+## node.jsの補完
+[[plugins]]
+repo = 'myhere/vim-nodejs-complete'
+on_ft = ['javascript']
+
+## function行、もしくは:JsDocでJSDocコメントができる
+[[plugins]]
+repo = 'heavenshell/vim-jsdoc'
+on_ft = ['javascript']
+
+## node用の辞書
+[[plugins]]
+repo = 'guileen/vim-node-dict'
+on_ft = ['javascript']
+
+## jsxのシンタックスプラグイン
+[[plugins]]
+repo = 'mxw/vim-jsx'
+on_ft = ['javascript']
+
+## javascriptのsyntaxとindentをよしなに調整してくれる
+#[[plugins]]
+#repo = ['pangloss/vim-javascript']
+#on_ft = ['javascript']
