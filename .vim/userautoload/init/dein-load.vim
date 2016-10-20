@@ -5,7 +5,7 @@ endif
 " プラグインが実際にインストールされるディレクトリ
 let s:dein_dir = expand('~/.vim/dein')
 " dein.vim 本体
-let s:dein_repos_dir = s:dein_dir . '/repos/github.com/Shugo/dein.vim'
+let s:dein_repos_dir = s:dein_dir . '/repos/github.com/Shougo/dein.vim'
 
 " dein.vimがなければ、githubから落としてくる
 if &runtimepath !~# '/dein.vim'
@@ -38,3 +38,9 @@ endif
 if dein#check_install()
   call dein#install()
 endif
+
+
+
+" 何故かシンタックスが切れるのでとりあえずここに
+" 後ほど解決する
+syntax on
