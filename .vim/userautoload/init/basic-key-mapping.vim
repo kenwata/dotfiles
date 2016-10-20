@@ -29,7 +29,6 @@ noremap <Space>h 0
 noremap <Space>l $
 
 " Ctrl + e でNERDTree表示、非表示
-"nnoremap <silent> <C-e> :NERDTreeToggle<CR>
 
 " ウィンドウを水平に分割
 nnoremap ss :<C-u>sp<CR>
@@ -58,4 +57,7 @@ nnoremap sK <C-w>K
 nnoremap sL <C-w>L
 " 左に移動
 nnoremap sH <C-w>H
-
+" 一番左上に移動
+noremap <S-h> <C-w>t
+" 一番右下に移動
+noremap <S-l> <C-w>b
