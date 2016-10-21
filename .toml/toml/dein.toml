@@ -31,8 +31,8 @@ repo = 'w0ng/vim-hybrid'
 
 # パワーライン等の設定
 # vim-powerline (フォントをこの中から取得し、パッチを当てる)
-[[plugins]]
-repo = 'Lokaltog/vim-powerline'
+#[[plugins]]
+#repo = 'Lokaltog/vim-powerline'
 # ステータスラインのカスタマイズのためのプラグイン
 [[plugins]]
 repo = 'itchyny/lightline.vim'
