@@ -175,3 +175,5 @@ set backspace=start,indent,eol
 "**************************************************
 
 syntax on
+
+filetype plugin indent on
