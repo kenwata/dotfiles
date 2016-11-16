@@ -24,9 +24,6 @@ set number
 " 右下に表示される行、列番号を表示
 set ruler
 
-" コマンドを画面最下部に表示する
-set showcmd
-
 " ウィンドウの幅より長い行を折り返し
 set wrap
 
@@ -170,10 +167,3 @@ set ambiwidth=double
 "set backspace=indent,eol,start
 set backspace=start,indent,eol
 
-"**************************************************
-" その他設定(後で変える)
-"**************************************************
-
-syntax on
-
-filetype plugin indent on

@@ -45,6 +45,6 @@ if dein#check_install()
 endif
 
 
-" 何故かシンタックスが切れるのでとりあえずここに
-" 後ほど解決する
+" deinはシンタックス・ファイルタイプの設定をここで行う
 syntax on
+filetype plugin indent on

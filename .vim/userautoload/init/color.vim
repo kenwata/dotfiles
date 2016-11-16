@@ -1,9 +1,6 @@
 " color setting here
 
 "********** ハイライト表示 **********
-" コードの色分け
-"syntax enable
-syntax on
 " 背景色
 set background=dark
 
@@ -33,6 +30,3 @@ set hlsearch
 
 " space二回押しでハイライトを消す
 nmap <silent> <Space><Space> :nohlsearch<CR>
-
-" コードの色分け
-syntax enable
