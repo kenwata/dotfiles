@@ -36,8 +36,3 @@ nmap <silent> <Space><Space> :nohlsearch<CR>
 
 " コードの色分け
 syntax enable
-" 背景色
-set background=dark
-
-" terminalで256色表示を使う
-set t_Co=256
