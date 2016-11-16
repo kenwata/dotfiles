@@ -27,6 +27,8 @@ hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-unite.vi
 # Git操作
 [[plugins]]
 repo = 'tpope/vim-fugitive'
+[[plugins]]
+repo = 'gregsexton/gitv'
 
 # カラーテーマ
 [[plugins]]
