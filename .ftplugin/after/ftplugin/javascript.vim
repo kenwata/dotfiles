@@ -9,3 +9,5 @@ setlocal tabstop=2
 setlocal softtabstop=2
 setlocal shiftwidth=2
 
+" 画面の上部に勝手にポップアップが出ないようにする
+setlocal completeopt-=preview

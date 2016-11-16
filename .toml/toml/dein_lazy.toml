@@ -29,6 +29,7 @@ on_ft = ['javascript']
 [[plugins]]
 repo = 'moll/vim-node'
 on_ft = ['javascript']
+add_hook = 'source ~/.vim/userautoload/plugins/programing-language/javascript/plugin-javascript.vim'
 
 ## node.jsの補完
 [[plugins]]
@@ -44,6 +45,7 @@ on_ft = ['javascript']
 [[plugins]]
 repo = 'guileen/vim-node-dict'
 on_ft = ['javascript']
+add_hook = 'source ~/.vim/userautoload/plugins/programing-language/javascript/plugin-javascript.vim'
 
 ## jsxのシンタックスプラグイン
 [[plugins]]

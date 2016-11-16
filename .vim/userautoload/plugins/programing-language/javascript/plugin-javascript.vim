@@ -7,5 +7,5 @@ let g:syntastic_auto_loc_list=2
 
 let g:syntastic_javascript_checkers = ['jshint']
 
-au FileType javascript set dictionary+=$HOME/.vim/bundle/vim-node-dict/dict/node.dict
+au FileType javascript set dictionary+=$HOME/.vim/dein/repos/github.com/guileen/vim-node-dict/dict/node.dict
 
