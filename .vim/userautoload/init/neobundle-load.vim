@@ -133,7 +133,7 @@ NeoBundle 'bps/vim-textobj-python'
 "NeoBundle 'kana/vim-smartinput'
 NeoBundle 'scrooloose/syntastic'
 " Flake8
-NeoBundle 'Flake8-vim'
+"NeoBundle 'Flake8-vim'
 """"""""""""""""""""""""""""""""""""""""
 " javascript Plugins
 """"""""""""""""""""""""""""""""""""""""
