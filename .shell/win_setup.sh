@@ -1,12 +1,9 @@
 #!/bin/bash
 
-# ドットファイルのdein用のブランチに移動
-cd ~/dotfiles
-git checkout replace/dein
 # deinディレクトリを作成
 mkdir -p ~/.vim/dein
 # ホームディレクトリに_vimrcのシンボリックリンクを張る
-ln -s ~/.vim/_vimrc ~/
+ln -s ~/dotfiles/_vimrc ~/
 # .vimディレクトリにuserautoload(プラグイン設定ファイル群)のシンボリックリンクを張る
 ln -s ~/dotfiles/.vim/userautoload ~/.vim/
 # deinでインストールするプラグインについてのtomlにシンボリックリンクを張る
