@@ -37,7 +37,7 @@ endif
 " vimprocだけは最初にインストールする
 " インストールしておかないと、他のプラグインのインストール時にtime outが起こる
 if dein#check_install(['vimproc'])
-  calldein#install(['vimproc'])
+  call dein#install(['vimproc'])
 endif
 " もし、未インストールのものがあったらインストール
 if dein#check_install()

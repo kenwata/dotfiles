@@ -6,6 +6,7 @@
 [[plugins]]
 repo = 'Shougo/neocomplete'
 on_i = 1
+hook_add = 'source ~/.vim/userautoload/plugins/programing-language/common/plugin-neocomplete.vim'
 
 # 特定のファイルタイプで読み込む
 ## Markdown
