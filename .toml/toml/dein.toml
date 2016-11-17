@@ -6,7 +6,7 @@ repo = 'Shougo/dein.vim'
 # vimで非同期処理を実現するためのプラグイン
 [[plugins]]
 repo = 'Shougo/vimproc.vim'
-hook_post_pudate = '''
+hook_post_update = '''
   if dein#util#_is_windows()
     let cmd = 'tools\\update-dll-mingw'
   elseif dein#util#_is_cygwin()
