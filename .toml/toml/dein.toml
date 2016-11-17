@@ -31,6 +31,8 @@ repo = 'tpope/vim-fugitive'
 repo = 'gregsexton/gitv'
 depends = ['vim-fugitive']
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-gitv.vim'
+[[plugins]]
+repo = 'cohama/agit.vim'
 
 # カラーテーマ
 [[plugins]]
