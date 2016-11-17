@@ -46,7 +46,9 @@ nnoremap k gk
 " <Space>s で置換
 noremap <Space>s :%s/
 
-noremap <Space><Space> <Esc>
+"noremap <Space><Space> <Esc>
+" space二回押しでハイライトを消す
+nmap <silent> <Space><Space> :nohlsearch<CR>
 
 " 分割したウィンドウそのものを移動
 " 下に移動
@@ -61,3 +63,16 @@ nnoremap sH <C-w>H
 noremap <S-h> <C-w>t
 " 一番右下に移動
 noremap <S-l> <C-w>b
+
+" / で検索時の結果数を表示する
+nnoremap <expr> / _(":%s/<Cursor>/&/gn")
+
+function! s:move_cursor_pos_mapping(str, ...)
+    let left = get(a:, 1, "<Left>")
+    let lefts = join(map(split(matchstr(a:str, '.*<Cursor>\zs.*\ze'), '.\zs'), 'left'), "")
+    return substitute(a:str, '<Cursor>', '', '') . lefts
+endfunction
+
+function! _(str)
+    return s:move_cursor_pos_mapping(a:str, "\<Left>")
+endfunction

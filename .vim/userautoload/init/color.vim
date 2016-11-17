@@ -4,9 +4,6 @@
 " 背景色
 set background=dark
 
-" 入力中のコマンドを表示
-set showcmd
-
 " 一行の文字数が多くてもきちんと描画する
 set display=lastline
 
@@ -28,5 +25,3 @@ set cursorline
 " 検索結果をハイライト 
 set hlsearch
 
-" space二回押しでハイライトを消す
-nmap <silent> <Space><Space> :nohlsearch<CR>
