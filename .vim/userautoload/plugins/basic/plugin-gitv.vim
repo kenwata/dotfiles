@@ -1,5 +1,9 @@
 " refarence
 " http://cohama.hateblo.jp/entry/20130517/1368806202
+function! s:gitv_get_current_hash()
+  return matchstr(getline('.'), '\[\zs.\{7\}\ze\]$')
+endfunction
+
 autocmd FileType git setlocal nofoldenable foldlevel=0
 function! s:toggle_git_folding()
   if &filetype ==# 'git'
@@ -16,8 +20,4 @@ function! s:my_gitv_settings()
   nnoremap <buffer> <Space>h :<C-u>Git cherry-pick <C-r>=GitvGetCurrentHash()<CR><CR>
   nnoremap <buffer> <Space>rh :<C-u>Git reset --hard <C-r>=GitvGetCurrentHash()<CR>
   nnoremap <silent><buffer> t :<C-u>windo call <SID>toggle_git_folding()<CR>1<C-w>w
-endfunction
-
-function! s:gitv_get_current_hash()
-  return matchstr(getline('.'), '\[\zs.\{7\}\ze\]$')
 endfunction
