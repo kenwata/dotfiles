@@ -95,3 +95,12 @@ on_ft = 'python'
 repo = 'Flake8-vim'
 on_ft = 'python'
 
+#[[plugins]]
+#repo = 'altercation/vim-colors-solarized'
+#on_cmd = 'colorscheme solarized'
+#hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-solarized.vim'
+#
+# template
+[[plugins]]
+repo = 'thinca/vim-template'
+on_ft = 'python'
