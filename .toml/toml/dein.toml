@@ -6,7 +6,7 @@ repo = 'Shougo/dein.vim'
 # vimで非同期処理を実現するためのプラグイン
 [[plugins]]
 repo = 'Shougo/vimproc.vim'
-hook_post_pudate = '''
+hook_post_update = '''
   if dein#util#_is_windows()
     let cmd = 'tools\\update-dll-mingw'
   elseif dein#util#_is_cygwin()
@@ -22,7 +22,7 @@ hook_post_pudate = '''
 # Unite
 [[plugins]]
 repo = 'Shougo/unite.vim'
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-unite.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-unite.vim'
 
 # Git操作
 [[plugins]]
@@ -30,12 +30,14 @@ repo = 'tpope/vim-fugitive'
 [[plugins]]
 repo = 'gregsexton/gitv'
 depends = ['vim-fugitive']
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-gitv.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-gitv.vim'
+[[plugins]]
+repo = 'cohama/agit.vim'
 
 # カラーテーマ
 [[plugins]]
 repo = 'w0ng/vim-hybrid'
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-color-scheme.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-color-scheme.vim'
 
 # パワーライン等の設定
 # vim-powerline (フォントをこの中から取得し、パッチを当てる)
@@ -44,7 +46,7 @@ hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-color-sc
 # ステータスラインのカスタマイズのためのプラグイン
 [[plugins]]
 repo = 'itchyny/lightline.vim'
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-lightline.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline.vim'
 # lightline.vimと連携しているgitプラグイン
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
@@ -52,13 +54,13 @@ repo = 'airblade/vim-gitgutter'
 # インデント行を可視化するプラグイン
 [[plugins]]
 repo = 'nathanaelkane/vim-indent-guides'
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-indent-guides.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-indent-guides.vim'
 
 # 連続入力を補助するプラグイン
 # ウィンドウサイズの調整などに使用
 [[plugins]]
 repo = 'kana/vim-submode'
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-submode.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-submode.vim'
 
 # シンタックスプラグイン
 [[plugins]]
@@ -67,15 +69,15 @@ repo = 'scrooloose/syntastic'
 # ファイラー系
 [[plugins]]
 repo = 'Shougo/vimfiler'
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-vimfiler.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-vimfiler.vim'
 [[plugins]]
 repo = 'ctrlpvim/ctrlp.vim'
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-ctrlp.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-ctrlp.vim'
 
 # テキストオブジェクト操作
 [[plugins]]
 repo = 'kana/vim-operator-replace.git'
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-operator-replace.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-operator-replace.vim'
 [[plugins]]
 repo = 'kana/vim-operator-user.git'
 [[plugins]]
@@ -87,5 +89,5 @@ repo = 'kana/vim-textobj-user'
 repo = 'kannokanno/previm'
 [[plugins]]
 repo = 'tyru/open-browser.vim'
-hook_add = 'source ~/.vim/userautoload/plugins/vim-base-settings/plugin-open-browser.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-open-browser.vim'
 
