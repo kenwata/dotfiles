@@ -99,8 +99,28 @@ on_ft = 'python'
 #repo = 'altercation/vim-colors-solarized'
 #on_cmd = 'colorscheme solarized'
 #hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-solarized.vim'
-#
-# template
+
+# haskell
 [[plugins]]
-repo = 'thinca/vim-template'
-on_ft = 'python'
+repo = 'kana/vim-filetype-haskell'
+on_ft = 'haskell'
+
+# これを使うには
+# cabal update
+# cabal install happy
+# export PATH="$HOME/.cabal/bin:$PATH"
+# cabal install ghc-mod
+# の手順が必要
+[[plugins]]
+repo = 'eagletmt/ghcmod-vim'
+on_ft = 'haskell'
+
+# Haskellの補完プラグイン
+[[plugins]]
+repo = 'ujihisa/neco-ghc'
+on_ft = 'haskell'
+
+# シンタックス
+[[plugins]]
+repo = 'dag/vim2hs'
+on_ft = 'haskell'
