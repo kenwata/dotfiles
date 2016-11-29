@@ -93,3 +93,7 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-open-browser.vim'
 
 [[plugins]]
 repo = 'thinca/vim-template'
+
+# プログラム実行
+[[plugins]]
+repo = 'thinca/vim-quickrun'

@@ -95,15 +95,22 @@ on_ft = 'python'
 repo = 'Flake8-vim'
 on_ft = 'python'
 
-# 以下、インストール出来ない
-#[[plugins]]
-#repo = 'kana/vim-filetype-haskell'
-#on_ft = 'haskell'
-#
-#[[plugins]]
-#repo = 'eagletmt/ghcmod-vim'
-#on_ft = 'haskell'
-#
-#[[plugins]]
-#repo = 'ujihisa/neco-ghc'
-#on_ft = 'haskell'
+# Haskell indent plugin
+[[plugins]]
+repo = 'kana/vim-filetype-haskell'
+on_ft = 'haskell'
+
+# Haskell 型チェックや補完等
+[[plugins]]
+repo = 'eagletmt/ghcmod-vim'
+on_ft = 'haskell'
+
+# Haskell complete
+[[plugins]]
+repo = 'ujihisa/neco-ghc'
+on_ft = 'haskell'
+
+# Haskell syntax
+[[plugins]]
+repo = 'dag/vim2hs'
+on_ft = 'haskell'

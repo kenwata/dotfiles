@@ -1,4 +1,4 @@
-if exists("b:did_ftplugin_python")
+if exists('b:did_ftplugin_python')
     finish
 endif
 
@@ -6,27 +6,27 @@ let b:did_ftplugin_python = 1
 
 setlocal smarttab
 setlocal expandtab
-setlocal tabstop=4
-setlocal shiftwidth=4
-"setlocal foldmethod=indent
+setlocal tabstop=2
+setlocal shiftwidth=2
+setlocal foldmethod=indent
 setlocal commentstring=#%s
 
 " - af: a function
 " - if: inner function
 " - ac: a class
 " - ic: inner class
-
+"
 " this plugin has aditional key-bind
 "  -  '[pf', ']pf': move to next/previous function
 "  -  '[pc', ']pc': move to next/previous class
-xmap <buffer> af <Plug>(textobj-python-function-a)
-omap <buffer> af <Plug>(textobj-python-function-a)
-xmap <buffer> if <Plug>(textobj-python-function-i)
-omap <buffer> if <Plug>(textobj-python-function-i)
-xmap <buffer> ac <Plug>(textobj-python-class-a)
-omap <buffer> ac <Plug>(textobj-python-class-a)
-xmap <buffer> ic <Plug>(textobj-python-class-i)
-omap <buffer> ic <Plug>(textobj-python-class-i)
+map <buffer> af <Plug>(textobj-python-function-a)
+map <buffer> af <Plug>(textobj-python-function-a)
+map <buffer> if <Plug>(textobj-python-function-i)
+map <buffer> if <Plug>(textobj-python-function-i)
+map <buffer> ac <Plug>(textobj-python-class-a)
+map <buffer> ac <Plug>(textobj-python-class-a)
+map <buffer> ic <Plug>(textobj-python-class-i)
+map <buffer> ic <Plug>(textobj-python-class-i)
 
 setlocal omnifunc=jedi#completions
 
@@ -54,6 +54,22 @@ let b:current_after_syntax = 'python'
 let &cpo = s:cpo_save
 unlet s:cpo_save
 
-" 画面の上部に勝手にポップアップが出ないようにする
+" neocomplete setting
+let g:jedi#auto_vim_configuration=0
+let g:jedi#popup_select_first=0
+
+if !exists('g:neocomplete#force_omni_input_patterns')
+    let g:neocomplete#force_omni_input_patterns = {}
+endif
+"let g:neocomplete#force_omni_input_patterns.python = '\%([^. \t]\.\|^\s*@\|^\s*from\s.\+import \|^\s*from \|^\s*import \)\w*'
+let g:neocomplete#force_omni_input_patterns.python = '\h\w*\|[^. \t]\.\w*'
+
+" jedi-vimのドックのようなものを表示させない
 setlocal completeopt-=preview
 
+" キーマッピング
+" 補完キーの設定この場合はCtrl+b
+let g:jedi#completions_command = "<C-b>"
+
+" syntastic
+let g:syntastic_python_checkers = ['pyflakes', 'pep8']
