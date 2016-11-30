@@ -166,5 +166,3 @@ set ambiwidth=double
 " バックスペースを有効化
 set backspace=start,indent,eol
 
-" Deleteキーを有効化
-set t_kd=
