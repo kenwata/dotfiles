@@ -163,6 +163,8 @@ set laststatus=2
 " ※ターミナルでの設定も必要
 set ambiwidth=double
 
-" バックスペースを有効化？
+" バックスペースを有効化
 set backspace=start,indent,eol
 
+" Deleteキーを有効化
+set t_kd=
