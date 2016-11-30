@@ -82,6 +82,8 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-operator-replace.vim
 repo = 'kana/vim-operator-user.git'
 [[plugins]]
 repo = 'kana/vim-textobj-user'
+[[plugins]]
+repo = 'tpope/vim-surround'
 
 # Markdown用のプラグイン
 # Markdownプレビューができるプラグイン
