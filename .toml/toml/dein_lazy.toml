@@ -4,52 +4,52 @@
 # 補完プラグイン
 # インサートモード時に呼び出す
 [[plugins]]
-repo = 'Shougo/neocomplete'
-on_i = 1
+repo     = 'Shougo/neocomplete'
+on_i     = 1
 hook_add = 'source ~/.vim/userautoload/plugins/pg-lang/common/plugin-neocomplete.vim'
 
 # 特定のファイルタイプで読み込む
 ## Markdown
 [[plugins]]
-repo = 'plasticboy/vim-markdown'
+repo  = 'plasticboy/vim-markdown'
 on_ft = 'markdown'
 
 # JavaScript
 ## ES6のシンタックスを当てる
 [[plugins]]
-repo = 'jelera/vim-javascript-syntax'
+repo  = 'jelera/vim-javascript-syntax'
 on_ft = 'javascript'
 
 ## jsの補完プラグイン
 [[plugins]]
-repo = 'mattn/jscomplete-vim'
+repo  = 'mattn/jscomplete-vim'
 on_ft = 'javascript'
 
 ## gfでrequire()のモジュールにジャンプ
 [[plugins]]
-repo = 'moll/vim-node'
-on_ft = 'javascript'
+repo     = 'moll/vim-node'
+on_ft    = 'javascript'
 add_hook = 'source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim'
 
 ## node.jsの補完
 [[plugins]]
-repo = 'myhere/vim-nodejs-complete'
+repo  = 'myhere/vim-nodejs-complete'
 on_ft = 'javascript'
 
 ## function行、もしくは:JsDocでJSDocコメントができる
 [[plugins]]
-repo = 'heavenshell/vim-jsdoc'
+repo  = 'heavenshell/vim-jsdoc'
 on_ft = 'javascript'
 
 ## node用の辞書
 [[plugins]]
-repo = 'guileen/vim-node-dict'
-on_ft = 'javascript'
+repo     = 'guileen/vim-node-dict'
+on_ft    = 'javascript'
 add_hook = 'source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim'
 
 ## jsxのシンタックスプラグイン
 [[plugins]]
-repo = 'mxw/vim-jsx'
+repo  = 'mxw/vim-jsx'
 on_ft = 'javascript'
 
 ## javascriptのsyntaxとindentをよしなに調整してくれる
@@ -60,39 +60,39 @@ on_ft = 'javascript'
 
 ## Python
 [[plugins]]
-repo = 'davidhalter/jedi-vim'
+repo  = 'davidhalter/jedi-vim'
 on_ft = 'python'
 
 [[plugins]]
-repo = 'andviro/flake8-vim'
+repo  = 'andviro/flake8-vim'
 on_ft = 'python'
 
 [[plugins]]
-repo = 'hynek/vim-python-pep8-indent'
+repo  = 'hynek/vim-python-pep8-indent'
 on_ft = 'python'
 
 [[plugins]]
-repo = 'jmcantrell/vim-virtualenv'
+repo  = 'jmcantrell/vim-virtualenv'
 on_ft = 'python'
 
 [[plugins]]
-repo = 'hachibeeDI/python_hl_lvar.vim'
+repo  = 'hachibeeDI/python_hl_lvar.vim'
 on_ft = 'python'
 
 [[plugins]]
-repo = 'kana/vim-textobj-indent'
+repo  = 'kana/vim-textobj-indent'
 on_ft = 'python'
 
 [[plugins]]
-repo = 'bps/vim-textobj-python'
+repo  = 'bps/vim-textobj-python'
 on_ft = 'python'
 
 [[plugins]]
-repo = 'kana/vim-smartinput'
+repo  = 'kana/vim-smartinput'
 on_ft = 'python'
 
 [[plugins]]
-repo = 'Flake8-vim'
+repo  = 'Flake8-vim'
 on_ft = 'python'
 
 #[[plugins]]
@@ -102,7 +102,7 @@ on_ft = 'python'
 
 # haskell
 [[plugins]]
-repo = 'kana/vim-filetype-haskell'
+repo  = 'kana/vim-filetype-haskell'
 on_ft = 'haskell'
 
 # これを使うには
@@ -112,15 +112,32 @@ on_ft = 'haskell'
 # cabal install ghc-mod
 # の手順が必要
 [[plugins]]
-repo = 'eagletmt/ghcmod-vim'
+repo  = 'eagletmt/ghcmod-vim'
 on_ft = 'haskell'
 
 # Haskellの補完プラグイン
 [[plugins]]
-repo = 'ujihisa/neco-ghc'
+repo  = 'ujihisa/neco-ghc'
 on_ft = 'haskell'
 
 # シンタックス
 [[plugins]]
-repo = 'dag/vim2hs'
+repo  = 'dag/vim2hs'
 on_ft = 'haskell'
+
+# 有効にならない
+#[[plugins]]
+#repo = 'thinca/vim-fontzoom'
+#on_cmd = ['Fontzoom']
+#on_map = ['<Plug>(fontzoom-']
+#gui  = 1
+#
+#[[plugins]]
+#repo = 'vim-scripts/zoom.vim'
+#gui  = 1
+#
+# お試し
+# minimap
+#[[plugins]]
+#repo = 'koron/minimap-vim'
+#gui  = 1
