@@ -15,3 +15,15 @@ if has('gui_macvim')
   " 透明度の設定
   set transparency=5
 endif
+
+" メニューバーを非教示
+set guioptions-=m
+" ツールバーを非表示
+set guioptions-=T
+" 左右のスクロールバーを非表示
+set guioptions-=r
+set guioptions-=R
+set guioptions-=l
+set guioptions-=L
+" 水平スクロールバーを非表示
+set guioptions-=b
