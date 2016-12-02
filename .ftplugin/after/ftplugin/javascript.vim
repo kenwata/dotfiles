@@ -1,0 +1,13 @@
+if exists("b:did_ftplugin_javascript")
+    finish
+endif
+
+let b:did_ftplugin_javascript=1
+
+setlocal expandtab
+setlocal tabstop=2
+setlocal softtabstop=2
+setlocal shiftwidth=2
+
+" 画面の上部に勝手にポップアップが出ないようにする
+setlocal completeopt-=preview
