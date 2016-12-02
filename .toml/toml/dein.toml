@@ -24,6 +24,12 @@ hook_post_update = '''
 repo = 'Shougo/unite.vim'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-unite.vim'
 
+# snipet
+[[plugins]]
+repo = 'Shougo/neosnippet.vim'
+[[plugins]]
+repo = 'Shougo/neosnippet-snippets'
+
 # Git操作
 [[plugins]]
 repo = 'tpope/vim-fugitive'

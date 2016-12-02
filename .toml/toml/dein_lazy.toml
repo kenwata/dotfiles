@@ -125,6 +125,16 @@ on_ft = 'haskell'
 repo  = 'dag/vim2hs'
 on_ft = 'haskell'
 
+# hoogle
+# cabal install hoogle が必要
+[[plugins]]
+repo = 'thinca/vim-ref'
+on_ft = 'haskell'
+[[plugins]]
+repo = 'ujihisa/ref-hoogle'
+on_ft = 'haskell'
+
+
 # 有効にならない
 #[[plugins]]
 #repo = 'thinca/vim-fontzoom'
