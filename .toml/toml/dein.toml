@@ -29,6 +29,7 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-unite.vim'
 repo = 'Shougo/neosnippet.vim'
 [[plugins]]
 repo = 'Shougo/neosnippet-snippets'
+depends =['neosnippet.vim']
 
 # Git操作
 [[plugins]]
