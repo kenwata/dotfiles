@@ -24,6 +24,11 @@ hook_post_update = '''
 repo = 'Shougo/unite.vim'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-unite.vim'
 
+# snippet
+[[plugins]]
+repo = 'Shougo/neosnippet-snippets'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-snippet.vim'
+
 # Git操作
 [[plugins]]
 repo = 'tpope/vim-fugitive'
@@ -82,6 +87,8 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-operator-replace.vim
 repo = 'kana/vim-operator-user.git'
 [[plugins]]
 repo = 'kana/vim-textobj-user'
+[[plugins]]
+repo = 'tpope/vim-surround'
 
 # Markdown用のプラグイン
 # Markdownプレビューができるプラグイン
