@@ -4,10 +4,13 @@ endif
 
 let b:did_ftplugin_haskell=1
 
+" ghc-modのパスを追加
+let $PATH = $PATH . ':' . expand('~/.cabal/bin')
+
 setlocal expandtab
-setlocal tabstop=2
-setlocal softtabstop=2
-setlocal shiftwidth=2
+setlocal tabstop=4
+setlocal softtabstop=4
+setlocal shiftwidth=4
 
 " 自動で折りたたまないようにする
 setlocal nofoldenable

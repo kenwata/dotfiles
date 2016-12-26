@@ -2,12 +2,13 @@ if exists("b:did_ftplugin_python")
     finish
 endif
 
-let b:did_ftplugin_python = 1
+let b:did_ftplugin_python=1
 
 setlocal smarttab
 setlocal expandtab
 setlocal tabstop=4
 setlocal shiftwidth=4
+setlocal softtabstop=4
 "setlocal foldmethod=indent
 setlocal commentstring=#%s
 
@@ -56,4 +57,15 @@ unlet s:cpo_save
 
 " 画面の上部に勝手にポップアップが出ないようにする
 setlocal completeopt-=preview
+
+let g:jedi#auto_initialization = 1
+let g:jedi#auto_vim_configuration = 1
+
+if !exists('g:neocomplete#force_omni_input_patterns')
+        let g:neocomplete#force_omni_input_patterns = {}
+endif
+
+let g:neocomplete#force_omni_input_patterns.python = '\h\w*\|[^. \t]\.\w*'
+
+let g:jedi#completions_command = "<C-Space>"
 
