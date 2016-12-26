@@ -19,4 +19,4 @@ smap <expr><TAB> neosnippet#expandable_or_jumpable() ?
 
 "let g:neosnippet#enable_snipmate_compatibility = 1
 
-let g:neosnippet#snippets_directory='~/.vim/dein/snippets'
+let g:neosnippet#snippets_directory='~/.vim/dein/repos/github.com/Shougo/neosnippet-snippets/snippets'
