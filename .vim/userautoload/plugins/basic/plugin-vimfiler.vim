@@ -3,7 +3,7 @@
 " vimデフォルトエクスプローラをvimfilerで置き換える
 let g:vimfiler_as_default_explorer=1
 
-noremap <Space>f :VimFiler<CR>
+noremap <Leader>f :VimFiler<CR>
 noremap <silent> :tree :VimFiler -split -simple -winwidth=35 -no-quit
 "noremap <C-E> :VimFiler -split -simple -winwidth=35 -no-quit<ENTER>
 nnoremap <silent> <C-e> :<C-u>VimFilerBufferDir -split -simple -winwidth=35 -toggle -no-quit<CR>

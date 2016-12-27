@@ -20,13 +20,13 @@ function! s:my_gitv_settings()
   " 現在のカーソル行のSHA1ハッシュを取得して
   " log上であらゆることを実行する
   " git rebase
-  nnoremap <buffer> <Space>rb :<C-u>Git rebase <C-r>=GitvGetCurrentHash()<CR><Space>
+  nnoremap <buffer> <Leader>rb :<C-u>Git rebase <C-r>=GitvGetCurrentHash()<CR><Space>
   " git revert
-  nnoremap <buffer> <Space>R :<C-u>Git revert <C-r>=GitvGetCurrentHash()<CR><CR>
+  nnoremap <buffer> <Leader>R :<C-u>Git revert <C-r>=GitvGetCurrentHash()<CR><CR>
   " git cherry-pick
-  nnoremap <buffer> <Space>h :<C-u>Git cherry-pick <C-r>=GitvGetCurrentHash()<CR><CR>
+  nnoremap <buffer> <Leader>h :<C-u>Git cherry-pick <C-r>=GitvGetCurrentHash()<CR><CR>
   " git reset --hard
-  nnoremap <buffer> <Space>rh :<C-u>Git reset --hard <C-r>=GitvGetCurrentHash()<CR>
+  nnoremap <buffer> <Leader>rh :<C-u>Git reset --hard <C-r>=GitvGetCurrentHash()<CR>
   " ファイルのdiffではなく、変更されたファイルの一覧を見る
   " 右ウィンドウで「t」を押すことでdiffウィンドウ内のfoldを切り替える
   nnoremap <silent><buffer> t :<C-u>windo call <SID>toggle_git_folding()<CR>1<C-w>w

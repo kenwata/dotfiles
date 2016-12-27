@@ -76,7 +76,7 @@ inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<S-TAB>
 "    "inoremap <expr><C-e>  neocomplete#cancel_popup()
 "
 "    " Close popup by <Space>.
-"    inoremap <expr><Space> pumvisible() ? neocomplete#close_popup() : "\<Space>"
+"    inoremap <expr><Leader> pumvisible() ? neocomplete#close_popup() : "\<Space>"
 "elseif neobundle#is_installed('neocomplcache')
 "    " neocomplcache用設定
 "    let g:neocomplcache_enable_at_startup = 1
