@@ -34,8 +34,8 @@ inoremap <expr><C-u> neocomplete#smart_close_popup()."\<C-u>"
 "inoremap <expr><C-y>  neocomplete#close_popup()
 "inoremap <expr><C-e>  neocomplete#cancel_popup()
 
-" Close popup by <Space>.
-inoremap <expr><Space> pumvisible() ? neocomplete#close_popup() : "\<Space>"
+" Close popup by Enter.
+inoremap <expr><CR> pumvisible() ? neocomplete#close_popup() : "\<CR>"
 
 " <TAB>: completion.
 " neosnippetが効かなくなってしまうので無効化
@@ -43,7 +43,10 @@ inoremap <expr><TAB> pumvisible() ? "\<C-n>" : "\<TAB>"
 inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<S-TAB>
 
 
-"if neobundle#is_installed('neocomplete') "Note: This option must set it in .vimrc(_vimrc).  NOT IN .gvimrc(_gvimrc)!  let g:neocomplete#force_overwrite_completefunc = 1 " AutoCompPopを無効にする let g:acp_enableAtStartup = 0 " neocompleteを有効にする let g:neocomplete#enable_at_startup = 1
+"if neobundle#is_installed('neocomplete')
+""Note: This option must set it in .vimrc(_vimrc).  NOT IN .gvimrc(_gvimrc)!  let g:neocomplete#force_overwrite_completefunc = 1
+" AutoCompPopを無効にする let g:acp_enableAtStartup = 0 
+" neocompleteを有効にする let g:neocomplete#enable_at_startup = 1
 "    " smarrt case有効化。 大文字が入力されるまで大文字小文字の区別を無視する
 "    let g:neocomplete#enable_smart_case = 1
 "    " 補完が自動で開始される文字数
