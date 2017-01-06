@@ -153,17 +153,3 @@ on_ft = 'haskell'
 #[[plugins]]
 #repo = 'koron/minimap-vim'
 #gui  = 1
-
-# カラーテーマ
-[[plugins]]
-repo = 'altercation/vim-colors-solarized'
-on_cmd = ['SOLARIZED']
-hook_post_source = '''
-  source ~/.vim/userautoload/plugins/basic/plugin-solarized.vim
-'''
-#[[plugins]]
-#repo = 'w0ng/vim-hybrid'
-#on_cmd = ['HYBRID']
-#hook_post_source = '''
-#  source ~/.vim/userautoload/plugins/basic/plugin-hybrid.vim
-#'''

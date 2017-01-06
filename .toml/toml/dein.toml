@@ -45,6 +45,8 @@ repo = 'cohama/agit.vim'
 [[plugins]]
 repo = 'w0ng/vim-hybrid'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-color-scheme.vim'
+[[plugins]]
+repo = 'altercation/vim-colors-solarized'
 
 # パワーライン等の設定
 # vim-powerline (フォントをこの中から取得し、パッチを当てる)
