@@ -77,3 +77,6 @@ endfunction
 function! _(str)
     return s:move_cursor_pos_mapping(a:str, "\<Left>")
 endfunction
+
+" 行末のスペースを削除
+noremap rs :%s/ *$//<CR>
