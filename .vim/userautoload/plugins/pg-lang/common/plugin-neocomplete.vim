@@ -34,7 +34,7 @@ inoremap <expr><C-u> neocomplete#smart_close_popup()."\<C-u>"
 "inoremap <expr><C-e>  neocomplete#cancel_popup()
 
 " Close popup by <Space>.
-inoremap <expr><Space> pumvisible() ? neocomplete#close_popup() : "\<Space>"
+inoremap <expr><Esc> pumvisible() ? neocomplete#close_popup() : "\<Esc>"
 
 inoremap <expr><TAB> pumvisible() ? "\<C-n>" : "\<TAB>"
 inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<S-TAB>

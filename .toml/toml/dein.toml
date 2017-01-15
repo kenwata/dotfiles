@@ -29,6 +29,11 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-unite.vim'
 repo = 'Shougo/neosnippet-snippets'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-snippet.vim'
 
+# shell
+[[plugins]]
+repo = 'Shougo/vimshell.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-vimshell.vim'
+
 # Git操作
 [[plugins]]
 repo = 'tpope/vim-fugitive'
@@ -43,6 +48,8 @@ repo = 'cohama/agit.vim'
 [[plugins]]
 repo = 'w0ng/vim-hybrid'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-color-scheme.vim'
+[[plugins]]
+repo = 'altercation/vim-colors-solarized'
 
 # パワーライン等の設定
 # vim-powerline (フォントをこの中から取得し、パッチを当てる)
