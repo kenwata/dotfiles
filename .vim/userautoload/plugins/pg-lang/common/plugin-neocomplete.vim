@@ -24,8 +24,9 @@ function! s:my_cr_function()
   " For no inserting <CR> key.
   return pumvisible() ? neocomplete#close_popup() : "\<CR>"
 endfunction
+
 " <TAB>: completion.
-inoremap <expr><TAB>  pumvisible() ? "\<C-n>" : "\<TAB>"
+"inoremap <expr><TAB>  pumvisible() ? "\<C-n>" : "\<TAB>"
 " <C-u>, <BS>: close popup and delete backword char.
 " ctrl + u で、インデント開始まで削除
 inoremap <expr><C-u> neocomplete#smart_close_popup()."\<C-u>"
@@ -36,8 +37,8 @@ inoremap <expr><C-u> neocomplete#smart_close_popup()."\<C-u>"
 " Close popup by <Space>.
 inoremap <expr><Esc> pumvisible() ? neocomplete#close_popup() : "\<Esc>"
 
-inoremap <expr><TAB> pumvisible() ? "\<C-n>" : "\<TAB>"
-inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<S-TAB>
+"inoremap <expr><TAB> pumvisible() ? "\<C-n>" : "\<TAB>"
+"inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<S-TAB>
 
 
 "if neobundle#is_installed('neocomplete') "Note: This option must set it in .vimrc(_vimrc).  NOT IN .gvimrc(_gvimrc)!  let g:neocomplete#force_overwrite_completefunc = 1 " AutoCompPopを無効にする let g:acp_enableAtStartup = 0 " neocompleteを有効にする let g:neocomplete#enable_at_startup = 1
