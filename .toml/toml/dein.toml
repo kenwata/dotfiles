@@ -35,7 +35,8 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-neosnippet.vim'
 repo     = 'Shougo/neosnippet-snippets'
 depends  = ['neosnippet.vim']
 
-# vimからShellを起動
+# open shell from vim
+# write alias to ~/.vimshrc
 [[plugins]]
 repo     = 'Shougo/vimshell'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-vimshell.vim'
