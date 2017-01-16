@@ -168,4 +168,4 @@ set backspace=start,indent,eol
 
 " 行頭で左(h)→上の行末へ
 " 行頭で右(l)→下の行頭へ
-:set whichwrap=b,s,h,l,<,>,[,],
+":set whichwrap=b,s,h,l,<,>,[,],

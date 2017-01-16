@@ -1,7 +1,7 @@
 "Note: This option must set it in .vimrc(_vimrc).  NOT IN .gvimrc(_gvimrc)!
 
-let g:neocomplete#force_overwrite_completefunc = 1
-" AutoCompPopを無効にする
+"let g:neocomplete#force_overwrite_completefunc = 1
+"" AutoCompPopを無効にする
 let g:acp_enableAtStartup = 0
 " neocompleteを有効にする
 let g:neocomplete#enable_at_startup = 1

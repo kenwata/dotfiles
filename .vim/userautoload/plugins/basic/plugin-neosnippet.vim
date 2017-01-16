@@ -1,7 +1,8 @@
 " neosnipet setting here!
-imap <C-s> <Plug>(neosnippet_expand_or_jump)
-smap <C-s> <Plug>(neosnippet_expand_or_jump)
-xmap <C-s> <Plug>(neosnippet_expand_target)
+" insert mode : ctrl + b でスニペット(C-sはなぜか割り当て出来なかった)
+imap <C-b> <Plug>(neosnippet_expand_or_jump)
+smap <C-b> <Plug>(neosnippet_expand_or_jump)
+xmap <C-b> <Plug>(neosnippet_expand_target)
 
 imap <expr><TAB> neosnippet#expandable_or_jumpable() ?
 \ "\<Plug>(neosnippet_expand_or_jump)"
