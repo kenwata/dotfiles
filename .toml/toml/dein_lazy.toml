@@ -6,7 +6,9 @@
 [[plugins]]
 repo     = 'Shougo/neocomplete'
 on_i     = 1
-hook_add = 'source ~/.vim/userautoload/plugins/pg-lang/common/plugin-neocomplete.vim'
+hook_add = '''
+  source ~/.vim/userautoload/plugins/basic/plugin-neocomplete.vim
+'''
 
 # 以下のファイルは、環境に併せてコメントを外してインストールすること
 
@@ -31,7 +33,9 @@ on_ft = 'javascript'
 [[plugins]]
 repo     = 'moll/vim-node'
 on_ft    = 'javascript'
-add_hook = 'source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim'
+hook_post_source = '''
+  source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
+'''
 
 ## node.jsの補完
 [[plugins]]
@@ -47,7 +51,9 @@ on_ft = 'javascript'
 [[plugins]]
 repo     = 'guileen/vim-node-dict'
 on_ft    = 'javascript'
-add_hook = 'source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim'
+hook_source = '''
+  source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
+'''
 
 ## jsxのシンタックスプラグイン
 [[plugins]]
@@ -97,15 +103,11 @@ on_ft = 'python'
 repo  = 'Flake8-vim'
 on_ft = 'python'
 
-#[[plugins]]
-#repo = 'altercation/vim-colors-solarized'
-#on_cmd = 'colorscheme solarized'
-#hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-solarized.vim'
-
 # haskell
-[[plugins]]
-repo  = 'kana/vim-filetype-haskell'
-on_ft = 'haskell'
+# conflict with 'dag/vim2hs'
+#[[plugins]]
+#repo  = 'kana/vim-filetype-haskell'
+#on_ft = 'haskell'
 
 # これを使うには
 # cabal update
@@ -135,21 +137,3 @@ on_ft = 'haskell'
 [[plugins]]
 repo = 'ujihisa/ref-hoogle'
 on_ft = 'haskell'
-
-
-# 有効にならない
-#[[plugins]]
-#repo = 'thinca/vim-fontzoom'
-#on_cmd = ['Fontzoom']
-#on_map = ['<Plug>(fontzoom-']
-#gui  = 1
-#
-#[[plugins]]
-#repo = 'vim-scripts/zoom.vim'
-#gui  = 1
-#
-# お試し
-# minimap
-#[[plugins]]
-#repo = 'koron/minimap-vim'
-#gui  = 1

@@ -23,23 +23,22 @@ hook_post_update = '''
 [[plugins]]
 repo = 'Shougo/unite.vim'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-unite.vim'
+# Unite history
+[[plugins]]
+repo = 'Shougo/neomru.vim'
+depends =['unite.vim']
 
-# snipet
 [[plugins]]
 repo = 'Shougo/neosnippet.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-neosnippet.vim'
 [[plugins]]
 repo = 'Shougo/neosnippet-snippets'
 depends =['neosnippet.vim']
 
-# Git操作
+# vimからShellを起動
 [[plugins]]
-repo = 'tpope/vim-fugitive'
-[[plugins]]
-repo = 'gregsexton/gitv'
-depends = ['vim-fugitive']
-hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-gitv.vim'
-[[plugins]]
-repo = 'cohama/agit.vim'
+repo = 'Shougo/vimshell'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-vimshell.vim'
 
 # カラーテーマ
 [[plugins]]
@@ -47,6 +46,17 @@ repo = 'w0ng/vim-hybrid'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-color-scheme.vim'
 [[plugins]]
 repo = 'altercation/vim-colors-solarized'
+
+# Git操作
+[[plugins]]
+repo = 'tpope/vim-fugitive'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-fugitive.vim'
+[[plugins]]
+repo = 'gregsexton/gitv'
+depends = ['vim-fugitive']
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-gitv.vim'
+[[plugins]]
+repo = 'cohama/agit.vim'
 
 # パワーライン等の設定
 # vim-powerline (フォントをこの中から取得し、パッチを当てる)
