@@ -9,5 +9,5 @@ noremap ,uf :Unite -buffer-name=file file<CR>
 " 最近使ったファイルの一覧
 noremap ,uu :Unite file_mru<CR>
 " sourcesを「今開いているファイルのディレクトリ」とする
-noremap :uff :<C-u>UniteWithBufferDir file -buffer-name=file<CR>
+noremap ,uh :<C-u>UniteWithBufferDir file -buffer-name=file<CR>
 

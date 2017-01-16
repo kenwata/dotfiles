@@ -79,3 +79,8 @@ endfunction
 
 " 行末のスペースを削除
 noremap rs :%s/ *$//<CR>
+
+" change dir to current file
+noremap <Leader>p :cd %:h<CR>
+" change dir to root
+noremap <Leader>h :cd ~<CR>
