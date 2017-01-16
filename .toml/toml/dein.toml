@@ -30,6 +30,7 @@ depends  = ['unite.vim']
 # yank/history
 [[plugins]]
 repo = 'Shougo/neoyank.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-neoyank.vim'
 depends = ['unite.vim']
 
 # snippet
