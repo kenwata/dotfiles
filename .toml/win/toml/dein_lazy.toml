@@ -4,94 +4,16 @@
 # 補完プラグイン
 # インサートモード時に呼び出す
 [[plugins]]
-repo = 'Shougo/neocomplete'
-on_i = 1
-hook_add = 'source ~/.vim/userautoload/plugins/pg-lang/common/plugin-neocomplete.vim'
+repo  = 'Shougo/neocomplete'
+on_i  = 1
+hook_add = '''
+  source ~/.vim/userautoload/plugins/basic/plugin-neocomplete.vim
+'''
+
+# 以下のファイルは、環境に併せてコメントを外してインストールすること
 
 # 特定のファイルタイプで読み込む
 ## Markdown
 [[plugins]]
-repo = 'plasticboy/vim-markdown'
+repo  = 'plasticboy/vim-markdown'
 on_ft = 'markdown'
-
-# JavaScript
-## ES6のシンタックスを当てる
-[[plugins]]
-repo = 'jelera/vim-javascript-syntax'
-on_ft = 'javascript'
-
-## jsの補完プラグイン
-[[plugins]]
-repo = 'mattn/jscomplete-vim'
-on_ft = 'javascript'
-
-## gfでrequire()のモジュールにジャンプ
-[[plugins]]
-repo = 'moll/vim-node'
-on_ft = 'javascript'
-add_hook = 'source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim'
-
-## node.jsの補完
-[[plugins]]
-repo = 'myhere/vim-nodejs-complete'
-on_ft = 'javascript'
-
-## function行、もしくは:JsDocでJSDocコメントができる
-[[plugins]]
-repo = 'heavenshell/vim-jsdoc'
-on_ft = 'javascript'
-
-## node用の辞書
-[[plugins]]
-repo = 'guileen/vim-node-dict'
-on_ft = 'javascript'
-add_hook = 'source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim'
-
-## jsxのシンタックスプラグイン
-[[plugins]]
-repo = 'mxw/vim-jsx'
-on_ft = 'javascript'
-
-## javascriptのsyntaxとindentをよしなに調整してくれる
-# 入れるとバグる
-#[[plugins]]
-#repo = 'pangloss/vim-javascript'
-#on_ft = 'javascript'
-
-## Python
-[[plugins]]
-repo = 'davidhalter/jedi-vim'
-on_ft = 'python'
-
-[[plugins]]
-repo = 'andviro/flake8-vim'
-on_ft = 'python'
-
-[[plugins]]
-repo = 'hynek/vim-python-pep8-indent'
-on_ft = 'python'
-
-[[plugins]]
-repo = 'jmcantrell/vim-virtualenv'
-on_ft = 'python'
-
-[[plugins]]
-repo = 'hachibeeDI/python_hl_lvar.vim'
-on_ft = 'python'
-
-[[plugins]]
-repo = 'kana/vim-textobj-indent'
-on_ft = 'python'
-
-[[plugins]]
-repo = 'bps/vim-textobj-python'
-on_ft = 'python'
-
-[[plugins]]
-repo = 'kana/vim-smartinput'
-on_ft = 'python'
-
-[[plugins]]
-repo = 'Flake8-vim'
-on_ft = 'python'
-

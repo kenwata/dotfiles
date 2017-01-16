@@ -1,4 +1,4 @@
-# 秘本は github.com のレポジトリを指定するだけ
+# 基本は github.com のレポジトリを指定するだけ
 [[plugins]]
 repo     = 'Shougo/dein.vim'
 
