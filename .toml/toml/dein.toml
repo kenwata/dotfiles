@@ -26,7 +26,12 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-unite.vim'
 # Unite history
 [[plugins]]
 repo     = 'Shougo/neomru.vim'
-depends  =['unite.vim']
+depends  = ['unite.vim']
+# yank/history
+[[plugins]]
+repo     = 'Shougo/neoyank.vim'
+depends  = ['unite.vim']
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-neoyank.vim'
 
 [[plugins]]
 repo     = 'Shougo/neosnippet.vim'
