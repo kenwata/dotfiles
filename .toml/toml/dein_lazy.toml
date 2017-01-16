@@ -4,8 +4,8 @@
 # 補完プラグイン
 # インサートモード時に呼び出す
 [[plugins]]
-repo     = 'Shougo/neocomplete'
-on_i     = 1
+repo  = 'Shougo/neocomplete'
+on_i  = 1
 hook_add = '''
   source ~/.vim/userautoload/plugins/basic/plugin-neocomplete.vim
 '''
@@ -31,8 +31,8 @@ on_ft = 'javascript'
 
 ## gfでrequire()のモジュールにジャンプ
 [[plugins]]
-repo     = 'moll/vim-node'
-on_ft    = 'javascript'
+repo  = 'moll/vim-node'
+on_ft = 'javascript'
 hook_post_source = '''
   source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
 '''
@@ -49,8 +49,8 @@ on_ft = 'javascript'
 
 ## node用の辞書
 [[plugins]]
-repo     = 'guileen/vim-node-dict'
-on_ft    = 'javascript'
+repo  = 'guileen/vim-node-dict'
+on_ft = 'javascript'
 hook_source = '''
   source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
 '''
@@ -132,8 +132,8 @@ on_ft = 'haskell'
 # hoogle
 # cabal install hoogle が必要
 [[plugins]]
-repo = 'thinca/vim-ref'
+repo  = 'thinca/vim-ref'
 on_ft = 'haskell'
 [[plugins]]
-repo = 'ujihisa/ref-hoogle'
+repo  = 'ujihisa/ref-hoogle'
 on_ft = 'haskell'
