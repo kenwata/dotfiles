@@ -6,7 +6,7 @@
 [[plugins]]
 repo = 'Shougo/neocomplete'
 on_i = 1
-hook_add = 'source ~/.vim/userautoload/plugins/pg-lang/common/plugin-neocomplete.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-neocomplete.vim'
 
 [[plugins]]
 repo = 'Shougo/neosnippet'
@@ -57,12 +57,6 @@ hook_add = 'source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascr
 repo = 'mxw/vim-jsx'
 on_ft = 'javascript'
 
-## javascriptのsyntaxとindentをよしなに調整してくれる
-# 入れるとバグる
-#[[plugins]]
-#repo = 'pangloss/vim-javascript'
-#on_ft = 'javascript'
-
 ## Python
 [[plugins]]
 repo = 'davidhalter/jedi-vim'
@@ -99,11 +93,6 @@ on_ft = 'python'
 [[plugins]]
 repo = 'Flake8-vim'
 on_ft = 'python'
-
-## Haskell indent plugin
-#[[plugins]]
-#repo = 'kana/vim-filetype-haskell'
-#on_ft = 'haskell'
 
 # Haskell 型チェックや補完等
 [[plugins]]

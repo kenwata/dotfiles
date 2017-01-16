@@ -23,6 +23,14 @@ hook_post_update = '''
 [[plugins]]
 repo = 'Shougo/unite.vim'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-unite.vim'
+# Unite history
+[[plugins]]
+repo     = 'Shougo/neomru.vim'
+depends  = ['unite.vim']
+# yank/history
+[[plugins]]
+repo = 'Shougo/neoyank.vim'
+depends = ['unite.vim']
 
 # snippet
 [[plugins]]
@@ -51,10 +59,6 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-color-scheme.vim'
 [[plugins]]
 repo = 'altercation/vim-colors-solarized'
 
-# パワーライン等の設定
-# vim-powerline (フォントをこの中から取得し、パッチを当てる)
-#[[plugins]]
-#repo = 'Lokaltog/vim-powerline'
 # ステータスラインのカスタマイズのためのプラグイン
 [[plugins]]
 repo = 'itchyny/lightline.vim'

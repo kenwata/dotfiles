@@ -3,6 +3,10 @@
 "**************************************************
 " キーバインド
 "**************************************************
+
+" LeaderキーをSpaceにする
+let mapleader = "\<Space>"
+
 "+++++ insert mode +++++ 
 " Ctrl + j で Esc
 inoremap <silent> jj <Esc>
@@ -25,10 +29,8 @@ noremap sh <C-W>h
 noremap sj <C-W>j
 noremap sk <C-W>k
 noremap sl <C-W>l
-noremap <Space>h 0
-noremap <Space>l $
-
-" Ctrl + e でNERDTree表示、非表示
+noremap <Leader>h 0
+noremap <Leader>l $
 
 " ウィンドウを水平に分割
 nnoremap ss :<C-u>sp<CR>
@@ -44,12 +46,9 @@ nnoremap j gj
 nnoremap k gk
 
 " <Space>s で置換
-noremap <Space>s :%s/
-" <Space><Space>でエスケープ
-noremap <Space><Space> <Esc>
-"noremap <Space><Space> <Esc>
+noremap <Leader>s :%s/
 " space二回押しでハイライトを消す
-nmap <silent> <Space><Space> :nohlsearch<CR>
+noremap <silent> <Leader><Leader> :nohlsearch<CR>
 
 " 分割したウィンドウそのものを移動
 " 下に移動
