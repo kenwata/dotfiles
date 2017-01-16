@@ -58,10 +58,6 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-gitv.vim'
 [[plugins]]
 repo     = 'cohama/agit.vim'
 
-# パワーライン等の設定
-# vim-powerline (フォントをこの中から取得し、パッチを当てる)
-#[[plugins]]
-#repo = 'Lokaltog/vim-powerline'
 # ステータスラインのカスタマイズのためのプラグイン
 [[plugins]]
 repo     = 'itchyny/lightline.vim'
@@ -99,8 +95,6 @@ repo     = 'kana/vim-operator-replace.git'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-operator-replace.vim'
 [[plugins]]
 repo     = 'kana/vim-operator-user.git'
-[[plugins]]
-repo     = 'kana/vim-textobj-user'
 [[plugins]]
 repo     = 'tpope/vim-surround'
 
