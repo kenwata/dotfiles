@@ -48,7 +48,7 @@ nnoremap k gk
 " <Space>s で置換
 noremap <Leader>s :%s/
 " space二回押しでハイライトを消す
-noremap <silent> <Leader><Leader> :nohlsearch<CR>
+noremap <silent> <Leader><Leader><Leader> :nohlsearch<CR>
 
 " 分割したウィンドウそのものを移動
 " 下に移動
@@ -80,7 +80,3 @@ endfunction
 " 行末のスペースを削除
 noremap rs :%s/ *$//<CR>
 
-" change dir to current file
-noremap <Leader>p :cd %:h<CR>
-" change dir to root
-noremap <Leader>h :cd ~<CR>
