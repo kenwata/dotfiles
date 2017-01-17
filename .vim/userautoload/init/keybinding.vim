@@ -8,12 +8,10 @@
 let mapleader = "\<Space>"
 
 "+++++ insert mode +++++ 
+
 " Ctrl + j で Esc
 inoremap <silent> jj <Esc>
 inoremap <silent> <C-j> j
-
-" ; と : を入れ替え
-noremap ; :
 
 " カーソル移動
 inoremap <C-j> <Down>
@@ -24,6 +22,11 @@ inoremap <C-l> <Right>
 inoremap ,w <Esc>:<C-u>w<CR>
 
 "+++++ normal mode +++++
+
+" ; と : を入れ替え
+noremap ; :
+
+
 " 分割ウィンドウ移動 
 noremap sh <C-W>h
 noremap sj <C-W>j
@@ -52,7 +55,7 @@ noremap <Leader>s :%s/
 
 "noremap <Space><Space> <Esc>
 " space二回押しでハイライトを消す
-nmap <silent> <Leader><Leader> :nohlsearch<CR>
+nmap <silent> <Leader><Leader><Leader> :nohlsearch<CR>
 
 " 分割したウィンドウそのものを移動
 " 下に移動
@@ -80,3 +83,11 @@ endfunction
 function! _(str)
     return s:move_cursor_pos_mapping(a:str, "\<Left>")
 endfunction
+
+" 行末のスペースを削除
+noremap rs :%s/ *$//<CR>
+
+" change dir to current file
+noremap <Leader>p :cd %:h<CR>
+" change dir to root
+noremap <Leader>h :cd ~<CR>
