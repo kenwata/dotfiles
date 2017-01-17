@@ -19,7 +19,7 @@ inoremap <C-k> <Up>
 inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
-inoremap ,w <Esc>:<C-u>w<CR>
+inoremap <Leader>w <Esc>:<C-u>w<CR>
 
 "+++++ normal mode +++++
 
@@ -53,8 +53,7 @@ nnoremap k gk
 " <Leader>s で置換
 noremap <Leader>s :%s/
 
-"noremap <Space><Space> <Esc>
-" space二回押しでハイライトを消す
+" space3回押しでハイライトを消す
 nmap <silent> <Leader><Leader><Leader> :nohlsearch<CR>
 
 " 分割したウィンドウそのものを移動
@@ -88,6 +87,6 @@ endfunction
 noremap rs :%s/ *$//<CR>
 
 " change dir to current file
-noremap <Leader>p :cd %:h<CR>
+noremap ,p :cd %:h<CR>
 " change dir to root
-noremap <Leader>h :cd ~<CR>
+noremap ,h :cd ~<CR>

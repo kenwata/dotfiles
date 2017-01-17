@@ -91,9 +91,9 @@ on_ft = 'python'
 repo  = 'kana/vim-textobj-indent'
 on_ft = 'python'
 
-[[plugins]]
-repo  = 'bps/vim-textobj-python'
-on_ft = 'python'
+#[[plugins]]
+#repo  = 'bps/vim-textobj-python'
+#on_ft = 'python'
 
 [[plugins]]
 repo  = 'kana/vim-smartinput'
