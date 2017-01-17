@@ -20,12 +20,12 @@ inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
 inoremap <Leader>w <Esc>:<C-u>w<CR>
+inoremap  <C-y> <Del>
 
 "+++++ normal mode +++++
 
 " ; と : を入れ替え
 noremap ; :
-
 
 " 分割ウィンドウ移動 
 noremap sh <C-W>h
