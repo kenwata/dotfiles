@@ -100,6 +100,8 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-ctrlp.vim'
 repo     = 'kana/vim-operator-replace.git'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-operator-replace.vim'
 [[plugins]]
+repo = 'kana/vim-textobj-user'
+[[plugins]]
 repo     = 'kana/vim-operator-user.git'
 [[plugins]]
 repo     = 'tpope/vim-surround'
