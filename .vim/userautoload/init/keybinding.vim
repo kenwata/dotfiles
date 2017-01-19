@@ -36,8 +36,6 @@ noremap sl <C-W>l
 noremap <Leader>h 0
 noremap <Leader>l $
 
-" Ctrl + e でNERDTree表示、非表示
-
 " ウィンドウを水平に分割
 nnoremap ss :<C-u>sp<CR>
 " ウィンドウを垂直に分割
@@ -46,6 +44,13 @@ nnoremap sv :<C-u>vs<CR>
 nnoremap sq :<C-u>q<CR>
 " バッファを閉じる
 nnoremap sQ :<C-u>bd<CR>
+" コマンド履歴
+nnoremap q; q:
+
+" タブ操作
+nnoremap st :<C-u>tabnew<CR>
+nnoremap sn gt
+nnoremap sp gT
 
 " j,kによる移動を折り返されたテキストでも自然にふるまう
 nnoremap j gj
