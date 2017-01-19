@@ -11,7 +11,6 @@ let mapleader = "\<Space>"
 
 " Ctrl + j で Esc
 inoremap <silent> jj <Esc>
-inoremap <silent> <C-j> j
 
 " カーソル移動
 inoremap <C-j> <Down>
@@ -20,8 +19,8 @@ inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
 inoremap <Leader>w <Esc>:<C-u>w<CR>
-inoremap  <C-y> <BS>
-inoremap  <C-v> <Del>
+inoremap <C-y> <BS>
+inoremap <C-v> <Del>
 
 "+++++ normal mode +++++
 
@@ -33,6 +32,7 @@ noremap sh <C-W>h
 noremap sj <C-W>j
 noremap sk <C-W>k
 noremap sl <C-W>l
+
 noremap <Leader>h 0
 noremap <Leader>l $
 
