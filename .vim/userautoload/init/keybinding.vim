@@ -22,6 +22,8 @@ inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
 inoremap ,w <Esc>:<C-u>w<CR>
+inoremap <C-y> <BS>
+inoremap <C-v> <Del>
 
 "+++++ normal mode +++++
 " 分割ウィンドウ移動 
@@ -29,6 +31,7 @@ noremap sh <C-W>h
 noremap sj <C-W>j
 noremap sk <C-W>k
 noremap sl <C-W>l
+
 noremap <Leader>h 0
 noremap <Leader>l $
 
@@ -40,6 +43,13 @@ nnoremap sv :<C-u>vs<CR>
 nnoremap sq :<C-u>q<CR>
 " バッファを閉じる
 nnoremap sQ :<C-u>bd<CR>
+" コマンド履歴
+nnoremap q; q:
+
+" タブ操作
+nnoremap st :<C-u>tabnew<CR>
+nnoremap sn gt
+nnoremap sp gT
 
 " j,kによる移動を折り返されたテキストでも自然にふるまう
 nnoremap j gj
