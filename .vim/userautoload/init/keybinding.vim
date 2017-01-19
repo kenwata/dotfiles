@@ -3,6 +3,10 @@
 "**************************************************
 " キーバインド
 "**************************************************
+
+" LeaderキーをSpaceにする
+let mapleader = "\<Space>"
+
 "+++++ insert mode +++++ 
 " Ctrl + j で Esc
 inoremap <silent> jj <Esc>
@@ -18,6 +22,8 @@ inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
 inoremap ,w <Esc>:<C-u>w<CR>
+inoremap <C-y> <BS>
+inoremap <C-v> <Del>
 
 "+++++ normal mode +++++
 " 分割ウィンドウ移動 
@@ -25,10 +31,9 @@ noremap sh <C-W>h
 noremap sj <C-W>j
 noremap sk <C-W>k
 noremap sl <C-W>l
-noremap <Space>h 0
-noremap <Space>l $
 
-" Ctrl + e でNERDTree表示、非表示
+noremap <Leader>h 0
+noremap <Leader>l $
 
 " ウィンドウを水平に分割
 nnoremap ss :<C-u>sp<CR>
@@ -38,17 +43,22 @@ nnoremap sv :<C-u>vs<CR>
 nnoremap sq :<C-u>q<CR>
 " バッファを閉じる
 nnoremap sQ :<C-u>bd<CR>
+" コマンド履歴
+nnoremap q; q:
+
+" タブ操作
+nnoremap st :<C-u>tabnew<CR>
+nnoremap sn gt
+nnoremap sp gT
 
 " j,kによる移動を折り返されたテキストでも自然にふるまう
 nnoremap j gj
 nnoremap k gk
 
 " <Space>s で置換
-noremap <Space>s :%s/
-
-"noremap <Space><Space> <Esc>
+noremap <Leader>s :%s/
 " space二回押しでハイライトを消す
-nmap <silent> <Space><Space> :nohlsearch<CR>
+noremap <silent> <Leader><Leader><Leader> :nohlsearch<CR>
 
 " 分割したウィンドウそのものを移動
 " 下に移動
@@ -76,3 +86,7 @@ endfunction
 function! _(str)
     return s:move_cursor_pos_mapping(a:str, "\<Left>")
 endfunction
+
+" 行末のスペースを削除
+noremap rs :%s/ *$//<CR>
+

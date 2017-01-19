@@ -23,6 +23,25 @@ hook_post_update = '''
 [[plugins]]
 repo = 'Shougo/unite.vim'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-unite.vim'
+# Unite history
+[[plugins]]
+repo     = 'Shougo/neomru.vim'
+depends  = ['unite.vim']
+# yank/history
+[[plugins]]
+repo = 'Shougo/neoyank.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-neoyank.vim'
+depends = ['unite.vim']
+
+# snippet
+[[plugins]]
+repo = 'Shougo/neosnippet-snippets'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-snippet.vim'
+
+# shell
+[[plugins]]
+repo = 'Shougo/vimshell.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-vimshell.vim'
 
 # snipet
 [[plugins]]
@@ -45,11 +64,9 @@ repo = 'cohama/agit.vim'
 [[plugins]]
 repo = 'w0ng/vim-hybrid'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-color-scheme.vim'
+[[plugins]]
+repo = 'altercation/vim-colors-solarized'
 
-# パワーライン等の設定
-# vim-powerline (フォントをこの中から取得し、パッチを当てる)
-#[[plugins]]
-#repo = 'Lokaltog/vim-powerline'
 # ステータスラインのカスタマイズのためのプラグイン
 [[plugins]]
 repo = 'itchyny/lightline.vim'
@@ -57,6 +74,7 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline.vim'
 # lightline.vimと連携しているgitプラグイン
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-gitgutter.vim'
 
 # インデント行を可視化するプラグイン
 [[plugins]]
@@ -103,5 +121,6 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-open-browser.vim'
 [[plugins]]
 repo = 'thinca/vim-template'
 
+# プログラム実行
 [[plugins]]
 repo = 'thinca/vim-quickrun'
