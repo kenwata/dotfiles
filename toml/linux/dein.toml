@@ -67,6 +67,7 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline.vim'
 # lightline.vimと連携しているgitプラグイン
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-gitgutter.vim'
 
 # インデント行を可視化するプラグイン
 [[plugins]]

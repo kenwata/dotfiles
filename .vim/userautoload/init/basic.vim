@@ -171,3 +171,24 @@ set ambiwidth=double
 " バックスペースを有効化？
 set backspace=start,indent,eol
 
+"**************************************************
+"   ハイライト表示
+"**************************************************
+
+" 背景色
+set background=dark
+
+" 対応括弧をハイライト表示する
+set showmatch
+
+" 対応括弧のハイライト時間を短くする(0.1秒)
+set matchtime=1
+
+" 行をハイライト
+set cursorline
+
+" 検索結果をハイライト 
+set hlsearch
+
+" terminalで256色表示を使う
+set t_Co=256
