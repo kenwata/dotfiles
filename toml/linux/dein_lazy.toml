@@ -131,3 +131,22 @@ on_ft = 'haskell'
 [[plugins]]
 repo  = 'ujihisa/ref-hoogle'
 on_ft = 'haskell'
+
+# for nvim
+[[plugins]]
+repo = 'Shougo/denite.nvim'
+hook_add = '''
+    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-denite.vim
+'''
+hook_post_source = '''
+    source ~/.vim/userautoload/plugins/neovim/hook_post_source/plugin-denite.vim
+'''
+if   = ' has("nvim") && has("python3") '
+
+[[plugins]]
+repo = 'Shougo/deoplete.nvim'
+hook_add = '''
+    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-deoplete.vim
+'''
+if   = ' has("nvim") && has("python3") '
+on_i = 1

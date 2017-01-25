@@ -57,10 +57,10 @@ nnoremap j gj
 nnoremap k gk
 
 " <Leader>s で置換
-noremap <Leader>s :%s/
+nnoremap <Leader>s :<C-u>%s/
 
 " space3回押しでハイライトを消す
-nmap <silent> <Leader><Leader><Leader> :nohlsearch<CR>
+nnoremap <silent> <Leader><Leader><Leader> :<C-u>nohlsearch<CR>
 
 " 分割したウィンドウそのものを移動
 " 下に移動
@@ -72,9 +72,9 @@ nnoremap sL <C-w>L
 " 左に移動
 nnoremap sH <C-w>H
 " 一番左上に移動
-noremap <S-h> <C-w>t
+nnoremap <S-h> <C-w>t
 " 一番右下に移動
-noremap <S-l> <C-w>b
+nnoremap <S-l> <C-w>b
 
 " / で検索時の結果数を表示する
 nnoremap <expr> / _(":%s/<Cursor>/&/gn")
@@ -90,5 +90,5 @@ function! _(str)
 endfunction
 
 " 行末のスペースを削除
-noremap rs :%s/ *$//<CR>
+noremap rs :<C-u>%s/ *$//<CR>
 
