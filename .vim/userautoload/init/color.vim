@@ -25,16 +25,3 @@ set cursorline
 " 検索結果をハイライト 
 set hlsearch
 
-" when open vim from terminal,
-" synchronize the vim's background transparency to terminal's one.
-if !has('gui_running')
-    augroup seiya
-        autocmd!
-        autocmd VimEnter,ColorScheme * highlight Normal ctermbg=none
-        autocmd VimEnter,ColorScheme * highlight LineNr ctermbg=none
-        autocmd VimEnter,ColorScheme * highlight SignColumn ctermbg=none
-        autocmd VimEnter,ColorScheme * highlight VertSplit ctermbg=none
-        autocmd VimEnter,ColorScheme * highlight NonText ctermbg=none
-    augroup END
-endif
-

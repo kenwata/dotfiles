@@ -150,3 +150,11 @@ hook_add = '''
 '''
 if   = ' has("nvim") && has("python3") '
 on_i = 1
+
+[[plugins]]
+repo = 'nixprime/cpsm'
+if   = ' has("nvim") && has("python3") '
+hook_add = '''
+    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-cpsm.vim
+'''
+#build = 'mkdir -p build && cd build && make -DPY3 .. && make install'
