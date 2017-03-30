@@ -9,6 +9,7 @@ on_i  = 1
 hook_add = '''
   source ~/.vim/userautoload/plugins/basic/plugin-neocomplete.vim
 '''
+if    = ' !has("nvim") '
 
 # 以下のファイルは、環境に併せてコメントを外してインストールすること
 
@@ -132,6 +133,24 @@ on_ft = 'haskell'
 repo  = 'ujihisa/ref-hoogle'
 on_ft = 'haskell'
 
+## C lang
+[[plugins]]
+repo  = 'justmao945/vim-clang'
+on_ft = ['c', 'cpp']
+hook_add = '''
+    source ~/.vim/userautoload/plugins/pg-lang/c/plugin-vim-clang.vim
+'''
+
+## R
+#[[plugins]]
+#repo = 'vim-scripts/Vim-R-plugin'
+#on_ft = 'r'
+
+[[plugins]]
+repo  = 'jalvesaq/Nvim-R'
+on_ft = 'r'
+if    = ' has("nvim") '
+
 # for nvim
 [[plugins]]
 repo = 'Shougo/denite.nvim'
@@ -157,4 +176,4 @@ if   = ' has("nvim") && has("python3") '
 hook_add = '''
     source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-cpsm.vim
 '''
-#build = 'mkdir -p build && cd build && make -DPY3 .. && make install'
+build = 'mkdir -p build && cd build && make -DPY3 .. && make install'

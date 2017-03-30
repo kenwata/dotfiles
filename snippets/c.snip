@@ -1,0 +1,17 @@
+snippet main
+options     head
+	int main(int argc, char const* argv[]) {
+		${0:TARGET}
+		return 0;
+	}
+
+snippet		switch
+options		head
+abbr		switch () {}
+	switch (${1:#:var}) {
+		case ${2:#:val}:
+			${3:TARGET}
+			break;
+		default:
+			${4:#:val}
+	}

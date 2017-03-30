@@ -18,7 +18,7 @@ inoremap <C-k> <Up>
 inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
-inoremap <Leader>w <Esc>:<C-u>w<CR>
+"inoremap <Leader>w <Esc>:<C-u>w<CR>
 inoremap <C-y> <BS>
 inoremap <C-v> <Del>
 
