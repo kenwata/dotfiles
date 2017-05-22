@@ -101,9 +101,9 @@ depends  = ['vim-textobj-user']
 repo  = 'kana/vim-smartinput'
 on_ft = 'python'
 
-[[plugins]]
-repo  = 'Flake8-vim'
-on_ft = 'python'
+#[[plugins]]
+#repo  = '/Flake8-vim'
+#on_ft = 'python'
 
 # to use
 # cabal update
