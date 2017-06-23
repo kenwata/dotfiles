@@ -34,16 +34,10 @@ if dein#load_state(s:dein_dir)
   call dein#save_state()
 endif
 
-" vimprocだけは最初にインストールする
-" インストールしておかないと、他のプラグインのインストール時にtime outが起こる
-if dein#check_install(['vimproc'])
-  call dein#install(['vimproc'])
-endif
 " もし、未インストールのものがあったらインストール
 if dein#check_install()
   call dein#install()
 endif
-
 
 " deinはシンタックス・ファイルタイプの設定をここで行う
 syntax on
