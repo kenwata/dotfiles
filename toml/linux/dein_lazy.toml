@@ -152,7 +152,7 @@ on_ft = 'r'
 hook_add = '''
     source ~/.vim/userautoload/plugins/pg-lang/R/plugin-nvim-r.vim
 '''
-#if    = ' has("nvim") '
+if    = ' has("nvim") '
 
 # for nvim
 [[plugins]]
