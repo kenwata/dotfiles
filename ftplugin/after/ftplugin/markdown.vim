@@ -15,5 +15,8 @@ setlocal nofoldenable
 " 自動改行を無効化
 setlocal noautoindent
 
+" プレビュー時にヘッダーを表示しない
+let g:previm_show_header=0
+
 noremap <C-M> :PrevimOpen<CR>
 

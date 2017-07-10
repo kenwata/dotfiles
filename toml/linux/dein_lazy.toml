@@ -149,7 +149,10 @@ hook_add = '''
 [[plugins]]
 repo  = 'jalvesaq/Nvim-R'
 on_ft = 'r'
-if    = ' has("nvim") '
+hook_add = '''
+    source ~/.vim/userautoload/plugins/pg-lang/R/plugin-nvim-r.vim
+'''
+#if    = ' has("nvim") '
 
 # for nvim
 [[plugins]]
