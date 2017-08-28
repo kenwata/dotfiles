@@ -18,5 +18,9 @@ setlocal noautoindent
 " プレビュー時にヘッダーを表示しない
 let g:previm_show_header=0
 
+if has('unix')
+  let g:previm_open_cmd = '/usr/bin/chromium-browser'
+endif
+
 noremap <C-M> :PrevimOpen<CR>
 
