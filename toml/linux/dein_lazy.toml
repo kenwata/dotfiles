@@ -153,6 +153,7 @@ hook_add = '''
     source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-cpsm.vim
 '''
 build = 'mkdir -p build && cd build && make -DPY3 .. && make install'
+#if    = ' has("nvim") '
 
 #########################
 # for nvim

@@ -1,6 +1,6 @@
 "let g:python3_host_prog = '~/.pyenv/versions/3.6.0/bin/python3'
 let g:python_host_prog = $PYENV_ROOT . '/shims/python'
-let g:python3_host_prog = $PYENV_ROOT . '/versions/3.6.0/bin/python3'
+let g:python3_host_prog = $PYENV_ROOT . '/versions/3.6.1/bin/python3'
 
 runtime! userautoload/init/*.vim
 runtime! userautoload/dein/*.vim
