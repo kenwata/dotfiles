@@ -91,4 +91,5 @@ endfunction
 
 " 行末のスペースを削除
 noremap rs :<C-u>%s/ *$//<CR>
-
+" 連続する空白行を1つの空白にする
+noremap <Leader>t :<C-u>%s/ *$/ /c<CR>
