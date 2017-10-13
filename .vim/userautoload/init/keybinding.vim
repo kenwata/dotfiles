@@ -93,3 +93,7 @@ endfunction
 noremap rs :<C-u>%s/ *$//<CR>
 " 連続する空白行を1つの空白にする
 noremap <Leader>t :<C-u>%s/ *$/ /c<CR>
+
+" 画面分割状態からDiffを取る
+nnoremap ,d :windo diffthis<CR>
+nnoremap ,o :diffoff<CR>
