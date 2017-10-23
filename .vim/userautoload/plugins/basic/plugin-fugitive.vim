@@ -1,0 +1,1 @@
+noremap gt :Git 

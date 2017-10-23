@@ -9,3 +9,4 @@ nnoremap <silent> ,ipy :VimShellInteractive python<CR>
 vmap <silent> ,ss :VimShellSendString<CR>
 " 選択中に,ss: 非同期で開いたインタプリタに選択行を評価させる
 nnoremap <silent> ,ss <S-v>:VimShellSendString<CR>
+

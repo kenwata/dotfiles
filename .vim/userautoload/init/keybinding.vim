@@ -8,12 +8,9 @@
 let mapleader = "\<Space>"
 
 "+++++ insert mode +++++ 
+
 " Ctrl + j で Esc
 inoremap <silent> jj <Esc>
-inoremap <silent> <C-j> j
-
-" ; と : を入れ替え
-noremap ; :
 
 " カーソル移動
 inoremap <C-j> <Down>
@@ -21,11 +18,15 @@ inoremap <C-k> <Up>
 inoremap <C-h> <Left>
 inoremap <C-l> <Right>
 
-inoremap ,w <Esc>:<C-u>w<CR>
+"inoremap <Leader>w <Esc>:<C-u>w<CR>
 inoremap <C-y> <BS>
 inoremap <C-v> <Del>
 
 "+++++ normal mode +++++
+
+" ; と : を入れ替え
+noremap ; :
+
 " 分割ウィンドウ移動 
 noremap sh <C-W>h
 noremap sj <C-W>j
@@ -55,10 +56,11 @@ nnoremap sp gT
 nnoremap j gj
 nnoremap k gk
 
-" <Space>s で置換
-noremap <Leader>s :%s/
-" space二回押しでハイライトを消す
-noremap <silent> <Leader><Leader><Leader> :nohlsearch<CR>
+" <Leader>s で置換
+nnoremap <Leader>s :<C-u>%s/
+
+" space3回押しでハイライトを消す
+nnoremap <silent> <Leader><Leader><Leader> :<C-u>nohlsearch<CR>
 
 " 分割したウィンドウそのものを移動
 " 下に移動
@@ -70,9 +72,9 @@ nnoremap sL <C-w>L
 " 左に移動
 nnoremap sH <C-w>H
 " 一番左上に移動
-noremap <S-h> <C-w>t
+nnoremap <S-h> <C-w>t
 " 一番右下に移動
-noremap <S-l> <C-w>b
+nnoremap <S-l> <C-w>b
 
 " / で検索時の結果数を表示する
 nnoremap <expr> / _(":%s/<Cursor>/&/gn")
@@ -88,5 +90,10 @@ function! _(str)
 endfunction
 
 " 行末のスペースを削除
-noremap rs :%s/ *$//<CR>
+noremap rs :<C-u>%s/ *$//<CR>
+" 連続する空白行を1つの空白にする
+noremap <Leader>t :<C-u>%s/ *$/ /c<CR>
 
+" 画面分割状態からDiffを取る
+nnoremap ,d :windo diffthis<CR>
+nnoremap ,o :diffoff<CR>
