@@ -75,3 +75,7 @@ endif
 "if has("nvim")
 "
 "endif
+
+" Syntastic の Flake8について
+" 特定のエラーを出力しない場合は、以下のように記述
+let g:syntastic_python_flake8_args = '--ignore="F401,F403"'
