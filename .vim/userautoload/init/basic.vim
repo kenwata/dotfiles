@@ -99,7 +99,12 @@ set guioptions+=a
 
 " yankしたテキストをクリップボードに格納
 " linux環境ではunnamedplus、その他環境はunnamedで設定するらしい
-set clipboard=unnamedplus,autoselect 
+" neovimではunnamedplusだけで良い
+if has("nvim")
+    set clipboard=unnamedplus
+elseif
+    set clipboard=unnamedplus,autoselect
+endif
 
 " クリップボードにコピーしたものをvimで編集しているものに貼り付けた時、
 " 自動的にset pasteモードに入り、自動インデントをしないようにする
