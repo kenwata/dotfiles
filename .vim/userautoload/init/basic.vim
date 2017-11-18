@@ -102,7 +102,7 @@ set guioptions+=a
 " neovimではunnamedplusだけで良い
 if has("nvim")
     set clipboard=unnamedplus
-elseif
+else
     set clipboard=unnamedplus,autoselect
 endif
 

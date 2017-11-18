@@ -6,18 +6,19 @@ repo     = 'Shougo/dein.vim'
 # vimで非同期処理を実現するためのプラグイン
 [[plugins]]
 repo     = 'Shougo/vimproc.vim'
-hook_post_update = '''
-  if dein#util#_is_windows()
-    let cmd = 'tools\\update-dll-mingw'
-  elseif dein#util#_is_cygwin()
-    let cmd = 'make -f make_cygwin.mak'
-  elseif executable('gmake')
-    let cmd = 'gmake'
-  else
-    let cmd = 'make'
-  endif
-  let g:dein#plugin.build = cmd
-'''
+build    = 'make'
+#hook_post_update = '''
+#  if dein#util#_is_windows()
+#    let cmd = 'tools\\update-dll-mingw'
+#  elseif dein#util#_is_cygwin()
+#    let cmd = 'make -f make_cygwin.mak'
+#  elseif executable('gmake')
+#    let cmd = 'gmake'
+#  else
+#    let cmd = 'make'
+#  endif
+#  let g:dein#plugin.build = cmd
+#'''
 
 # Unite
 [[plugins]]
@@ -85,9 +86,12 @@ repo     = 'kana/vim-submode'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-submode.vim'
 
 # シンタックスプラグイン
+#[[plugins]]
+#repo     = 'scrooloose/syntastic'
+#hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-syntastic.vim'
+
 [[plugins]]
-repo     = 'scrooloose/syntastic'
-hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-syntastic.vim'
+repo     = 'w0rp/ale'
 
 # ファイラー系
 [[plugins]]
