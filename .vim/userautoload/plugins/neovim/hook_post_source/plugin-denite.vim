@@ -6,7 +6,7 @@
 "call denite#custom#var('grep', 'separator', [])
 "call denite#custom#var('grep', 'default_opts', ['--nocolor', '--nogroup'])
 
-call denite#custom#source('file_rec', 'matcher', ['matcher_cpsm'])
+"call denite#custom#source('file_rec', 'matcher', ['matcher_cpsm'])
 
 call denite#custom#map('insert', '<C-j>', '<denite:move_to_next_line>', 'noremap')
 call denite#custom#map('insert', '<C-k>', '<denite:move_to_previous_line>', 'noremap')
