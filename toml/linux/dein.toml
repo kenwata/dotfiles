@@ -68,7 +68,15 @@ repo     = 'cohama/agit.vim'
 # ステータスラインのカスタマイズのためのプラグイン
 [[plugins]]
 repo     = 'itchyny/lightline.vim'
-hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline.vim'
+# hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline.vim'
+# lightline拡張
+[[plugins]]
+repo     = 'delphinus/lightline-delphinus'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline-delphinus.vim'
+[[plugins]]
+repo = 'ryanoasis/vim-devicons'
+[[plugins]]
+repo     = 'w0rp/ale'
 # lightline.vimと連携しているgitプラグイン
 [[plugins]]
 repo     = 'airblade/vim-gitgutter'
@@ -89,9 +97,6 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-submode.vim'
 #[[plugins]]
 #repo     = 'scrooloose/syntastic'
 #hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-syntastic.vim'
-
-[[plugins]]
-repo     = 'w0rp/ale'
 
 # ファイラー系
 [[plugins]]
