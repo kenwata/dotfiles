@@ -146,15 +146,6 @@ hook_add = '''
 #repo = 'vim-scripts/Vim-R-plugin'
 #on_ft = 'r'
 
-[[plugins]]
-repo = 'nixprime/cpsm'
-if   = ' has("nvim") && has("python3") '
-hook_add = '''
-    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-cpsm.vim
-'''
-build = 'mkdir -p build && cd build && make -DPY3 .. && make install'
-#if    = ' has("nvim") '
-
 #########################
 # for nvim
 [[plugins]]
@@ -186,3 +177,12 @@ if    = ' has("nvim") '
 [[plugins]]
 repo = 'zchee/deoplete-jedi'
 if   = ' has("nvim") '
+
+#[[plugins]]
+#repo = 'nixprime/cpsm'
+#if   = ' has("nvim") && has("python3") '
+#hook_add = '''
+#    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-cpsm.vim
+#'''
+#build = 'mkdir -p build && cd build && make -DPY3 .. && make install'
+#if    = ' has("nvim") '

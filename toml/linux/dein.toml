@@ -77,6 +77,8 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline-delphinus.
 repo = 'ryanoasis/vim-devicons'
 [[plugins]]
 repo     = 'w0rp/ale'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-ale.vim'
+
 # lightline.vimと連携しているgitプラグイン
 [[plugins]]
 repo     = 'airblade/vim-gitgutter'
