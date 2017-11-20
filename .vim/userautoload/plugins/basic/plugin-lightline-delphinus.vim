@@ -1,3 +1,7 @@
+let g:lightline_delphinus_use_powerline_glyphs=1
+"let g:lightline_delphinus_use_nerd_fonts_glyphs=1
+let g:lightline_delphinus_colorscheme="nord_improved"
+
 function! s:ale_string(mode)
   if !exists('g:ale_buffer_info')
     return ''
@@ -16,6 +20,8 @@ function! s:ale_string(mode)
   return l:error_count == 0 && l:warning_count == 0 ? l:no_errors : ''
 endfunction
 
-let g:lightline_delphinus_use_powerline_glyphs=1
-"let g:lightline_delphinus_use_nerd_fonts_glyphs=1
-let g:lightline_delphinus_colorscheme="nord_improved"
+augroup LightLineOnALE
+  autocmd!
+  autocmd User ALELint call lightline#update()
+augroup END
+
