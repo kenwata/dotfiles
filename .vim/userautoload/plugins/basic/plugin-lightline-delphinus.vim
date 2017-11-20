@@ -1,6 +1,7 @@
 let g:lightline_delphinus_use_powerline_glyphs=1
-"let g:lightline_delphinus_use_nerd_fonts_glyphs=1
+let g:lightline_delphinus_use_nerd_fonts_glyphs=1
 let g:lightline_delphinus_colorscheme="nord_improved"
+"let g:lightline_delphinus_colorscheme="solarized_improved"
 
 function! s:ale_string(mode)
   if !exists('g:ale_buffer_info')

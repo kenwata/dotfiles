@@ -50,7 +50,8 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-vimshell.vim'
 # カラーテーマ
 [[plugins]]
 repo     = 'w0ng/vim-hybrid'
-hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-color-scheme.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/colors/plugin-default-color-scheme.vim'
+#hook_add = 'source ~/.vim/userautoload/plugins/colors/plugin-solarized.vim'
 [[plugins]]
 repo     = 'altercation/vim-colors-solarized'
 
@@ -68,7 +69,7 @@ repo     = 'cohama/agit.vim'
 # ステータスラインのカスタマイズのためのプラグイン
 [[plugins]]
 repo     = 'itchyny/lightline.vim'
- hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline.vim'
 # lightline拡張
 [[plugins]]
 repo     = 'delphinus/lightline-delphinus'
