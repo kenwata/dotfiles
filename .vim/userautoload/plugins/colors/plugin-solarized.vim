@@ -14,10 +14,11 @@ let g:solarized_visibility = "high"
 
 
 " lightline 設定
-let g:lightline = {
-            \ 'colorscheme': 'solarized'
-            \}
+"let g:lightline = {
+"            \ 'colorscheme': 'solarized'
+"            \}
 let g:lightline_delphinus_colorscheme="solarized_improved"
+let g:lightline['colorscheme']="solarized_improved"
 
 function! s:ale_string(mode)
   if !exists('g:ale_buffer_info')
