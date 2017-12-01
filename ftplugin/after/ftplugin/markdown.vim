@@ -19,9 +19,14 @@ setlocal noautoindent
 let g:previm_show_header=0
 
 " デフォルトのブラウザをfirefoxに移行したためいらなくなった
-"if has('unix')
-"  let g:previm_open_cmd = '/usr/bin/chromium-browser'
-"endif
+if has('mac')
+  let g:previm_open_cmd = 'open -a Firefox'
+elseif has('unix')
+  let g:previm_open_cmd = '/usr/bin/firefox'
+elseif has('win64')
+  let g:previm_open_cmd = 'C:\\Program\ Files\\Mozilla\ Firefox\\firefox.exe'
+" TODO has('win32')
+endif
 
 noremap <C-M> :PrevimOpen<CR>
 
