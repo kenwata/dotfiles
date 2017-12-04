@@ -21,7 +21,7 @@ let g:ale_lint_on_enter = 0
 " エラー・警告時にウィンドウ左に出力する文字
 "let g:ale_sign_error = '>>'
 "let g:ale_sign_warning = '--'
-let g:ale_statusline_format = ['⤫ %d', '⚠ %d', '🆗']
+let g:ale_statusline_format = ['⤫ %d', '⚠ %d', 'OK']
 let g:ale_sign_error = '⤫ '
 let g:ale_sign_warning = '⚠ '
 
