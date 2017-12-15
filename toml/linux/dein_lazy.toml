@@ -61,24 +61,10 @@ hook_source = '''
 repo  = 'mxw/vim-jsx'
 on_ft = 'javascript'
 
-## javascriptのsyntaxとindentをよしなに調整してくれる
-# 入れるとバグる
-#[[plugins]]
-#repo = 'pangloss/vim-javascript'
-#on_ft = 'javascript'
-
-## Python
+# Python
 [[plugins]]
 repo  = 'davidhalter/jedi-vim'
 on_ft = 'python'
-
-# [[plugins]]
-# repo  = 'andviro/flake8-vim'
-# on_ft = 'python'
-
-# [[plugins]]
-# repo  = 'hynek/vim-python-pep8-indent'
-# on_ft = 'python'
 
 # [[plugins]]
 # repo  = 'jmcantrell/vim-virtualenv'
@@ -141,11 +127,6 @@ hook_add = '''
     source ~/.vim/userautoload/plugins/pg-lang/c/plugin-vim-clang.vim
 '''
 
-## R
-#[[plugins]]
-#repo = 'vim-scripts/Vim-R-plugin'
-#on_ft = 'r'
-
 #########################
 # for nvim
 [[plugins]]
@@ -166,6 +147,7 @@ hook_add = '''
 if   = ' has("nvim") && has("python3") '
 on_i = 1
 
+# Rコンソール
 [[plugins]]
 repo  = 'jalvesaq/Nvim-R'
 on_ft = 'r'
@@ -174,6 +156,7 @@ hook_add = '''
 '''
 if    = ' has("nvim") '
 
+# Python補完
 [[plugins]]
 repo = 'zchee/deoplete-jedi'
 if   = ' has("nvim") '
