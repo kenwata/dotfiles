@@ -1,8 +1,8 @@
 " Depends on pyenv versions
 "let g:python3_host_prog = '~/.pyenv/versions/3.6.0/bin/python3'
 "let g:python_host_prog = $PYENV_ROOT . '/shims/python'
-let g:python_host_prog = $PYENV_ROOT . '/versions/2.7.9/bin/python'
-let g:python3_host_prog = $PYENV_ROOT . '/versions/3.6.1/bin/python3'
+let g:python_host_prog = $PYENV_ROOT . '/versions/2.7.14/bin/python'
+let g:python3_host_prog = $PYENV_ROOT . '/versions/3.6.3/bin/python3'
 
 " ロードする順番を指定
 runtime! userautoload/init/basic.vim
