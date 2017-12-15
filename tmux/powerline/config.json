@@ -2,7 +2,6 @@
   "common": {
     "term_truecolor": false,
     "log_file": "/tmp/powerline.log",
-    "log_level": "DEBUG",
     "default_top_theme": "powerline"
   },
   "ext": {
