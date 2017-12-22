@@ -20,7 +20,7 @@ let g:previm_show_header=0
 
 " デフォルトのブラウザをfirefoxに移行したためいらなくなった
 if has('mac')
-  let g:previm_open_cmd = 'open -a Firefox'
+  let g:previm_open_cmd = 'open -a Google\ Chrome'
 elseif has('unix')
   let g:previm_open_cmd = '/usr/bin/firefox'
 elseif has('win64')

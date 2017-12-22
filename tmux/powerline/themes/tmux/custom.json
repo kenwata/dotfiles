@@ -2,6 +2,10 @@
   "segments": {
     "right": [
       {
+        "function": "powerline_gitstatus.gitstatus",
+        "priority": 40
+      },
+      {
         "function": "powerline.segments.common.net.internal_ip",
         "before": "\uf450"
       },
