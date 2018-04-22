@@ -14,7 +14,7 @@ let g:ale_linters = {
             \}
 
 " 開いたときはエラー表示しない
-let g:ale_lint_on_enter = 0
+"let g:ale_lint_on_enter = 0
 " 左端のシンボルカラムを表示したままにする
 " let g:ale_sign_column_always = 1
 
@@ -24,4 +24,8 @@ let g:ale_lint_on_enter = 0
 let g:ale_statusline_format = ['⤫ %d', '⚠ %d', 'OK']
 let g:ale_sign_error = '⤫ '
 let g:ale_sign_warning = '⚠ '
+" 編集中はエラーを出さない
+let g:ale_lint_on_text_change = 'never'
+
+let g:ale_sign_column_always = 1
 

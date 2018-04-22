@@ -78,5 +78,16 @@ endif
 
 " Syntastic の Flake8について
 " 特定のエラーを出力しない場合は、以下のように記述
-let g:syntastic_python_flake8_args = '--ignore="F401,F403"'
+" let g:syntastic_python_flake8_args = '--ignore="F401,F403"'
+let g:ale_python_flake8_executable = 'flake8'
 
+" E402 : impot文はファイルの先頭orドックストリングの直後
+"        (os.pardirやos.appendなどするとエラーになるのでoff)
+" E501 : 80文字以上警告
+" E731 : do not assign a lambda expression, use a def
+"        ラムダ式使うと警告出るのでoff
+" F401 : imported but unused
+" F403 : using wildcard imports
+" W391 : blank line at end of file
+let g:ale_python_flake8_args = '--ignore=E127,E402,E501,E731,F401,F403,W391'
+let g:ale_python_flake8_options = '--ignore=E127,E402,E501,E731,F401,F403,W391'

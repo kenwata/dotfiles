@@ -19,21 +19,39 @@ if    = ' !has("nvim") '
 repo  = 'plasticboy/vim-markdown'
 on_ft = 'markdown'
 
+# JS シンタックスハイライト
+[[plugins]]
+repo  = 'pangloss/vim-javascript'
+on_ft = 'javascript'
 # JavaScript
-## ES6のシンタックスを当てる
+# ES6のシンタックスを当てる
 [[plugins]]
 repo  = 'jelera/vim-javascript-syntax'
-on_ft = 'javascript'
+on_ft = ['javascript', 'javascript.jsx']
+build = 'npm install'
 
 ## jsの補完プラグイン
+# [[plugins]]
+# repo  = 'mattn/jscomplete-vim'
+# on_ft = 'javascript'
+# [[plugins]]
+# repo  = 'ternjs/tern_for_vim'
+# on_ft = ['javascript', 'javascript.jsx']
+# merged = 0
 [[plugins]]
-repo  = 'mattn/jscomplete-vim'
-on_ft = 'javascript'
+repo  = 'carlitux/deoplete-ternjs'
+on_ft = ['javascript', 'javascript.jsx']
+on_ft = ' has("nvim") '
+build = 'npm install -g tern'
+merged = 0
+# hook_post_source = '''
+#   source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-deoplete-ternjs
+# '''
 
 ## gfでrequire()のモジュールにジャンプ
 [[plugins]]
 repo  = 'moll/vim-node'
-on_ft = 'javascript'
+on_ft = ['javascript', 'javascript.jsx']
 hook_post_source = '''
   source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
 '''
@@ -41,12 +59,12 @@ hook_post_source = '''
 ## node.jsの補完
 [[plugins]]
 repo  = 'myhere/vim-nodejs-complete'
-on_ft = 'javascript'
+on_ft = ['javascript', 'javascript.jsx']
 
 ## function行、もしくは:JsDocでJSDocコメントができる
 [[plugins]]
 repo  = 'heavenshell/vim-jsdoc'
-on_ft = 'javascript'
+on_ft = ['javascript', 'javascript.jsx']
 
 ## node用の辞書
 [[plugins]]
@@ -56,10 +74,14 @@ hook_source = '''
   source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
 '''
 
-## jsxのシンタックスプラグイン
+# jsxのシンタックスプラグイン
+# [[plugins]]
+# repo  = 'mxw/vim-jsx'
+# on_ft = 'javascript'
+# こちらのほうが正しくハイライトされる
 [[plugins]]
-repo  = 'mxw/vim-jsx'
-on_ft = 'javascript'
+repo  = 'maxmellon/vim-jsx-pretty'
+on_ft = ['javascript', 'javascript.jsx']
 
 # Python
 [[plugins]]

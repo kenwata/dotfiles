@@ -18,7 +18,7 @@
       },
       {
         "function": "powerline.segments.common.time.date",
-        "before": "\uf073"
+        "before": "\uf073 "
       },
       {
         "function": "powerline.segments.common.time.date",
