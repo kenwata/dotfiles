@@ -141,12 +141,18 @@ on_ft = 'haskell'
 repo  = 'ujihisa/ref-hoogle'
 on_ft = 'haskell'
 
-## C lang
+# # C lang
+# [[plugins]]
+# repo  = 'justmao945/vim-clang'
+# on_ft = ['c', 'cpp']
+# hook_add = '''
+#     source ~/.vim/userautoload/plugins/pg-lang/c/plugin-vim-clang.vim
+# '''
 [[plugins]]
-repo  = 'justmao945/vim-clang'
-on_ft = ['c', 'cpp']
+repo  = 'zchee/deoplete-clang'
+on_ft = ['c', 'cpp', 'cmake']
 hook_add = '''
-    source ~/.vim/userautoload/plugins/pg-lang/c/plugin-vim-clang.vim
+    source ~/.vim/userautoload/plugins/pg-lang/c/plugin-deoplete-clang.vim
 '''
 
 #########################
