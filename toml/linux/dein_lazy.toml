@@ -87,7 +87,6 @@ on_ft = ['javascript', 'javascript.jsx']
 [[plugins]]
 repo  = 'davidhalter/jedi-vim'
 on_ft = 'python'
-if   = ' !has("nvim") '
 
 # [[plugins]]
 # repo  = 'jmcantrell/vim-virtualenv'
