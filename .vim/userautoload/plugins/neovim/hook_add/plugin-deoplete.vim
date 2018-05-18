@@ -12,12 +12,4 @@ let g:deoplete#max_list = 10000
 " initialize
 let g:deoplete#omni#input_patterns = {}
 
-" file/include conflicting deoplete-jedi
-let g:deoplete#ignore_sources = {}
-let g:deoplete#ignore_sources.python =
-\ ['buffer', 'dictionary', 'member', 'omni', 'tag', 'syntax', 'around']
 
-let g:deoplete#sources#jedi#statement_length = 0
-let g:deoplete#sources#jedi#short_types = 0
-let g:deoplete#sources#jedi#show_docstring = 1
-let g:deoplete#sources#jedi#worker_threads = 2
