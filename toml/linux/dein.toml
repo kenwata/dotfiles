@@ -63,13 +63,20 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline.vim'
 [[plugins]]
 repo     = 'delphinus/lightline-delphinus'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-lightline-delphinus.vim'
+
 # icon 拡張
 [[plugins]]
 repo = 'ryanoasis/vim-devicons'
+
 # シンタックス
 [[plugins]]
 repo     = 'w0rp/ale'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-ale.vim'
+# シンタックスプラグイン
+# ALEに移行
+#[[plugins]]
+#repo     = 'scrooloose/syntastic'
+#hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-syntastic.vim'
 
 # lightline.vimと連携しているgitプラグイン
 [[plugins]]
@@ -86,12 +93,6 @@ hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-indent-guides.vim'
 [[plugins]]
 repo     = 'kana/vim-submode'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-submode.vim'
-
-# シンタックスプラグイン
-# ALEに移行
-#[[plugins]]
-#repo     = 'scrooloose/syntastic'
-#hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-syntastic.vim'
 
 # ファイラー系
 [[plugins]]

@@ -12,4 +12,3 @@ let g:deoplete#max_list = 10000
 " initialize
 let g:deoplete#omni#input_patterns = {}
 
-

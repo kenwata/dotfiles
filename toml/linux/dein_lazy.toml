@@ -1,5 +1,20 @@
-# 必ずしも起動時に必要でないプラグインは
-# 利用条件と共にこちらで入れる
+[[plugins]]
+repo = 'Shougo/denite.nvim'
+hook_add = '''
+    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-denite.vim
+'''
+hook_post_source = '''
+    source ~/.vim/userautoload/plugins/neovim/hook_post_source/plugin-denite.vim
+'''
+if   = ' has("nvim") && has("python3") '
+
+[[plugins]]
+repo = 'Shougo/deoplete.nvim'
+hook_add = '''
+    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-deoplete.vim
+'''
+if   = ' has("nvim") && has("python3") '
+on_i = 1
 
 # 補完プラグイン
 # インサートモード時に呼び出す
@@ -11,9 +26,6 @@ hook_add = '''
 '''
 if    = ' !has("nvim") '
 
-# 以下のファイルは、環境に併せてコメントを外してインストールすること
-
-# 特定のファイルタイプで読み込む
 ## Markdown
 [[plugins]]
 repo  = 'plasticboy/vim-markdown'
@@ -83,7 +95,9 @@ hook_source = '''
 repo  = 'maxmellon/vim-jsx-pretty'
 on_ft = ['javascript', 'javascript.jsx']
 
-# Python
+
+## Python
+# Python補完
 [[plugins]]
 repo  = 'davidhalter/jedi-vim'
 on_ft = 'python'
@@ -91,32 +105,24 @@ hook_source = '''
   source ~/.vim/userautoload/plugins/pg-lang/python/plugin-jedi.vim
 '''
 
-
-# [[plugins]]
-# repo  = 'jmcantrell/vim-virtualenv'
-# on_ft = 'python'
+[[plugins]]
+repo = 'zchee/deoplete-jedi'
+if   = ' has("nvim") '
+on_ft = 'python'
+hook_source = '''
+    source ~/.vim/userautoload/plugins/pg-lang/python/plugin-deoplete-jedi.vim
+'''
 
 [[plugins]]
-repo  = 'hachibeeDI/python_hl_lvar.vim'
+repo = 'Shougo/echodoc.vim'
 on_ft = 'python'
 
 # [[plugins]]
-# repo  = 'kana/vim-textobj-indent'
+# repo  = 'hachibeeDI/python_hl_lvar.vim'
 # on_ft = 'python'
-#
-# [[plugins]]
-# repo  = 'bps/vim-textobj-python'
-# on_ft = 'python'
-# depends  = ['vim-textobj-user']
+# if    = " has('python2') "
 
-# [[plugins]]
-# repo  = 'kana/vim-smartinput'
-# on_ft = 'python'
-
-#[[plugins]]
-#repo  = '/Flake8-vim'
-#on_ft = 'python'
-
+## Haskell
 # to use
 # cabal update
 # cabal install happy
@@ -145,12 +151,6 @@ on_ft = 'haskell'
 repo  = 'ujihisa/ref-hoogle'
 on_ft = 'haskell'
 
-# # C lang
-# [[plugins]]
-# repo  = 'justmao945/vim-clang'
-# on_ft = ['c', 'cpp']
-# hook_add = '''
-#     source ~/.vim/userautoload/plugins/pg-lang/c/plugin-vim-clang.vim
 # '''
 [[plugins]]
 repo  = 'zchee/deoplete-clang'
@@ -159,25 +159,6 @@ hook_add = '''
     source ~/.vim/userautoload/plugins/pg-lang/c/plugin-deoplete-clang.vim
 '''
 
-#########################
-# for nvim
-[[plugins]]
-repo = 'Shougo/denite.nvim'
-hook_add = '''
-    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-denite.vim
-'''
-hook_post_source = '''
-    source ~/.vim/userautoload/plugins/neovim/hook_post_source/plugin-denite.vim
-'''
-if   = ' has("nvim") && has("python3") '
-
-[[plugins]]
-repo = 'Shougo/deoplete.nvim'
-hook_add = '''
-    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-deoplete.vim
-'''
-if   = ' has("nvim") && has("python3") '
-on_i = 1
 
 # Rコンソール
 [[plugins]]
@@ -188,14 +169,6 @@ hook_add = '''
 '''
 if    = ' has("nvim") '
 
-# # Python補完
-# [[plugins]]
-# repo = 'zchee/deoplete-jedi'
-# if   = ' has("nvim") '
-# on_ft = 'python'
-# hook_source = '''
-#     source ~/.vim/userautoload/plugins/pg-lang/python/plugin-deoplete-jedi.vim
-# '''
 
 #[[plugins]]
 #repo = 'nixprime/cpsm'

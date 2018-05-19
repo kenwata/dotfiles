@@ -15,6 +15,22 @@ setlocal commentstring=#%s
 " deoplete 上部に description を表示しない
 setlocal completeopt-=preview
 
+" コマンド業を2行分確保 (Shougo/echodoc.vim 用)
+setlocal cmdheight=2
+
+python3 << EOF
+import subprocess
+import sys
+path = subprocess.run(['python','-c','import site; print(site.getsitepackages()[0])'],
+                      stdout=subprocess.PIPE).stdout
+path = path.strip()
+path = path.decode('utf-8')
+path = str(path)
+
+if not path in sys.path:
+    sys.path.append(path)
+EOF
+
 if !has("nvim")
   " - af: a function
   " - if: inner function
