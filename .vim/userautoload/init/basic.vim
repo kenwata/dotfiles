@@ -33,7 +33,8 @@ set wrap
 set title
 
 " 入力中のコマンドを表示
-set showcmd
+" set showcmd
+setlocal noshowmode
 
 " 一行の文字数が多くてもきちんと描画する
 set display=lastline

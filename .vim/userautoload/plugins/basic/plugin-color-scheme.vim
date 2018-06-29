@@ -1,3 +1,3 @@
 " カラースキーマ指定
-colorscheme hybrid
-
+" colorscheme hybrid
+colorscheme today-material

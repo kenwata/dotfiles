@@ -12,7 +12,7 @@ endif
 let g:deoplete#omni_patterns.r = '[[:alnum:].\\]\+'
 
 " nvim-r
-let R_tmux_split = 1
+" let R_tmux_split = 1
 " 非推奨になった
 " let R_vsplit = 1
 let R_rconsole_width = winwidth(0) / 2

@@ -15,9 +15,6 @@ setlocal commentstring=#%s
 " deoplete 上部に description を表示しない
 setlocal completeopt-=preview
 
-" コマンド業を2行分確保 (Shougo/echodoc.vim 用)
-setlocal cmdheight=2
-
 python3 << EOF
 import subprocess
 import sys
@@ -31,6 +28,7 @@ if not path in sys.path:
     sys.path.append(path)
 EOF
 
+" for vim
 if !has("nvim")
   " - af: a function
   " - if: inner function
@@ -108,4 +106,4 @@ let g:ale_python_flake8_executable = 'flake8'
 " F403 : using wildcard imports
 " W391 : blank line at end of file
 let g:ale_python_flake8_args = '--ignore=E127,E402,E501,E731,F401,F403,W391'
-let g:ale_python_flake8_options = '--ignore=E127,E402,E501,E731,F401,F403,W391'
+" let g:ale_python_flake8_options = '--ignore=E127,E402,E501,E731,F401,F403,W391'

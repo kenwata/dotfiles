@@ -2,6 +2,11 @@ if &compatible
   set nocompatible
 endif
 
+" " reset augroup
+" augroup MyAutoCmd
+"     autocmd!
+" augroup END
+
 " プラグインが実際にインストールされるディレクトリ
 let s:dein_dir = expand('~/.vim/dein')
 " dein.vim 本体

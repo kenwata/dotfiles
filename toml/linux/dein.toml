@@ -36,11 +36,12 @@ depends  = ['neosnippet.vim']
 repo     = 'Shougo/vimshell'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-vimshell.vim'
 
-# カラーテーマ
+# カラーテーマ (sub)
 [[plugins]]
 repo     = 'w0ng/vim-hybrid'
-hook_add = 'source ~/.vim/userautoload/plugins/colors/plugin-default-color-scheme.vim'
-#hook_add = 'source ~/.vim/userautoload/plugins/colors/plugin-solarized.vim'
+hook_add = '''
+    source ~/.vim/userautoload/plugins/colors/plugin-default-color-scheme.vim
+'''
 [[plugins]]
 repo     = 'altercation/vim-colors-solarized'
 
@@ -72,7 +73,6 @@ repo = 'ryanoasis/vim-devicons'
 [[plugins]]
 repo     = 'w0rp/ale'
 hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-ale.vim'
-# シンタックスプラグイン
 # ALEに移行
 #[[plugins]]
 #repo     = 'scrooloose/syntastic'
@@ -130,3 +130,6 @@ repo     = 'thinca/vim-quickrun'
 # 括弧補完
 [[plugins]]
 repo     = 'cohama/lexima.vim'
+hook_add = """
+    let g:lexima_enable_newline_rules = 1
+"""
