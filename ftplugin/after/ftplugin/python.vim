@@ -105,5 +105,6 @@ let g:ale_python_flake8_executable = 'flake8'
 " F401 : imported but unused
 " F403 : using wildcard imports
 " W391 : blank line at end of file
-let g:ale_python_flake8_args = '--ignore=E127,E402,E501,E731,F401,F403,W391'
-" let g:ale_python_flake8_options = '--ignore=E127,E402,E501,E731,F401,F403,W391'
+" Rename your g:ale_python_flake8_args setting to g:ale_python_flake8_options instead. Support for this will removed in ALE 2.0.
+" let g:ale_python_flake8_args = '--ignore=E127,E402,E501,E731,F401,F403,W391'
+let g:ale_python_flake8_options = '--ignore=E127,E402,E501,E731,F401,F403,W391'
