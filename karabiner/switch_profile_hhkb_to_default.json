@@ -1,0 +1,21 @@
+{
+  "title": "switch_profile_to_default",
+  "rules": [
+    {
+      "description": "switch_profile_to_default",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "insert"
+          },
+          "to": [
+            {
+              "shell_command": "'/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli' --select-profile 'Default profile'"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
