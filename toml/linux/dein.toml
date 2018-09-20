@@ -113,14 +113,6 @@ repo     = 'kana/vim-operator-user.git'
 [[plugins]]
 repo     = 'tpope/vim-surround'
 
-# Markdown用のプラグイン
-# Markdownプレビューができるプラグイン
-[[plugins]]
-repo     = 'kannokanno/previm'
-[[plugins]]
-repo     = 'tyru/open-browser.vim'
-hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-open-browser.vim'
-
 [[plugins]]
 repo     = 'thinca/vim-template'
 

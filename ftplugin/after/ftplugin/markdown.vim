@@ -15,19 +15,21 @@ setlocal nofoldenable
 " 自動改行を無効化
 setlocal noautoindent
 
-" プレビュー時にヘッダーを表示しない
-let g:previm_show_header=0
+" " previm setting
+" " プレビュー時にヘッダーを表示しない
+" let g:previm_show_header=0
+" 
+" " デフォルトのブラウザをfirefoxに移行したためいらなくなった
+" if has('mac')
+"   let g:previm_open_cmd = 'open -a Google\ Chrome'
+"   " let g:previm_open_cmd = 'open -a Google\ Chrome'
+" elseif has('unix')
+"   let g:previm_open_cmd = '/usr/bin/firefox'
+" elseif has('win64')
+"   let g:previm_open_cmd = 'C:\\Program\ Files\\Mozilla\ Firefox\\firefox.exe'
+" " TODO has('win32')
+" endif
+" 
+" noremap <C-M> :PrevimOpen<CR>
 
-" デフォルトのブラウザをfirefoxに移行したためいらなくなった
-if has('mac')
-  let g:previm_open_cmd = 'open -a Google\ Chrome'
-  " let g:previm_open_cmd = 'open -a Google\ Chrome'
-elseif has('unix')
-  let g:previm_open_cmd = '/usr/bin/firefox'
-elseif has('win64')
-  let g:previm_open_cmd = 'C:\\Program\ Files\\Mozilla\ Firefox\\firefox.exe'
-" TODO has('win32')
-endif
-
-noremap <C-M> :PrevimOpen<CR>
 

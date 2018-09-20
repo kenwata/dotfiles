@@ -31,6 +31,31 @@ if    = ' !has("nvim") '
 repo  = 'plasticboy/vim-markdown'
 on_ft = 'markdown'
 
+# Markdown用のプラグイン
+# Markdownプレビューができるプラグイン
+[[plugins]]
+repo        = 'iamcco/markdown-preview.vim'
+on_ft       = 'markdown'
+hook_source = '''
+  nmap <silent> <F8> <Plug>MarkdownPreview        " for normal mode
+  imap <silent> <F8> <Plug>MarkdownPreview        " for insert mode
+  nmap <silent> <F9> <Plug>StopMarkdownPreview    " for normal mode
+  imap <silent> <F9> <Plug>StopMarkdownPreview    " for insert mode
+'''
+
+[[plugins]]
+repo     = 'iamcco/mathjax-support-for-mkdp'
+on_ft    = 'markdown'
+
+[[plugins]]
+repo     = 'tyru/open-browser.vim'
+hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-open-browser.vim'
+on_ft    = ['markdown', 'html']
+
+# [[plugins]]
+# repo     = 'kannokanno/previm'
+# on_ft    = 'markdown'
+
 # JS シンタックスハイライト
 [[plugins]]
 repo  = 'pangloss/vim-javascript'
@@ -151,8 +176,8 @@ on_ft = 'haskell'
 
 # '''
 [[plugins]]
-repo  = 'zchee/deoplete-clang'
-on_ft = ['c', 'cpp', 'cmake']
+repo     = 'zchee/deoplete-clang'
+on_ft    = ['c', 'cpp', 'cmake']
 hook_add = '''
     source ~/.vim/userautoload/plugins/pg-lang/c/plugin-deoplete-clang.vim
 '''
@@ -185,3 +210,34 @@ on_ft    = 'python'
 hook_add = '''
     let g:python_highlight_all = 1
 '''
+
+# toml syntax
+[[plugins]]
+repo  = 'cespare/vim-toml'
+on_ft = 'toml'
+
+# Rust
+# requirement: rustfmt, racer
+#   => https://github.com/racer-rust/racer
+[[plugins]]
+repo        = 'rust-lang/rust.vim'
+on_ft       = 'rust'
+hook_source = '''
+    let g:rustfmt_autosave = 1
+'''
+
+[[plugins]]
+repo = 'sebastianmarkow/deoplete-rust'
+on_ft = 'rust'
+depends = ['deoplete.nvim']
+
+# [[plugins]]
+# repo     = 'racer-rust/vim-racer'
+# on_ft = 'rust'
+# hook_source = '''
+#     " racerバイナリ指定
+#     let g:racer_cmd = "~/.cargo/bin/racer"
+#     " rust本体のソースコードパス指定
+#     let $RUST_SRC_PATH="{$(rustc --print sysroot)/lib/rustlib/src/rust/src}"
+# '''
+
