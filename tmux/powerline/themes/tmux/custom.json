@@ -6,6 +6,10 @@
         "priority": 40
       },
       {
+        "function": "powerline.segments.common.net.external_ip",
+        "before": "\uf424"
+      },
+      {
         "function": "powerline.segments.common.net.internal_ip",
         "before": "\uf450"
       },
