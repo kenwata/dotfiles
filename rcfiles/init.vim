@@ -13,10 +13,12 @@ runtime! userautoload/init/color.vim
 runtime! userautoload/init/command.vim
 runtime! userautoload/dein/dein-load.vim
 
-set runtimepath+=~/.vim/dein/repos/github.com/Shougo/deoplete.nvim/
-set runtimepath+=~/.vim/dein/repos/github.com/Shougo/denite.nvim/
-set runtimepath+=~/.vim/dein/repos/github.com/zchee/deoplete-jedi/
-" set runtimepath+=~/.vim/dein/repos/github.com/sebastianmarkow/deoplete-rust/
+"set runtimepath+=~/.vim/dein/repos/github.com/Shougo/deoplete.nvim/
+"set runtimepath+=~/.vim/dein/repos/github.com/Shougo/denite.nvim/
+"set runtimepath+=~/.vim/dein/repos/github.com/zchee/deoplete-jedi/
+set runtimepath+=~/.cache/dein/repos/github.com/Shougo/deoplete.nvim/
+set runtimepath+=~/.cache/dein/repos/github.com/Shougo/denite.nvim/
+set runtimepath+=~/.cache/dein/repos/github.com/zchee/deoplete-jedi/
 
 let g:deoplete#enable_at_startup = 1
 

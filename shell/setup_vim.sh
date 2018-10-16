@@ -19,5 +19,5 @@ ln -s $SCRIPT_DIR/../.vim/template $HOME/.config/nvim/
 ln -s $SCRIPT_DIR/../ftplugin/after $HOME/.config/nvim/
 
 # common
-mkdir -p $HOME/.vim/dein
-ln -s $SCRIPT_DIR/../toml/linux $HOME/.vim/dein/toml
+mkdir -p $HOME/.cache/dein
+ln -s $SCRIPT_DIR/../toml/linux $HOME/.cache/dein/toml
