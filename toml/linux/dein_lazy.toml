@@ -78,7 +78,7 @@ build = 'npm install'
 [[plugins]]
 repo  = 'carlitux/deoplete-ternjs'
 on_ft = ['javascript', 'javascript.jsx']
-on_ft = ' has("nvim") '
+if = ' has("nvim") '
 build = 'npm install -g tern'
 merged = 0
 # hook_post_source = '''
