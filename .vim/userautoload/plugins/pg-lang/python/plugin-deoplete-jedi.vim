@@ -1,5 +1,8 @@
-" let g:deoplete#sources#jedi#python_path = $PYENV_ROOT . '/versions/3.6.3/bin/python3'
-let g:deoplete#sources#jedi#python_path = $PYENV_ROOT . '/versions/anaconda3-5.0.1/bin/python3'
+" Requirements
+"   Python 3.x.x
+"   pip3 install jedi
+let g:deoplete#sources#jedi#python_path = system('type pyenv &>/dev/null && echo -n "$(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/bin/python" || echo -n $(which python)')
+" let g:deoplete#sources#jedi#python_path = $PYENV_ROOT . '/versions/3.7.1/bin/python3'
 
 " file/include conflicting deoplete-jedi
 let g:deoplete#ignore_sources = {}
