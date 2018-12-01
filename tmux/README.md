@@ -90,3 +90,12 @@ pip install powerline-gitstatus
 powerline.zshの210〜213行目をコメントアウト  
 
 `~/.config/powerline/themes/tmux/custom.json` の内容と `~/.config/powerline/themes/tmux/custom.json.org` を入れ替える  
+
+
+# 追記
+
+下記コマンドでシンボリックリンクをはる  
+
+`ln -s $(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/$(echo -n $(ls $(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/ | grep "^python3\..$"))/site-packages/powerline/bindings/tmux/powerline.conf ~/.cache/`  
+
+なお、 `pyenv global` の設定は `pyenv global system 3.x.x` としておく想定

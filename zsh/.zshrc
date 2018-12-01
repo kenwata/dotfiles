@@ -87,7 +87,7 @@ bindkey '^Z' fancy-ctrl-z
 # for tmux pwd
 # ~/.anyenv/envs/pyenv/versions/3.6.3/lib/python3.6/site-packages/powerline/bindings/zsh/powerline.zsh
 # comment out line 210-213
-. ~/.anyenv/envs/pyenv/versions/3.6.3/lib/python3.6/site-packages/powerline/bindings/zsh/powerline.zsh
+. "$(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/$(echo -n $(ls $(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/ | grep "^python3\..$"))/site-packages/powerline/bindings/zsh/powerline.zsh"
 
 # turn off -> shell integration
 # test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
