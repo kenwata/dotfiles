@@ -99,4 +99,4 @@ nnoremap ,d :windo diffthis<CR>
 nnoremap ,o :diffoff<CR>
 
 " エンコードをcp932で開き直す
-nnoremap <Leader>w :<C-u>e ++enc=cp932<CR>
+nnoremap <silent> <Leader>w :<C-u>e ++enc=cp932<CR>
