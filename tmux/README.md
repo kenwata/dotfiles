@@ -79,6 +79,12 @@ ln -s /to/path/dotfiles/tmux/powerline ~/.config/
 
 ```zsh
 pip install powerline-gitstatus
+# dependency (show CPU)
+pip install psutil
+# dependency (show Internal IP)
+pip install netifaces
+# dependency
+pip install pyuv
 ```
 
 `~/.zshrc` に以下を記述  
@@ -99,3 +105,8 @@ powerline.zshの210〜213行目をコメントアウト
 `ln -s $(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/$(echo -n $(ls $(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/ | grep "^python3\..$"))/site-packages/powerline/bindings/tmux/powerline.conf ~/.cache/`  
 
 なお、 `pyenv global` の設定は `pyenv global system 3.x.x` としておく想定
+
+```
+# 設定を更新
+powerline-deamon --replace
+```
