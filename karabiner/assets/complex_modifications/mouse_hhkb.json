@@ -2,8 +2,23 @@
   "title": "Mouse Personal rules",
   "rules": [
     {
-      "description": "Use mouse buttons 4, 5, and 6",
+      "description": "Use mouse buttons 3, 4, and 5 (when using hhkb keyboard)",
       "manipulators": [
+        {
+          "description": "button3 → Mission Control",
+          "from": {
+          "pointing_button": "button3"
+          },
+          "to": [
+            {
+              "key_code": "up_arrow",
+              "modifiers": [ 
+                "control" 
+              ]
+            }
+          ],
+          "type": "basic"
+        },
         {
           "description": "button4 → [ + command",
           "from": {
@@ -13,7 +28,7 @@
             {
               "key_code": "open_bracket",
               "modifiers": [ 
-                "command" 
+                "right_command" 
               ]
             }
           ],
@@ -28,22 +43,7 @@
             {
               "key_code": "close_bracket",
               "modifiers": [ 
-                "command" 
-              ]
-            }
-          ],
-          "type": "basic"
-        },
-        {
-          "description": "button6 → Mission Control",
-          "from": {
-          "pointing_button": "button6"
-          },
-          "to": [
-            {
-              "key_code": "up_arrow",
-              "modifiers": [ 
-                "control" 
+                "right_command" 
               ]
             }
           ],

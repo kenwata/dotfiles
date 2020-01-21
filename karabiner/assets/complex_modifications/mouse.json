@@ -1,0 +1,25 @@
+{
+  "title": "Mouse Personal rules",
+  "rules": [
+    {
+      "description": "Use mouse buttons 3 as mission controll.",
+      "manipulators": [
+        {
+          "description": "button3 → Mission Control",
+          "from": {
+          "pointing_button": "button3"
+          },
+          "to": [
+            {
+              "key_code": "up_arrow",
+              "modifiers": [
+                "control"
+              ]
+            }
+          ],
+          "type": "basic"
+        }
+      ]
+    }
+  ]
+}
