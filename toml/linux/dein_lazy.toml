@@ -1,17 +1,17 @@
 [[plugins]]
 repo = 'Shougo/denite.nvim'
 hook_add = '''
-    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-denite.vim
+    source ~/.config/nvim/userautoload/plugins/neovim/hook_add/plugin-denite.vim
 '''
 hook_post_source = '''
-    source ~/.vim/userautoload/plugins/neovim/hook_post_source/plugin-denite.vim
+    source ~/.config/nvim/userautoload/plugins/neovim/hook_post_source/plugin-denite.vim
 '''
 if   = ' has("nvim") && has("python3") '
 
 [[plugins]]
 repo = 'Shougo/deoplete.nvim'
 hook_add = '''
-    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-deoplete.vim
+    source ~/.config/nvim/userautoload/plugins/neovim/hook_add/plugin-deoplete.vim
 '''
 if   = ' has("nvim") && has("python3") '
 on_i = 1
@@ -22,7 +22,7 @@ on_i = 1
 repo  = 'Shougo/neocomplete'
 on_i  = 1
 hook_add = '''
-  source ~/.vim/userautoload/plugins/basic/plugin-neocomplete.vim
+  source ~/.config/nvim/userautoload/plugins/basic/plugin-neocomplete.vim
 '''
 if    = ' !has("nvim") '
 
@@ -49,8 +49,13 @@ on_ft    = 'markdown'
 
 [[plugins]]
 repo     = 'tyru/open-browser.vim'
-hook_add = 'source ~/.vim/userautoload/plugins/basic/plugin-open-browser.vim'
+hook_add = 'source ~/.config/nvim/userautoload/plugins/basic/plugin-open-browser.vim'
 on_ft    = ['markdown', 'html']
+
+[[plugins]]
+repo     = 'mattn/emmet-vim'
+hook_add = 'source ~/.config/nvim/userautoload/plugins/basic/emmet-vim.vim'
+on_ft    = 'html'
 
 # [[plugins]]
 # repo     = 'kannokanno/previm'
@@ -80,17 +85,17 @@ repo  = 'carlitux/deoplete-ternjs'
 on_ft = ['javascript', 'javascript.jsx']
 if = ' has("nvim") '
 build = 'npm install -g tern'
-merged = 0
-# hook_post_source = '''
-#   source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-deoplete-ternjs
-# '''
+hook_post_source = '''
+  source ~/.config/nvim/userautoload/plugins/pg-lang/javascript/plugin-deoplete-ternjs
+'''
+#merged = 0
 
 ## gfでrequire()のモジュールにジャンプ
 [[plugins]]
 repo  = 'moll/vim-node'
 on_ft = ['javascript', 'javascript.jsx']
 hook_post_source = '''
-  source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
+  source ~/.config/nvim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
 '''
 
 ## node.jsの補完
@@ -108,7 +113,7 @@ on_ft = ['javascript', 'javascript.jsx']
 repo  = 'guileen/vim-node-dict'
 on_ft = 'javascript'
 hook_source = '''
-  source ~/.vim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
+  source ~/.config/nvim/userautoload/plugins/pg-lang/javascript/plugin-javascript.vim
 '''
 
 # jsxのシンタックスプラグイン
@@ -127,7 +132,7 @@ on_ft = ['javascript', 'javascript.jsx']
 repo  = 'davidhalter/jedi-vim'
 on_ft = 'python'
 hook_source = '''
-  source ~/.vim/userautoload/plugins/pg-lang/python/plugin-jedi.vim
+  source ~/.config/nvim/userautoload/plugins/pg-lang/python/plugin-jedi.vim
 '''
 
 [[plugins]]
@@ -135,14 +140,14 @@ repo = 'zchee/deoplete-jedi'
 if   = ' has("nvim") '
 on_ft = 'python'
 hook_source = '''
-    source ~/.vim/userautoload/plugins/pg-lang/python/plugin-deoplete-jedi.vim
+    source ~/.config/nvim/userautoload/plugins/pg-lang/python/plugin-deoplete-jedi.vim
 '''
 
 [[plugins]]
 repo = 'Shougo/echodoc.vim'
 on_ft = 'python'
 hook_source = '''
-    source ~/.vim/userautoload/plugins/pg-lang/python/plugin-echodoc.vim
+    source ~/.config/nvim/userautoload/plugins/pg-lang/python/plugin-echodoc.vim
 '''
 
 ## Haskell
@@ -179,7 +184,7 @@ on_ft = 'haskell'
 repo     = 'zchee/deoplete-clang'
 on_ft    = ['c', 'cpp', 'cmake']
 hook_add = '''
-    source ~/.vim/userautoload/plugins/pg-lang/c/plugin-deoplete-clang.vim
+    source ~/.config/nvim/userautoload/plugins/pg-lang/c/plugin-deoplete-clang.vim
 '''
 
 
@@ -188,16 +193,20 @@ hook_add = '''
 repo  = 'jalvesaq/Nvim-R'
 on_ft = 'r'
 hook_add = '''
-    source ~/.vim/userautoload/plugins/pg-lang/R/plugin-nvim-r.vim
+    source ~/.config/nvim/userautoload/plugins/pg-lang/R/plugin-nvim-r.vim
 '''
 if    = ' has("nvim") '
 
+[[plugins]]
+repo  = 'eigenfoo/stan-vim'
+on_ft = 'stan'
+if    = ' has("nvim") '
 
 #[[plugins]]
 #repo = 'nixprime/cpsm'
 #if   = ' has("nvim") && has("python3") '
 #hook_add = '''
-#    source ~/.vim/userautoload/plugins/neovim/hook_add/plugin-cpsm.vim
+#    source ~/.config/nvim/userautoload/plugins/neovim/hook_add/plugin-cpsm.vim
 #'''
 #build = 'mkdir -p build && cd build && make -DPY3 .. && make install'
 #if    = ' has("nvim") '

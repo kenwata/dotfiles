@@ -1,5 +1,6 @@
 " Set bin if you have many instalations
-let g:deoplete#sources#ternjs#tern_bin = '~/.anyenv/envs/ndenv/shims/tern'
+" let g:deoplete#sources#ternjs#tern_bin = '~/.anyenv/envs/ndenv/shims/tern'
+let g:deoplete#sources#ternjs#tern_bin = '/usr/local/bin/tern'
 let g:deoplete#sources#ternjs#timeout = 1
 
 " Whether to include the types of the completions in the result data. Default: 0
@@ -50,8 +51,8 @@ let g:deoplete#sources#ternjs#in_literal = 0
 
 "Add extra filetypes
 let g:deoplete#sources#ternjs#filetypes = [
-                \ 'javascript',
-                \ 'jsx',
-                \ 'javascript.jsx',
-                \ 'vue'
-                \ ]
+    \ 'javascript',
+    \ 'jsx',
+    \ 'javascript.jsx',
+    \ 'vue'
+    \ ]

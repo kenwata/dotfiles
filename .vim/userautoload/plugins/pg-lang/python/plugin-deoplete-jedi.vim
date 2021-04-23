@@ -5,7 +5,7 @@ let g:deoplete#sources#jedi#python_path = system('type pyenv &>/dev/null && echo
 " let g:deoplete#sources#jedi#python_path = $PYENV_ROOT . '/versions/3.7.1/bin/python3'
 
 " file/include conflicting deoplete-jedi
-let g:deoplete#ignore_sources = {}
+"let g:deoplete#ignore_sources = {}
 let g:deoplete#ignore_sources.python =
 \ ['buffer', 'dictionary', 'member', 'omni', 'tag', 'syntax', 'around']
 

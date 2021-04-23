@@ -87,7 +87,37 @@ bindkey '^Z' fancy-ctrl-z
 # for tmux pwd
 # ~/.anyenv/envs/pyenv/versions/3.6.3/lib/python3.6/site-packages/powerline/bindings/zsh/powerline.zsh
 # comment out line 210-213
-. "$(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/$(echo -n $(ls $(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/ | grep "^python3\..$"))/site-packages/powerline/bindings/zsh/powerline.zsh"
+# TODO
+#. "$(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/$(echo -n $(ls $(pyenv root)/versions/$(cat $(pyenv root)/version | tail -n 1)/lib/ | grep "^python3\..$"))/site-packages/powerline/bindings/zsh/powerline.zsh"
 
 # turn off -> shell integration
 # test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
+
+alias pyenv='CONFIGURE_OPTS="--with-openssl=$(brew --prefix openssl@1.1)" pyenv'
+
+# for matplotlib
+export LDFLAGS="-L/usr/local/opt/tcl-tk/lib"
+export CPPFLAGS="-I/usr/local/opt/tcl-tk/include"
+
+# # docker command completion
+# mkdir -p ~/.zsh/completion
+# curl -o ~/.zsh/completion/_docker https://raw.githubusercontent.com/docker/cli/master/contrib/completion/zsh/_docker
+# curl -o ~/.zsh/completion/_docker https://raw.githubusercontent.com/docker/cli/master/contrib/completion/zsh/_docker
+export fpath=(~/.zsh/completion $fpath)
+autoload -Uz compinit && compinit -i
+
+# # >>> conda initialize >>>
+# # !! Contents within this block are managed by 'conda init' !!
+# __conda_setup="$('/Users/watanabekenta/.anyenv/envs/pyenv/versions/miniconda3-4.7.12/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+# if [ $? -eq 0 ]; then
+#     eval "$__conda_setup"
+# else
+#     if [ -f "/Users/watanabekenta/.anyenv/envs/pyenv/versions/miniconda3-4.7.12/etc/profile.d/conda.sh" ]; then
+#         . "/Users/watanabekenta/.anyenv/envs/pyenv/versions/miniconda3-4.7.12/etc/profile.d/conda.sh"
+#     else
+#         export PATH="/Users/watanabekenta/.anyenv/envs/pyenv/versions/miniconda3-4.7.12/bin:$PATH"
+#     fi
+# fi
+# unset __conda_setup
+# # <<< conda initialize <<<
+
