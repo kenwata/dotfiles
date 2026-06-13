@@ -1,0 +1,68 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/watanabe/.agents/skills/agmsg/scripts/*)",
+      "Bash(npm test:*)",
+      "Bash(npm run *)",
+      "Bash(pnpm *)",
+      "Bash(yarn *)",
+      "Bash(pytest:*)",
+      "Bash(go test:*)",
+      "Bash(cargo test:*)",
+      "Bash(make *)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)"
+    ],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(shutdown:*)",
+      "Bash(reboot:*)",
+      "Bash(halt:*)",
+      "Bash(systemctl:*)",
+      "Bash(launchctl:*)",
+      "Bash(brew services:*)",
+      "Bash(kill:*)",
+      "Bash(killall:*)",
+      "Bash(pkill:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
+    ],
+    "ask": [
+      "Bash(rm:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(pip install:*)"
+    ],
+    "defaultMode": "acceptEdits"
+  },
+  "model": "opusplan",
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude-bedrock/statusline.sh"
+  },
+  "enabledPlugins": {
+    "qmd@qmd": true
+  },
+  "extraKnownMarketplaces": {
+    "qmd": {
+      "source": {
+        "source": "github",
+        "repo": "tobi/qmd"
+      }
+    }
+  },
+  "language": "japanese",
+  "effortLevel": "high",
+  "theme": "dark"
+}
