@@ -20,8 +20,10 @@
 .claude/.last-cleanup
 .claude/.last-update-result.json
 .claude/mcp-needs-auth-cache.json
+.claude/image-cache/
 
 # Claude Bedrock — runtime-generated, not config
+.claude-bedrock/image-cache/
 .claude-bedrock/.claude.json
 .claude-bedrock/.last-cleanup
 .claude-bedrock/.last-update-result.json

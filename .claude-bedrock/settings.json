@@ -46,7 +46,7 @@
     ],
     "defaultMode": "acceptEdits"
   },
-  "model": "opusplan",
+  "model": "opus",
   "statusLine": {
     "type": "command",
     "command": "~/.claude-bedrock/statusline.sh"
@@ -64,5 +64,6 @@
   },
   "language": "japanese",
   "effortLevel": "high",
+  "tui": "fullscreen",
   "theme": "dark"
 }
