@@ -1,0 +1,6 @@
+# 自分用設定を分割ロード
+if [[ -d "$HOME/.config/zsh" ]]; then
+  for file in "$HOME"/.config/zsh/*.zsh(N); do
+    source "$file"
+  done
+fi

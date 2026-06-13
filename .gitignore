@@ -1,0 +1,58 @@
+# macOS
+.DS_Store
+.DS_Store?
+._*
+
+# Claude Code — runtime-generated, not config
+.claude/history.jsonl
+.claude/backups/
+.claude/cache/
+.claude/projects/
+.claude/paste-cache/
+.claude/file-history/
+.claude/plugins/
+.claude/sessions/
+.claude/shell-snapshots/
+.claude/stats-cache.json
+.claude/plans/
+.claude/tasks/
+.claude/telemetry/
+.claude/.last-cleanup
+.claude/.last-update-result.json
+.claude/mcp-needs-auth-cache.json
+
+# Claude Bedrock — runtime-generated, not config
+.claude-bedrock/.claude.json
+.claude-bedrock/.last-cleanup
+.claude-bedrock/.last-update-result.json
+.claude-bedrock/history.jsonl
+.claude-bedrock/backups/
+.claude-bedrock/cache/
+.claude-bedrock/file-history/
+.claude-bedrock/mcp-needs-auth-cache.json
+.claude-bedrock/paste-cache/
+.claude-bedrock/plans/
+.claude-bedrock/plugins/
+.claude-bedrock/projects/
+.claude-bedrock/sessions/
+.claude-bedrock/session-env/
+.claude-bedrock/shell-snapshots/
+.claude-bedrock/settings.json.before-restore-*
+
+# agents — runtime data (db/run/teams) and dated backups
+# teams/ and .claude/settings.local.json contain absolute paths and are regenerated at install time
+.agents/skills/*.bak*/
+.agents/skills/*/db/
+.agents/skills/*/run/
+.agents/skills/*/teams/
+.agents/skills/*/.claude/settings.local.json
+.agents/skills/*/.agmsg
+
+# tmux plugins — installed by tpm, not stored in repo
+.tmux/plugins/tmux-resurrect/
+.tmux/plugins/tmux-continuum/
+
+# Editor temporaries
+*.swp
+*.swo
+*~

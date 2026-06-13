@@ -1,0 +1,21 @@
+{
+  "model": "opusplan",
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "qmd@qmd": true
+  },
+  "extraKnownMarketplaces": {
+    "qmd": {
+      "source": {
+        "source": "github",
+        "repo": "tobi/qmd"
+      }
+    }
+  },
+  "language": "japanese",
+  "effortLevel": "high",
+  "theme": "dark"
+}
