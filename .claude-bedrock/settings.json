@@ -1,25 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(/Users/watanabe/.agents/skills/agmsg/scripts/*)",
-      "Bash(npm test:*)",
-      "Bash(npm run *)",
-      "Bash(pnpm *)",
-      "Bash(yarn *)",
-      "Bash(pytest:*)",
-      "Bash(go test:*)",
-      "Bash(cargo test:*)",
-      "Bash(make *)",
-      "Bash(git status:*)",
-      "Bash(git diff:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git log:*)",
-      "Bash(git branch:*)",
-      "Bash(ls:*)",
-      "Bash(cat:*)",
-      "Bash(grep:*)",
-      "Bash(rg:*)"
+      "Bash"
     ],
     "deny": [
       "Bash(sudo:*)",
@@ -39,14 +21,11 @@
       "Bash(rm:*)",
       "Bash(git push:*)",
       "Bash(curl:*)",
-      "Bash(wget:*)",
-      "Bash(npm install:*)",
-      "Bash(npm uninstall:*)",
-      "Bash(pip install:*)"
+      "Bash(wget:*)"
     ],
     "defaultMode": "acceptEdits"
   },
-  "model": "opus",
+  "model": "sonnet",
   "statusLine": {
     "type": "command",
     "command": "~/.claude-bedrock/statusline.sh"
@@ -63,7 +42,7 @@
     }
   },
   "language": "japanese",
-  "effortLevel": "high",
+  "effortLevel": "medium",
   "tui": "fullscreen",
   "theme": "dark"
 }

@@ -12,9 +12,9 @@ export AWS_PROFILE=bedrock-dev
 export AWS_REGION=ap-northeast-1
 export AWS_DEFAULT_REGION=ap-northeast-1
 
-# Claude Code via Bedrock（CLAUDE_BEDROCK_MODEL でモデル上書き可、既定 opusplan）
+# Claude Code via Bedrock (override model with CLAUDE_BEDROCK_MODEL; default: opusplan)
 claude-bedrock() {
-  # 対話端末のときだけ起動前に画面クリア（パイプ／非対話利用を壊さないよう -t でガード）
+  # Clear screen only for interactive terminals (guard with -t to avoid breaking pipes)
   [[ -t 1 ]] && command clear
   AWS_PROFILE=bedrock-dev \
   AWS_REGION=ap-northeast-1 \
@@ -28,10 +28,10 @@ claude-bedrock() {
   claude "$@"
 }
 
-# agmsg 連携用ロール別ラッパー
-# ロール指示ファイルを --append-system-prompt-file で注入する。
-# 解決順: cwd の .claude/roles/<role>.md（プロジェクト固有の上書き）
-#       → ~/.claude/roles/<role>.md（グローバル正本）
+# Per-role wrappers for agmsg team collaboration.
+# Injects the role instruction file via --append-system-prompt-file.
+# Resolution order: cwd .claude/roles/<role>.md (project-local override)
+#                 → ~/.claude/roles/<role>.md (global canonical)
 _claude_role_file() {
   local f="$PWD/.claude/roles/$1.md"
   [[ -f "$f" ]] || f="$HOME/.claude/roles/$1.md"
@@ -59,10 +59,10 @@ claude-planner() {
   claude --model opus "${args[@]}" "$@"
 }
 
-# カレントディレクトリで planner/coder/reviewer チームを組成する
-# Usage: claude-team-init [チーム名]   （既定: devteam-<ディレクトリ名>）
-# join.sh は冪等（既登録の registration は重複追加されない）なので再実行しても安全
-claude-team-init() {
+# Compose the planner/coder/reviewer devteam in the current directory.
+# Usage: claude-devteam-init [team]   (default: devteam-<dirname>)
+# join.sh is idempotent — safe to re-run even if already registered
+claude-devteam-init() {
   local agmsg="$HOME/.agents/skills/agmsg/scripts"
   local team="${1:-devteam-${PWD:t}}"
   local role
@@ -74,11 +74,66 @@ claude-team-init() {
   "$agmsg/team.sh" "$team"
   "$agmsg/delivery.sh" status claude-code "$PWD"
 }
+# Backward-compat alias — existing invocations and README references keep working
+alias claude-team-init=claude-devteam-init
 
-# カレントディレクトリの planner/coder/reviewer チームを解散する
-# 登録・agmsg メッセージ履歴・actas ロックを削除する。
-# Usage: claude-team-teardown [チーム名] [--yes]   （既定: devteam-<ディレクトリ名>）
-# --yes を付けると確認プロンプトをスキップする。
+# --- Shared helpers for design-team role wrappers ---
+# Bedrock role wrapper: _claude_bedrock_role <role> <model> [args...]
+_claude_bedrock_role() {
+  local role="$1" model="$2"; shift 2
+  local -a args; local f; f="$(_claude_role_file "$role")"
+  [[ -n "$f" ]] && args=(--append-system-prompt-file "$f")
+  CLAUDE_BEDROCK_MODEL="$model" claude-bedrock "${args[@]}" "$@"
+}
+
+# Subscription role wrapper: _claude_sub_role <role> [args...]  (regular API, ~/.claude)
+_claude_sub_role() {
+  local role="$1"; shift
+  local -a args; local f; f="$(_claude_role_file "$role")"
+  [[ -n "$f" ]] && args=(--append-system-prompt-file "$f")
+  claude --model opus "${args[@]}" "$@"
+}
+
+# --- design-team launch wrappers (6 roles) ---
+# Orchestrator: subscription Opus (Monitor receive + WebSearch available)
+claude-orchestrator()      { _claude_sub_role     orchestrator "$@"; }
+# Content Architect / Layout Designer / Renderer: Bedrock Sonnet
+claude-content-architect() { _claude_bedrock_role content-architect jp.anthropic.claude-sonnet-4-6 "$@"; }
+claude-layout-designer()   { _claude_bedrock_role layout-designer   jp.anthropic.claude-sonnet-4-6 "$@"; }
+claude-renderer()          { _claude_bedrock_role renderer          jp.anthropic.claude-sonnet-4-6 "$@"; }
+# Diagram Architect / design-reviewer: Bedrock Opus
+claude-diagram-architect() { _claude_bedrock_role diagram-architect jp.anthropic.claude-opus-4-8   "$@"; }
+claude-design-reviewer()   { _claude_bedrock_role design-reviewer   jp.anthropic.claude-opus-4-8   "$@"; }
+
+# Compose the 6-role design-team in the current directory.
+# Usage: claude-design-team-init [team]   (default: designteam-<dirname>)
+# join.sh is idempotent — safe to re-run even if already registered
+claude-design-team-init() {
+  local agmsg="$HOME/.agents/skills/agmsg/scripts"
+  local team="${1:-designteam-${PWD:t}}"
+  local role
+  for role in orchestrator content-architect diagram-architect layout-designer renderer design-reviewer; do
+    "$agmsg/join.sh" "$team" "$role" claude-code "$PWD" || return 1
+  done
+  "$agmsg/delivery.sh" set monitor claude-code "$PWD" || return 1
+  echo "--- team: $team"
+  "$agmsg/team.sh" "$team"
+  "$agmsg/delivery.sh" status claude-code "$PWD"
+}
+
+# Disband the design-team in the current directory.
+# Usage: claude-design-team-teardown [team] [--yes]   (default: designteam-<dirname>)
+claude-design-team-teardown() {
+  local agmsg="$HOME/.agents/skills/agmsg/scripts"
+  local team="${1:-designteam-${PWD:t}}"
+  shift 2>/dev/null || true
+  "$agmsg/disband.sh" "$team" "$@"
+}
+
+# Disband the planner/coder/reviewer devteam in the current directory.
+# Removes team registration, agmsg message history, and actas locks.
+# Usage: claude-team-teardown [team] [--yes]   (default: devteam-<dirname>)
+# --yes skips the confirmation prompt.
 claude-team-teardown() {
   local agmsg="$HOME/.agents/skills/agmsg/scripts"
   local team="${1:-devteam-${PWD:t}}"
@@ -86,7 +141,7 @@ claude-team-teardown() {
   "$agmsg/disband.sh" "$team" "$@"
 }
 
-# 当月の Bedrock 利用だけを集計（月が変われば自動リセット）
+# Summarize Bedrock usage for the current month (auto-resets when month changes)
 bedrock-cost() {
   CLAUDE_CONFIG_DIR="$HOME/.claude-bedrock" \
   npx ccusage@latest monthly \
