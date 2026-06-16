@@ -29,7 +29,7 @@
   "model": "sonnet",
   "statusLine": {
     "type": "command",
-    "command": "~/.claude-bedrock/statusline.sh"
+    "command": "~/.claude-foundry/statusline.sh"
   },
   "enabledPlugins": {
     "qmd@qmd": true

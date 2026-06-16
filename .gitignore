@@ -41,6 +41,25 @@
 .claude-bedrock/shell-snapshots/
 .claude-bedrock/settings.json.before-restore-*
 
+# Claude Foundry — runtime-generated, not config
+.claude-foundry/image-cache/
+.claude-foundry/.claude.json
+.claude-foundry/.last-cleanup
+.claude-foundry/.last-update-result.json
+.claude-foundry/history.jsonl
+.claude-foundry/backups/
+.claude-foundry/cache/
+.claude-foundry/file-history/
+.claude-foundry/mcp-needs-auth-cache.json
+.claude-foundry/paste-cache/
+.claude-foundry/plans/
+.claude-foundry/plugins/
+.claude-foundry/projects/
+.claude-foundry/sessions/
+.claude-foundry/session-env/
+.claude-foundry/shell-snapshots/
+.claude-foundry/settings.json.before-restore-*
+
 # agents — runtime data (db/run/teams) and dated backups
 # teams/ and .claude/settings.local.json contain absolute paths and are regenerated at install time
 .agents/skills/*.bak*/
@@ -49,6 +68,7 @@
 .agents/skills/*/teams/
 .agents/skills/*/.claude/settings.local.json
 .agents/skills/*/.agmsg
+.agents/skills/*/*.db
 
 # tmux plugins — installed by tpm, not stored in repo
 .tmux/plugins/tmux-resurrect/

@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "defaultMode": "plan"
+  },
   "model": "opusplan",
   "statusLine": {
     "type": "command",
@@ -17,5 +20,8 @@
   },
   "language": "japanese",
   "effortLevel": "high",
-  "theme": "dark"
+  "theme": "dark",
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "remoteControlAtStartup": true
 }

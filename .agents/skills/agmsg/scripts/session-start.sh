@@ -172,6 +172,40 @@ fi
 
 WATCH="$SKILL_DIR/scripts/watch.sh"
 
+# --- Auto-actas: launch wrapper exported AGMSG_ACTAS=<role>. ---
+# When a role-specific launcher (e.g. claude-planner, claude-coder) exports
+# AGMSG_ACTAS=<role>, we short-circuit the manual `/agmsg actas` flow here:
+# claim the exclusivity lock, narrow the watcher to <role>, and inject a
+# FROM directive into the emitted instruction — all without any model action.
+ACTAS_NAME="${AGMSG_ACTAS:-}"
+WATCH_NAME=""    # appended to watch.sh command when claim succeeds
+ACTAS_NOTE=""    # appended to the emitted directive when non-empty
+if [ -n "$ACTAS_NAME" ]; then
+  claim=$("$SCRIPT_DIR/actas-claim.sh" "$PROJECT" "$TYPE" "$ACTAS_NAME" "$SESSION_ID" 2>/dev/null || true)
+  case "$claim" in
+    status=ok*)
+      WATCH_NAME="$ACTAS_NAME"
+      ACTAS_NOTE="This session is acting as \`$ACTAS_NAME\` (agmsg auto-actas). Use \`$ACTAS_NAME\` as the FROM (2nd argument) in every send.sh call for the rest of this session; treat inbound messages as addressed to \`$ACTAS_NAME\`. Auto-actas is already in effect — do NOT ask the user to run /agmsg actas."
+      ;;
+    status=held*)
+      # Another live session owns this role. Warn and fall back to broad watcher.
+      ACTAS_NOTE="WARNING: cannot auto-act as \`$ACTAS_NAME\` — $claim. The role is held by another live session. Run \`/agmsg drop $ACTAS_NAME\` there first, then \`/agmsg actas $ACTAS_NAME\` here. Watcher started in default (broad) mode for now."
+      ;;
+    *)
+      # not_registered or unexpected — team init probably hasn't run yet.
+      ACTAS_NOTE="NOTE: role \`$ACTAS_NAME\` is not registered to a team in this project. Run the matching init first (e.g. claude-devteam-init / claude-design-team-init), then \`/agmsg actas $ACTAS_NAME\`. Watcher started in default (broad) mode."
+      ;;
+  esac
+fi
+
+# Build watch commands (with optional actas name filter).
+WATCH_CMD="$WATCH $SESSION_ID $PROJECT $TYPE"
+WATCH_ONCE_CMD="$WATCH --once $SESSION_ID $PROJECT $TYPE"
+if [ -n "$WATCH_NAME" ]; then
+  WATCH_CMD="$WATCH_CMD $WATCH_NAME"
+  WATCH_ONCE_CMD="$WATCH_ONCE_CMD $WATCH_NAME"
+fi
+
 # Delivery style. Some environments don't offer the Monitor tool at all
 # (observed: Claude Code with CLAUDE_CODE_USE_BEDROCK=1 — ToolSearch finds
 # no Monitor). Hooks inherit the CLI's environment, so we can autodetect
@@ -193,7 +227,7 @@ AGMSG monitor mode (Bash fallback — the Monitor tool is not available in
 this environment): run the following command NOW with the Bash tool, with
 run_in_background: true, before any other action in this session.
 
-  command: $WATCH --once $SESSION_ID $PROJECT $TYPE
+  command: $WATCH_ONCE_CMD
   description: agmsg inbox wait (one batch)
 
 The task blocks until agmsg messages arrive, prints them (one line per
@@ -213,6 +247,7 @@ you are notified that the task completed:
 
 If you later run \`/agmsg actas <name>\`, re-arm with <name> appended
 instead: \`$WATCH --once $SESSION_ID $PROJECT $TYPE <name>\`
+$ACTAS_NOTE
 EOF
   exit 0
 fi
@@ -221,7 +256,7 @@ cat <<EOF
 AGMSG monitor mode: invoke the Monitor tool now with the following parameters,
 before any other action in this session.
 
-  command: $WATCH $SESSION_ID $PROJECT $TYPE
+  command: $WATCH_CMD
   description: agmsg inbox stream
   persistent: true
 
@@ -234,4 +269,5 @@ Note: On a /clear or --continue/--resume re-fire, you may shortly see a
 task. That is the previous watcher being cleaned up to avoid duplicates
 — it is expected. Do NOT relaunch it; the Monitor you invoke from this
 directive replaces it.
+$ACTAS_NOTE
 EOF
