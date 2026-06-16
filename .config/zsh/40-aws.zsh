@@ -150,16 +150,3 @@ bedrock-cost() {
     --timezone Asia/Tokyo "$@"
 }
 
-claude-foundry() {
-  [[ -t 1 ]] && command clear
-  CLAUDE_CODE_USE_FOUNDRY=1 \
-  ANTHROPIC_FOUNDRY_RESOURCE="https://tool-use-resource.openai.azure.com/openai/v1" \
-  CLAUDE_CONFIG_DIR="$HOME/.claude-foundry" \
-  ANTHROPIC_MODEL="${CLAUDE_FOUNDRY_MODEL:-claude-sonnet-4-6}" \
-  ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-8" \
-  ANTHROPIC_DEFAULT_SONNET_MODEL="claude-sonnet-4-6" \
-  ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-haiku-4-5" \
-  CLAUDE_CODE_EFFORT_LEVEL="high" \
-  AGMSG_ACTAS="${AGMSG_ACTAS:-}" \
-  claude "$@"
-}
