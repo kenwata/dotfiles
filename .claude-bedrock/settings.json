@@ -26,7 +26,7 @@
     ],
     "defaultMode": "acceptEdits"
   },
-  "model": "sonnet",
+  "model": "global.anthropic.claude-opus-4-6-v1",
   "statusLine": {
     "type": "command",
     "command": "~/.claude-bedrock/statusline.sh"

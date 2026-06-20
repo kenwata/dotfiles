@@ -21,7 +21,8 @@
   "language": "japanese",
   "effortLevel": "high",
   "theme": "dark",
+  "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
-  "remoteControlAtStartup": true
+  "skipDangerousModePermissionPrompt": true
 }
