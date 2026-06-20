@@ -53,6 +53,19 @@ paths:
 - Use `logging.handlers.TimedRotatingFileHandler` for file output with `when="D"` and `backupCount=14` as the baseline.
 - Control debug-mode switching via the environment variable `DEBUG=1` or `debug: true` in the config file. When `DEBUG=1`, set the root logger level to `DEBUG`.
 
+## Docstrings
+
+- Write docstrings in English and follow Google style.
+- Do not leave docstrings as a short one-line summary when the function, method, class, or data structure has a caller-visible contract.
+- For functions and methods, include:
+  - A concise description of what the callable does.
+  - `Args:` with each parameter's meaning, expected type or shape when useful, units, and important constraints.
+  - `Returns:` with the return value's meaning, type or shape, and notable empty/default cases.
+  - `Raises:` for exceptions that can be propagated or intentionally raised, including `SystemExit` for CLI-style functions.
+- For classes, `TypedDict`, dataclasses, and pydantic models, include `Attributes:` and describe every field that is part of the public data contract.
+- For side-effecting functions, document the side effects such as file writes, stdout/stderr output, network access, process exits, or mutation of passed objects.
+- Keep docstrings synchronized with the implementation whenever signatures, return shapes, errors, or side effects change.
+
 ## Documentation (Sphinx)
 
 - Create specifications and API documentation with **Sphinx**.
