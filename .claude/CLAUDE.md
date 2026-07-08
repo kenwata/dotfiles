@@ -45,3 +45,14 @@ Once an outcome is set, derive the minimal path by working backward from the ide
 | Fix           | Root cause resolved                                 | Symptom patches           |
 | Investigation | Normal case understood                              | Bug identified only       |
 | No change     | Show goal completion evidence and confirm with user | Self-judgment alone       |
+
+## Tool Utilization and Token Optimization
+
+This environment has powerful CLI tools installed. To reduce token consumption and improve task efficiency and accuracy, the AI agent should proactively use the following tools via the Bash tool when appropriate.
+
+- **`jq` / `yq`**:
+  When dealing with large JSON, YAML, or TOML files, use these tools to extract specific keys or inspect structures instead of reading the entire file into context.
+- **`ast-grep`**:
+  Use this for AST-aware, advanced code searches and structural bulk replacements where simple text search (regex) falls short.
+
+*Note: While tools like `rg`, `fd`, `tree`, `bat`, and `eza` are also installed, prioritize Claude Code's native tools (`Grep`, `Glob`, `Read`) by default. Use the CLI tools (via Bash) only when complex option specifications or broad structural overviews are required that cannot be handled by native tools.*

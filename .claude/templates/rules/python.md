@@ -80,3 +80,8 @@ paths:
 
 - Create a virtual environment with `venv`, `poetry`, `uv`, or similar to isolate dependencies per project.
 - Include a lock file (`poetry.lock`, `uv.lock`, or a pinned `requirements.txt`) in the repository to fix dependency versions.
+
+## Performance Optimization
+
+- Avoid nested for-loops in pure Python as much as possible. Actively use built-in functions and comprehensions instead.
+- Actively use Numpy/SciPy for numerical and array calculations.
