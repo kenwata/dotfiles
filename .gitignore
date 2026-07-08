@@ -21,6 +21,7 @@
 .claude/.last-update-result.json
 .claude/mcp-needs-auth-cache.json
 .claude/image-cache/
+.claude/chrome/
 
 # Claude Bedrock — runtime-generated, not config
 .claude-bedrock/image-cache/
@@ -40,6 +41,8 @@
 .claude-bedrock/session-env/
 .claude-bedrock/shell-snapshots/
 .claude-bedrock/settings.json.before-restore-*
+.claude-bedrock/tasks/
+.claude-bedrock/chrome/
 
 # Claude Foundry — runtime-generated, not config
 .claude-foundry/image-cache/
@@ -59,6 +62,8 @@
 .claude-foundry/session-env/
 .claude-foundry/shell-snapshots/
 .claude-foundry/settings.json.before-restore-*
+.claude-foundry/tasks/
+.claude-foundry/chrome/
 
 # agents — runtime data (db/run/teams) and dated backups
 # teams/ and .claude/settings.local.json contain absolute paths and are regenerated at install time
