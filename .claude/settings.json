@@ -1,8 +1,12 @@
 {
+  "env": {
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-6",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5"
+  },
   "permissions": {
     "defaultMode": "plan"
   },
-  "model": "opusplan",
+  "model": "sonnet",
   "statusLine": {
     "type": "command",
     "command": "~/.claude/statusline.sh"
@@ -20,9 +24,9 @@
   },
   "language": "japanese",
   "effortLevel": "high",
+  "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
   "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true,
-  "skipDangerousModePermissionPrompt": true
+  "agentPushNotifEnabled": true
 }

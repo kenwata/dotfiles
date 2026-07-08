@@ -21,9 +21,6 @@ claude-bedrock() {
   AWS_DEFAULT_REGION=ap-northeast-1 \
   CLAUDE_CODE_USE_BEDROCK=1 \
   CLAUDE_CONFIG_DIR="$HOME/.claude-bedrock" \
-  ANTHROPIC_MODEL="${CLAUDE_BEDROCK_MODEL:-global.anthropic.claude-opus-4-6-v1}" \
-  ANTHROPIC_DEFAULT_OPUS_MODEL="global.anthropic.claude-opus-4-6-v1" \
-  ANTHROPIC_DEFAULT_SONNET_MODEL="jp.anthropic.claude-sonnet-4-6" \
   CLAUDE_CODE_EFFORT_LEVEL="high" \
   AGMSG_ACTAS="${AGMSG_ACTAS:-}" \
   claude "$@"
