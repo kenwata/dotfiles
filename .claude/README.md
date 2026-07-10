@@ -29,6 +29,12 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    ロードされないため、他セッションを汚染しない
 4. **副作用コマンドは隠蔽** — `/initialize` のような設定変更コマンドは
    `disable-model-invocation: true` で手動起動限定にし、起動時コンテキストからも消す
+5. **成長型ファイルは逐語アーカイブローテーション** — handoff・TODO・changelog 等が
+   行数予算を超えたら、要約(情報欠落)ではなく `.claude/archive/` へ一字一句そのまま
+   退避する。archive は自動ロードされないため起動コストもゼロ(`rules/growing-docs.md`)
+6. **修正指摘は再発判定してルール化** — その場しのぎの修正で終えず、スコープに応じて
+   ファイル内規約 / `.claude/rules/` / templates への還元 / auto memory へ振り分ける
+   (BLUEPRINT §10)
 
 ## ディレクトリ構成
 
@@ -45,7 +51,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     ├── skeletons/               # 機械的に穴埋め・コピーする雛形
     │   ├── CLAUDE.project.md    # プロジェクト CLAUDE.md 雛形(ポインタ型)
     │   └── handoff.md           # ハンドオフ雛形(書式規約をコメントで同梱)
-    ├── rules/                   # 言語別コーディング規約(paths: 付き、11 ファイル)
+    ├── rules/                   # コーディング規約+成長型ドキュメント規約(paths: 付き、12 ファイル)
     └── roles/                   # ロール定義カタログ(計 11。目的に応じて選定・不足時は新規起草)
 ```
 
@@ -68,13 +74,15 @@ claude
 <project>/
 ├── CLAUDE.md              # ポインタ型(30-50 行)。コマンド表・ポインタ・セッション運用
 ├── .claude/
-│   ├── rules/             # 検出言語に応じた規約のみコピー(常時は coding-principles/testing/markdown)
+│   ├── rules/             # 検出言語に応じた規約のみコピー(常時は coding-principles/testing/markdown/growing-docs)
 │   └── handoff.md         # git コミット対象
 └── agents/                # ロール配置ありの時のみ(構成は目的に応じて選定)
 ```
 
 冪等なので既存プロジェクトで実行しても安全(既存ファイルは上書きせず全スキップ報告。
 既存 CLAUDE.md には不足節のみ承認付きで追記提案)。言語が増えたら再実行すればよい。
+`.claude/archive/` は初期化時には作られず、handoff 等が行数予算を超えた初回
+ローテーション時に生成される(溢れた分は逐語移動・要約禁止)。
 
 ## セッションの回し方
 
@@ -82,7 +90,8 @@ claude
 - **複数ターンのタスク**: `/goal <検証可能な完了条件>, or stop after 20 turns` で
   完了まで自動駆動する(状態確認は `/goal`、解除は `/goal clear`)
 - **終了時**: handoff.md を更新してコミットに含める。完了項目は「完了」欄へ移し、
-  前回の完了欄は削除する(履歴は git が持つ)
+  前回の完了欄は削除する(履歴は git が持つ)。60 行を超える分は
+  `.claude/archive/handoff.md` へ逐語退避する
 - **ロールセッション**(agmsg): `cd agents/planner && claude` で起動。
   ルートの CLAUDE.md + そのロールの CLAUDE.md だけがロードされる
 
@@ -90,6 +99,8 @@ claude
 
 - 規約を足す/直す: `~/.claude/templates/rules/` を編集(必ず `paths:` frontmatter を付ける)。
   既存プロジェクトへは該当ファイルを手動 `cp` か `/initialize` 再実行
+- 規約の還元: セッション中に「全プロジェクト共通」と判定された規約は、確認のうえ
+  `templates/rules/` へ還元される(再発ミスのルール化 — BLUEPRINT §10)
 - ロールを足す: `~/.claude/templates/roles/` に追加。ここは**カタログ**であり、
   `/initialize` は目的に合うロールだけを選定・提案する(選定原則は
   `templates/BLUEPRINT.md` §7)。カタログに無いロールは初期化時に新規起草され、
