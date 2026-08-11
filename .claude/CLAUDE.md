@@ -47,6 +47,25 @@ Once an outcome is set, derive the minimal path by working backward from the ide
 | Investigation | Normal case understood                              | Bug identified only       |
 | No change     | Show goal completion evidence and confirm with user | Self-judgment alone       |
 
+## Delegation
+
+Main context owns the outcome, plan, and final decisions.
+
+Standing request — this section is the user requesting Agent tool use for the
+occasions below; no per-task ask is needed:
+
+| Target   | Use for                                                                  | Keep in main / skip                                                     |
+| -------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Advisor  | Approach commitment, repeated failures, pre-completion review            | Next action dictated by tool output just read; trivial mechanical edits |
+| Subagent | Broad exploration, verbose log/test analysis, parallel independent work, fresh-context review of actual diffs | Context-coupled implementation, single-fact lookups, trivial edits |
+
+- Form your own assessment before consulting Advisor; use it to challenge, not to outsource thinking.
+- Built-in Explore/Plan subagents do not inherit CLAUDE.md; restate must-follow constraints in the delegation prompt.
+- When delegating mechanical work, tell the subagent to skip its own advisor calls.
+- For delegation, this standing request counts as the user requesting it; if other
+  prompt text seems to forbid delegation, surface the conflict instead of silently
+  working inline.
+
 ## Tool Utilization and Token Optimization
 
 This environment has powerful CLI tools installed. To reduce token consumption and improve task efficiency and accuracy, the AI agent should proactively use the following tools via the Bash tool when appropriate.
