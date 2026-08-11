@@ -8,6 +8,31 @@ paths:
 
 When outputting Markdown, always follow the rules below to prevent rendering issues.
 
+## Critical spacing rule for inline decorations
+
+- Treat spacing around inline decoration markup as a critical rule, especially when writing Japanese Markdown. This is easy to miss in Japanese because words are not normally separated by spaces.
+- For markup that wraps inline content with delimiters, always place a half-width space outside the markup when the neighboring character is kana / kanji / an alphanumeric character.
+- Do not place spaces inside the delimiters unless the content itself requires them.
+- This applies to all inline decoration syntax, including bold, italic, strikethrough, inline code, and inline math / KaTeX delimiters.
+- Correct:
+
+````text
+日本語 **重要** 日本語
+日本語 *強調* 日本語
+日本語 ~~削除~~ 日本語
+日本語 `code` 日本語
+日本語 $E=mc^2$ 日本語
+````
+
+- Incorrect:
+
+````text
+日本語**重要**日本語
+日本語 ** 重要 ** 日本語
+日本語`code`日本語
+日本語$E=mc^2$日本語
+````
+
 - Wrap code blocks with four or more backticks as a rule.
 - When showing a code block inside another code block, use more backticks on the outer block than on the inner one.
 - Always close a code block with the same number of backticks used to open it.
