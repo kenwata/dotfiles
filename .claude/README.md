@@ -13,26 +13,45 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 | `~/.claude/CLAUDE.md` / プロジェクトの `CLAUDE.md` | 毎セッション起動時 |
 | `.claude/rules/*.md`(`paths:` frontmatter あり) | 該当ファイルを操作した時のみ |
 | サブディレクトリの `CLAUDE.md` | その配下を操作した時のみ(遅延ロード) |
-| skills | 起動時は description のみ。本文は呼び出し時 |
+| commands / skills | 起動時は description のみ。本文は呼び出し時 |
 | auto memory(`MEMORY.md` 先頭 200 行) | 毎セッション起動時 |
+| `HANDOFF.md` / `TODO.md` | 自動ロードではない。セッション運用の指示により開始時に読む |
+| `docs/`・`.claude/archive/` | 自動ロードされない。必要時のみ明示的に読む |
 
 この前提から導かれる型:
 
 1. **CLAUDE.md はポインタ型**(50 行以内)— 規約の中身を書かず、「どこに何があるか」と
    セッション運用だけを書く。規約本体は path-scoped な rules に置き、必要時のみロードさせる
-2. **ハンドオフは二層** — タスク状態・TODO は git 管理の `.claude/handoff.md`
-   (60 行上限・完了欄は次回更新で削除・パス参照のみ)、個人的な学びは Claude Code
-   組み込みの auto memory に任せて何も作らない。次セッションは handoff 1 ファイルを
-   読むだけで着手でき、完了済みタスクのための再読込が発生しない
-3. **ロール指示は遅延ロード** — マルチエージェント(agmsg)のロール定義は
+2. **ハンドオフは四層** — 役割を分けて、常時ロードされる層を最小に保つ(BLUEPRINT §6)
+
+   | 層 | 担当 | コンテキストコスト |
+   | -- | ---- | ------------------ |
+   | auto memory | 個人的な学び・環境固有の事実 | 組み込み。何も作らない |
+   | `HANDOFF.md`(ルート直下) | 今の状態・仕掛かり中・次の一手 | 40 行以内。毎セッション終了時に**全体上書き**(追記しない) |
+   | git log | 何を依頼され・どう対応したか(逐語) | ゼロ。**1 タスク完了 = 1 コミット**、検索で必要箇所のみ引く |
+   | `docs/decisions.md` | 仕様解釈・逸脱・ユーザー決定(1 行/件) | ゼロ。append-only |
+   | `.claude/archive/` | TODO 等の予算超過分の逐語退避 | ゼロ。初回ローテーション時に生成 |
+
+   **タスクID `T<n>` が四層をつなぐ接続キー**。TODO.md が定義し、コミット要約に含め
+   (`git log --grep='T7'` でタスク単位の全作業を引ける)、decisions.md のタスクID列と
+   HANDOFF.md の仕掛かり中が参照する。通し番号・再利用禁止
+3. **計画は /breakdown で着地させる** — plan mode のプランファイルは `~/.claude/plans/` にあり
+   **repo 外・揮発性**で、しかも会話の検討過程を要約した骨子に過ぎない。承認直後の同一
+   セッションで `docs/design/<slug>.md`(why/what。状態を書かない)と `TODO.md`(実行状態)へ
+   落とす。行間が生きているのは承認直後だけなので、後回しにしない
+4. **ロール指示は遅延ロード** — マルチエージェント(agmsg)のロール定義は
    プロジェクト内 `agents/<role>/CLAUDE.md` に置く。その配下で作業するセッションにしか
    ロードされないため、他セッションを汚染しない
-4. **副作用コマンドは隠蔽** — `/initialize` のような設定変更コマンドは
+5. **副作用コマンドは隠蔽** — `/initialize` のような設定変更コマンドは
    `disable-model-invocation: true` で手動起動限定にし、起動時コンテキストからも消す
-5. **成長型ファイルは逐語アーカイブローテーション** — handoff・TODO・changelog 等が
-   行数予算を超えたら、要約(情報欠落)ではなく `.claude/archive/` へ一字一句そのまま
-   退避する。archive は自動ロードされないため起動コストもゼロ(`rules/growing-docs.md`)
-6. **修正指摘は再発判定してルール化** — その場しのぎの修正で終えず、スコープに応じて
+6. **成長型ファイルは逐語アーカイブローテーション** — TODO・changelog 等が行数予算を
+   超えたら、要約(情報欠落)ではなく `.claude/archive/` へ一字一句そのまま退避し、
+   移動後に diff で無損失を検証する(`rules/growing-docs.md`)。HANDOFF.md は全体上書きが
+   前提のためローテーション対象外
+7. **更新トリガーは配線する** — 「セッション終了時に更新する」と規約に書くだけでは形骸化
+   する。実際、旧 `.claude/handoff.md` は規約はあったが実行を強制する手順が無く、更新
+   されなくなった。実体は `skeletons/todo.md` の §0 セッションプロトコルに埋め込んである
+8. **修正指摘は再発判定してルール化** — その場しのぎの修正で終えず、スコープに応じて
    ファイル内規約 / `.claude/rules/` / templates への還元 / auto memory へ振り分ける
    (BLUEPRINT §10)
 
@@ -40,20 +59,28 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 
 ```
 ~/.claude/
-├── CLAUDE.md                    # グローバル指針(思想レベルのみ、59 行)
+├── CLAUDE.md                    # グローバル指針(思想レベルのみ、78 行)
 ├── README.md                    # このファイル
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
+│   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
 │   ├── agmsg.md                 # /agmsg — マルチエージェントメッセージング
 │   └── ingest.md, lint.md, query.md   # LLM Wiki 用(Wiki ディレクトリ内でのみ動く)
-└── templates/                   # /initialize が読むテンプレート群(プロジェクトへは選択コピー)
+└── templates/                   # /initialize と /breakdown が読むテンプレート群
     ├── BLUEPRINT.md             # 初期化設計書 — 判断基準と手順のすべてはここ
-    ├── skeletons/               # 機械的に穴埋め・コピーする雛形
+    ├── skeletons/               # 機械的に穴埋め・コピーする雛形(5 ファイル)
     │   ├── CLAUDE.project.md    # プロジェクト CLAUDE.md 雛形(ポインタ型)
-    │   └── handoff.md           # ハンドオフ雛形(書式規約をコメントで同梱)
+    │   ├── handoff.md           # HANDOFF.md 雛形(書式規約をコメントで同梱)
+    │   ├── todo.md              # TODO.md 雛形(§0 セッションプロトコル+タスクID規約)
+    │   ├── design.md            # docs/design/<slug>.md 雛形
+    │   └── decisions.md         # docs/decisions.md 雛形
     ├── rules/                   # コーディング規約+成長型ドキュメント規約(paths: 付き、12 ファイル)
-    └── roles/                   # ロール定義カタログ(計 11。目的に応じて選定・不足時は新規起草)
+    └── roles/                   # ロール定義カタログ(計 9。目的に応じて選定・不足時は新規起草)
 ```
+
+雛形は**他ファイルを参照させず自己完結**させる。書式規約は雛形冒頭のコメントに実体ごと
+同梱する(「テンプレートは A 参照」「A はテンプレート参照」の循環参照で実体がどこにも
+無くなった実例があるため)。
 
 ## プロジェクトの始め方
 
@@ -73,25 +100,37 @@ claude
 ```
 <project>/
 ├── CLAUDE.md              # ポインタ型(30-50 行)。コマンド表・ポインタ・セッション運用
+├── HANDOFF.md             # 今の状態(40 行以内)。git コミット対象
+├── docs/
+│   └── decisions.md       # なぜの記録(append-only)。git コミット対象
 ├── .claude/
-│   ├── rules/             # 検出言語に応じた規約のみコピー(常時は coding-principles/testing/markdown/growing-docs)
-│   └── handoff.md         # git コミット対象
+│   └── rules/             # 検出言語に応じた規約のみコピー(常時は coding-principles/testing/markdown/growing-docs)
 └── agents/                # ロール配置ありの時のみ(構成は目的に応じて選定)
 ```
 
+`TODO.md` と `docs/design/<slug>.md` は初期化時には作らない。plan mode で計画を立て、
+`/breakdown` を実行した時に生成される。`.claude/archive/` も初期化時には作られず、
+TODO 等が行数予算を超えた初回ローテーション時に生成される(溢れた分は逐語移動・要約禁止)。
+
 冪等なので既存プロジェクトで実行しても安全(既存ファイルは上書きせず全スキップ報告。
 既存 CLAUDE.md には不足節のみ承認付きで追記提案)。言語が増えたら再実行すればよい。
-`.claude/archive/` は初期化時には作られず、handoff 等が行数予算を超えた初回
-ローテーション時に生成される(溢れた分は逐語移動・要約禁止)。
 
 ## セッションの回し方
 
-- **開始時**: `.claude/handoff.md` の「次の一手」から着手する
+ライフサイクルの標準形:
+
+```
+/initialize(下地)→ plan mode(計画)→ /breakdown(着地)→ 実行(1 タスク = 1 コミット)
+```
+
+- **開始時**: `HANDOFF.md` と `TODO.md` の 2 つを読む。着手点は HANDOFF.md の「次の一手」
+- **タスク完了ごと**: ①TODO.md の該当タスクを `[x]` に更新 ②コミット(要約に `T<n>` を含める)
 - **複数ターンのタスク**: `/goal <検証可能な完了条件>, or stop after 20 turns` で
   完了まで自動駆動する(状態確認は `/goal`、解除は `/goal clear`)
-- **終了時**: handoff.md を更新してコミットに含める。完了項目は「完了」欄へ移し、
-  前回の完了欄は削除する(履歴は git が持つ)。60 行を超える分は
-  `.claude/archive/handoff.md` へ逐語退避する
+- **終了時**: ①チェックボックス更新の確認 ②`HANDOFF.md` を**全体上書き**(追記しない)
+  ③該当あれば `docs/decisions.md` へ 1 行追記
+- **過去を辿る時**: `git log`(引数なし)の全件読み込みはしない。
+  `git log --oneline -- <path>` → `git log --grep=<語>` → `git show <sha>` の順に絞る
 - **ロールセッション**(agmsg): `cd agents/planner && claude` で起動。
   ルートの CLAUDE.md + そのロールの CLAUDE.md だけがロードされる
 
@@ -99,11 +138,13 @@ claude
 
 - 規約を足す/直す: `~/.claude/templates/rules/` を編集(必ず `paths:` frontmatter を付ける)。
   既存プロジェクトへは該当ファイルを手動 `cp` か `/initialize` 再実行
+  (`/initialize` は `cp -n` なので既存ファイルは上書きされない — 更新は手動 `cp` が必要)
 - 規約の還元: セッション中に「全プロジェクト共通」と判定された規約は、確認のうえ
   `templates/rules/` へ還元される(再発ミスのルール化 — BLUEPRINT §10)
 - ロールを足す: `~/.claude/templates/roles/` に追加。ここは**カタログ**であり、
   `/initialize` は目的に合うロールだけを選定・提案する(選定原則は
   `templates/BLUEPRINT.md` §7)。カタログに無いロールは初期化時に新規起草され、
-  汎用性があればカタログへ還元される
+  汎用性があればカタログへ還元される。提案は 2〜4 ロールに抑え、
+  「作る役」と「検証する役」の分離を基本形とする
 - 初期化の挙動を変える: `templates/BLUEPRINT.md` が唯一の真実。
   `commands/initialize.md` は BLUEPRINT を読んで従うだけの薄いコマンド
