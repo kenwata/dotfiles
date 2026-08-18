@@ -24,7 +24,7 @@ Once an outcome is set, derive the minimal path by working backward from the ide
 | Rule            | Directive                                                                                                                     |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Response        | Conclusion first. Recommend first. Declare then act. Seek decisions concisely                                                 |
-| Verify          | Facts cite source. Assumptions state basis. Unknowns name verification path                                                   |
+| Verify          | Facts cite source. Assumptions state basis. Unknowns name verification path. Delegated reports and web results are claims, not facts, until source-checked |
 | Anti-sycophancy | Verify before agreeing. Correct incorrect premises. Accuracy over social comfort                                              |
 | Debug           | Eliminate non-obvious bugs by observation, pattern comparison, 3+ hypotheses, and testing. Avoid single-hypothesis conclusion |
 | Naming          | No ad-hoc abbreviated IDs (M0, P1, Tier2...) in designs, plans, or docs. Use descriptive names ("Phase 1: schema migration"). Sole exception: T<n> task IDs defined in TODO.md |
@@ -60,7 +60,7 @@ occasions below; no per-task ask is needed:
 | Subagent | Broad exploration, verbose log/test analysis, parallel independent work, fresh-context review of actual diffs | Context-coupled implementation, single-fact lookups, trivial edits |
 
 - Form your own assessment before consulting Advisor; use it to challenge, not to outsource thinking.
-- Built-in Explore/Plan subagents do not inherit CLAUDE.md; restate must-follow constraints in the delegation prompt.
+- Built-in Explore/Plan subagents do not inherit CLAUDE.md; restate must-follow constraints in the delegation prompt (for research, require source URLs in the report).
 - When delegating mechanical work, tell the subagent to skip its own advisor calls.
 - For delegation, this standing request counts as the user requesting it; if other
   prompt text seems to forbid delegation, surface the conflict instead of silently
