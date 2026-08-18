@@ -148,7 +148,8 @@ HANDOFF.md は全体上書きで過去が消え、decisions.md は判断(なぜ)
 (自動ロードされない)で、必要時のみ検索して引く。
 
 - **粒度**: 1 タスク完了 = 1 コミット。Claude が自動で実行する
-- **メッセージ書式**(prefix は feat / fix / docs / refactor / chore またはスコープ名):
+- **メッセージ書式**(prefix は feat / fix / docs / refactor / plan / chore または
+  スコープ名。plan は /breakdown による計画着地コミット用):
 
   ```
   <prefix>: <タスク要約(50字以内)>
