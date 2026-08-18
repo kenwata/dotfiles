@@ -14,6 +14,7 @@
 | git log 規約(コミット書式・遡り方) | 本書 §6 | `skeletons/CLAUDE.project.md` セッション運用 |
 | タスクID規約 | `skeletons/todo.md` 冒頭コメント | 本書 §6(設計理由のみ) |
 | HANDOFF 書式規約 | `skeletons/handoff.md` 冒頭コメント | 本書 §6(設計理由のみ) |
+| /goal 運用指針 | 本書 §8 | `skeletons/CLAUDE.project.md` セッション運用 |
 | 再発ミスの振り分け | 本書 §10 | `skeletons/CLAUDE.project.md` 修正指摘の項 |
 
 ## 1. 目的と原則
@@ -264,6 +265,9 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 - 完了条件は Claude の出力で検証可能な形で書く(例: 「test/auth の全テストがパスし
   lint が警告ゼロ」)。外部チェックに依存する条件は書かない
 - 状態確認は `/goal`(引数なし)、解除は `/goal clear`
+
+本節が正であり、要約は `skeletons/CLAUDE.project.md` のセッション運用に同梱されて
+いる。同梱側を変える時はここも直す。
 
 ## 9. 冪等性ポリシー(既存プロジェクトへの適用)
 
