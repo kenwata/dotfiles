@@ -19,9 +19,15 @@
 .claude/telemetry/
 .claude/.last-cleanup
 .claude/.last-update-result.json
+.claude/.last-update-result.json.tmp.*
 .claude/mcp-needs-auth-cache.json
 .claude/image-cache/
 .claude/chrome/
+.claude/daemon/
+.claude/daemon.log
+.claude/jobs/
+.claude/session-env/
+.claude/downloads/
 
 # Claude Bedrock — runtime-generated, not config
 .claude-bedrock/image-cache/
