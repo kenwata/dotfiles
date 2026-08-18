@@ -16,6 +16,7 @@
 | HANDOFF 書式規約 | `skeletons/handoff.md` 冒頭コメント | 本書 §6(設計理由のみ) |
 | /goal 運用指針 | 本書 §8 | `skeletons/CLAUDE.project.md` セッション運用 |
 | 再発ミスの振り分け | 本書 §10 | `skeletons/CLAUDE.project.md` 修正指摘の項 |
+| 規約配置の一般原則 | `rules/growing-docs.md`「Placement of durable rules」 | 本書 §10(再発ミス時のルーティングに限定) |
 
 ## 1. 目的と原則
 
@@ -309,6 +310,10 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 
 この振り分けの要約は `skeletons/CLAUDE.project.md` のセッション運用に同梱されており、
 生成された各プロジェクトで常時有効になる。本節が正であり、要約を変える時はここも直す。
+
+配置の一般原則(コンテキストコストと drift リスクによるルーティング)は
+`rules/growing-docs.md` の「Placement of durable rules」が正であり、本節は
+再発ミス検出時のルーティングに限定する。
 
 ## 11. 生成後検証(初期化完了を報告する前に必ず実施)
 
