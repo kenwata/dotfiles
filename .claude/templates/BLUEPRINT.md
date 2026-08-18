@@ -289,6 +289,10 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 以下4点を機械的に確認してから §2 の報告(作成/スキップ一覧)を行う。手作業の目視確認
 だけに頼らない — frontmatter のような機械的トリガーの陳腐化は、動作させるまで気づけない。
 
+例外: 遅延生成ファイル(`.claude/archive/` — 初回ローテーション時に生成、
+`TODO.md`・`docs/design/` — /breakdown 実行時に生成、`CHANGELOG` 等)の不在は
+エラー扱いしない。ポインタ実在確認(1)および `paths:` 一致確認(2)の対象から除外する。
+
 1. **ポインタの実在確認**: `CLAUDE.md`(および `HANDOFF.md` ヘッダコメント)が言及する
    全パス(`.claude/rules/`、`HANDOFF.md`、`docs/decisions.md`、`agents/<role>/CLAUDE.md`
    等)が実際に生成されているか、`ls`/`test -f` で確認する
