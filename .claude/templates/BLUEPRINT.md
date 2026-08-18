@@ -111,7 +111,9 @@
 コピー元: `~/.claude/templates/rules/`。コピー先: `.claude/rules/`。
 
 **常時コピー**(言語を問わない): `coding-principles.md`, `testing.md`, `markdown.md`,
-`growing-docs.md`(成長型ドキュメントの逐語アーカイブローテーション規約)
+`growing-docs.md`(成長型ドキュメントの逐語アーカイブローテーション規約)。
+このうち `markdown.md` / `growing-docs.md` は `paths:` 付き(path-scoped)であり、
+§1 の常時ロード 2 件枠には含まれない。
 
 **言語別**(マーカーファイル検出時のみ):
 
