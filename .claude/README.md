@@ -52,7 +52,10 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    前提のためローテーション対象外
 7. **更新トリガーは配線する** — 「セッション終了時に更新する」と規約に書くだけでは形骸化
    する。実際、旧 `.claude/handoff.md` は規約はあったが実行を強制する手順が無く、更新
-   されなくなった。実体は `skeletons/todo.md` の §0 セッションプロトコルに埋め込んである
+   されなくなった。実体は `skeletons/todo.md` の §0 セッションプロトコルに埋め込んである。
+   さらにプロンプト側の配線が破られた時(セッション異常終了等)の安全網として、
+   SessionStart hook(`hooks/check-handoff-stale.sh`)が次セッション起動時に HANDOFF.md の
+   未コミット変更・最新コミットからの遅れを機構側で検知して警告する
 8. **修正指摘は再発判定してルール化** — その場しのぎの修正で終えず、スコープに応じて
    ファイル内規約 / `.claude/rules/` / templates への還元 / auto memory へ振り分ける
    (BLUEPRINT §10)
@@ -65,6 +68,8 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── README.md                    # このファイル
 ├── settings.json                # 中核設定 — model / effortLevel / autoMode / qmd プラグイン(github: tobi/qmd)有効化
 ├── statusline.sh                # ステータスライン用スクリプト
+├── hooks/
+│   └── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md 陳腐化の起動時検知(設計方針 7)
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
@@ -84,8 +89,8 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ```
 
 dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあり(`install.sh` が
-`~/.claude-bedrock` へ symlink)、`settings.json` のみ実体を持ち、`commands/` と
-`statusline.sh` は `../.claude/` への symlink で共有する。
+`~/.claude-bedrock` へ symlink)、`settings.json` のみ実体を持ち、`commands/`・
+`statusline.sh`・`hooks/` は `../.claude/` への symlink で共有する。
 
 雛形は**他ファイルを参照させず自己完結**させる。書式規約は雛形冒頭のコメントに実体ごと
 同梱する(「テンプレートは A 参照」「A はテンプレート参照」の循環参照で実体がどこにも

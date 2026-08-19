@@ -11,6 +11,19 @@
     "type": "command",
     "command": "~/.claude/statusline.sh"
   },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/check-handoff-stale.sh"
+          }
+        ]
+      }
+    ]
+  },
   "enabledPlugins": {
     "qmd@qmd": true
   },

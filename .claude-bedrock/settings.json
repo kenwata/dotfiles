@@ -34,6 +34,19 @@
     "type": "command",
     "command": "~/.claude-bedrock/statusline.sh"
   },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude-bedrock/hooks/check-handoff-stale.sh"
+          }
+        ]
+      }
+    ]
+  },
   "enabledPlugins": {
     "qmd@qmd": true
   },
