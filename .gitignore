@@ -25,6 +25,8 @@
 .claude/chrome/
 .claude/daemon/
 .claude/daemon.log
+.claude/daemon.lock
+.claude/daemon.status.json
 .claude/jobs/
 .claude/session-env/
 .claude/downloads/
