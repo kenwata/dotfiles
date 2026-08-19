@@ -9,9 +9,12 @@
 # (SessionStart hook の stdout はセッションのコンテキストに追加される)。
 # いかなる場合も exit 0(セッション開始をブロックしない)。
 
-# 対象外: HANDOFF.md 運用をしていない / git repo 外 / コミットゼロ
-[ -f HANDOFF.md ] || exit 0
+# 対象外: git repo 外 / HANDOFF.md 運用をしていない / コミットゼロ
+# HANDOFF.md はリポジトリルート直下が定位置のため、サブディレクトリ起動
+# (ロールセッション: cd agents/<role> && claude)でも検知できるようルートへ移動する
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
+cd "$(git rev-parse --show-toplevel)" || exit 0
+[ -f HANDOFF.md ] || exit 0
 git rev-parse --verify HEAD >/dev/null 2>&1 || exit 0
 
 if [ -n "$(git status --porcelain -- HANDOFF.md 2>/dev/null)" ]; then
