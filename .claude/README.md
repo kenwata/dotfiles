@@ -12,6 +12,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 | ---- | ---------------- |
 | `~/.claude/CLAUDE.md` / プロジェクトの `CLAUDE.md` | 毎セッション起動時 |
 | `.claude/rules/*.md`(`paths:` frontmatter あり) | 該当ファイルを操作した時のみ |
+| `.claude/rules/*.md`(`paths:` なし) | 毎セッション起動時(CLAUDE.md と同等) |
 | サブディレクトリの `CLAUDE.md` | その配下を操作した時のみ(遅延ロード) |
 | commands / skills | 起動時は description のみ。本文は呼び出し時 |
 | auto memory(`MEMORY.md` 先頭 200 行) | 毎セッション起動時 |
@@ -33,7 +34,8 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    | `.claude/archive/` | TODO 等の予算超過分の逐語退避 | ゼロ。初回ローテーション時に生成 |
 
    **タスクID `T<n>` が四層をつなぐ接続キー**。TODO.md が定義し、コミット要約に含め
-   (`git log --grep='T7'` でタスク単位の全作業を引ける)、decisions.md のタスクID列と
+   (境界付き `git log -E --grep='T7([^0-9]|$)'` でタスク単位の全作業を引ける。裸の
+   `--grep='T7'` は T70 等に誤マッチする)、decisions.md のタスクID列と
    HANDOFF.md の仕掛かり中が参照する。通し番号・再利用禁止
 3. **計画は /breakdown で着地させる** — plan mode のプランファイルは `~/.claude/plans/` にあり
    **repo 外・揮発性**で、しかも会話の検討過程を要約した骨子に過ぎない。承認直後の同一
@@ -61,6 +63,8 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ~/.claude/
 ├── CLAUDE.md                    # グローバル指針(思想レベルのみ、78 行)
 ├── README.md                    # このファイル
+├── settings.json                # 中核設定 — model / effortLevel / autoMode / qmd プラグイン(github: tobi/qmd)有効化
+├── statusline.sh                # ステータスライン用スクリプト
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
@@ -74,9 +78,14 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     │   ├── todo.md              # TODO.md 雛形(§0 セッションプロトコル+タスクID規約)
     │   ├── design.md            # docs/design/<slug>.md 雛形
     │   └── decisions.md         # docs/decisions.md 雛形
-    ├── rules/                   # コーディング規約+成長型ドキュメント規約(paths: 付き、12 ファイル)
+    ├── rules/                   # コーディング規約+成長型ドキュメント規約(12 ファイル。原則 paths: 付き、
+    │                            #   paths なし=常時ロードは coding-principles/testing の 2 件のみ — BLUEPRINT §1)
     └── roles/                   # ロール定義カタログ(計 9。目的に応じて選定・不足時は新規起草)
 ```
+
+dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあり(`install.sh` が
+`~/.claude-bedrock` へ symlink)、`settings.json` のみ実体を持ち、`commands/` と
+`statusline.sh` は `../.claude/` への symlink で共有する。
 
 雛形は**他ファイルを参照させず自己完結**させる。書式規約は雛形冒頭のコメントに実体ごと
 同梱する(「テンプレートは A 参照」「A はテンプレート参照」の循環参照で実体がどこにも
@@ -104,7 +113,8 @@ claude
 ├── docs/
 │   └── decisions.md       # なぜの記録(append-only)。git コミット対象
 ├── .claude/
-│   └── rules/             # 検出言語に応じた規約のみコピー(常時は coding-principles/testing/markdown/growing-docs)
+│   └── rules/             # 検出言語別の規約+言語を問わず常時コピーの 4 件(coding-principles/testing/
+│                          #   markdown/growing-docs)。常時ロードは前 2 件のみ、後 2 件は path-scoped(BLUEPRINT §5)
 └── agents/                # ロール配置ありの時のみ(構成は目的に応じて選定)
 ```
 
@@ -130,17 +140,21 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
 - **終了時**: ①チェックボックス更新の確認 ②`HANDOFF.md` を**全体上書き**(追記しない)
   ③該当あれば `docs/decisions.md` へ 1 行追記
 - **過去を辿る時**: `git log`(引数なし)の全件読み込みはしない。
-  `git log --oneline -- <path>` → `git log --grep=<語>` → `git show <sha>` の順に絞る
+  `git log --oneline -- <path>` → `git log --grep=<語>`(タスクIDは境界付き
+  `-E --grep='T7([^0-9]|$)'` 形式)→ `git show <sha>` の順に絞る
 - **ロールセッション**(agmsg): `cd agents/planner && claude` で起動。
   ルートの CLAUDE.md + そのロールの CLAUDE.md だけがロードされる
 
 ## メンテナンス
 
-- 規約を足す/直す: `~/.claude/templates/rules/` を編集(必ず `paths:` frontmatter を付ける)。
+- 規約を足す/直す: `~/.claude/templates/rules/` を編集(原則 `paths:` frontmatter を付ける。
+  paths なし=常時ロードは coding-principles/testing の 2 件までと BLUEPRINT §1 が定める)。
   既存プロジェクトへは該当ファイルを手動 `cp` か `/initialize` 再実行
   (`/initialize` は `cp -n` なので既存ファイルは上書きされない — 更新は手動 `cp` が必要)
 - 規約の還元: セッション中に「全プロジェクト共通」と判定された規約は、確認のうえ
-  `templates/rules/` へ還元される(再発ミスのルール化 — BLUEPRINT §10)
+  `templates/rules/` へ還元される(再発ミスのルール化 — BLUEPRINT §10)。
+  どの規約の正がどこにあり、どこへ同梱されるかは BLUEPRINT 冒頭の
+  「規約の正と同梱先(対応表)」が一覧している
 - ロールを足す: `~/.claude/templates/roles/` に追加。ここは**カタログ**であり、
   `/initialize` は目的に合うロールだけを選定・提案する(選定原則は
   `templates/BLUEPRINT.md` §7)。カタログに無いロールは初期化時に新規起草され、
