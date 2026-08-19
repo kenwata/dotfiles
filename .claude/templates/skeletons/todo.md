@@ -17,8 +17,8 @@
 ## §0 セッションプロトコル
 
 - 開始時に読む: このファイルと `HANDOFF.md` の 2 つ
-- タスク完了ごと: ①該当タスクを `[x]` に更新 ②git commit(要約に `T<n>` を含める)
-- 終了時: ①チェックボックス更新の確認 ②`HANDOFF.md` の全体上書き ③該当あれば `docs/decisions.md` へ 1 行追記
+- タスク完了ごと: ①該当タスクを `[x]` に更新 ②git commit(要約に `T<n>` を含める。変更を生まないタスクは `git commit --allow-empty` で記録を残す)
+- 終了時: ①チェックボックス更新の確認 ②`HANDOFF.md` の全体上書き ③該当あれば `docs/decisions.md` へ 1 行追記 ④上書きした `HANDOFF.md`(と `docs/decisions.md`)をコミット
 
 ## {{slug}}(設計: docs/design/{{slug}}.md)
 
