@@ -74,8 +74,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
 │   ├── follow-up.md             # /follow-up — 終了時に計画と成果の差分を検査・是正
-│   ├── agmsg.md                 # /agmsg — マルチエージェントメッセージング
-│   └── ingest.md, lint.md, query.md   # LLM Wiki 用(Wiki ディレクトリ内でのみ動く)
+│   └── agmsg.md                 # /agmsg — マルチエージェントメッセージング
 └── templates/                   # /initialize と /breakdown が読むテンプレート群
     ├── BLUEPRINT.md             # 初期化設計書 — 判断基準と手順のすべてはここ
     ├── skeletons/               # 機械的に穴埋め・コピーする雛形(5 ファイル)
@@ -88,6 +87,11 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     │                            #   paths なし=常時ロードは coding-principles/testing の 2 件のみ — BLUEPRINT §1)
     └── roles/                   # ロール定義カタログ(計 9。目的に応じて選定・不足時は新規起草)
 ```
+
+LLM Wiki 用の `/ingest` `/query` `/lint` はここには置かない。2026-08-20 に LLM Wiki
+リポジトリ側の `.claude/skills/` へ移設した(そこでしか使わないコマンドであり、
+personal スコープに置くと無関係なプロジェクトでも候補に出るうえ、personal が project を
+上書きするためリポジトリ側に置いた実体が効かなくなるため)。
 
 dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあり(`install.sh` が
 `~/.claude-bedrock` へ symlink)、`settings.json` のみ実体を持ち、`commands/`・
