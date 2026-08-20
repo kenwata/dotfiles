@@ -57,6 +57,12 @@ SessionStart フックが `actas-claim.sh` で排他ロックを取り、上流�
   `backup_and_link` を通すと `db/` と `teams/` ごとバックアップへ退避されるため。
   このマシンの symlink は手動で張られたもの。
 
+## 既知の限界
+
+- `step_agmsg` の取り残し掃除は `scripts/` と旧 `templates/` だけを見る（`db/` `teams/` を
+  守るための意図的な限定）。スキルルート直下に上流が捨てたファイルが残った場合
+  （今回の `agmsg.db` のようなケース）は手動で消す。
+
 ## 未確認事項
 
 - **Bedrock で Monitor ツールが使えるかは未検証。** 2026-06 時点の上流には
