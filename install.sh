@@ -206,9 +206,11 @@ step4_symlinks() {
   backup_and_link "$DOTFILES/.tmux.conf"   "$HOME/.tmux.conf"
 
   # ディレクトリ
-  # .agents 配下の skills/ は追跡していない (.gitignore)。symlink しておくことで
-  # step_agmsg が入れる実体と、repo が持つ patches/ が同じ木の下に並ぶ。
-  backup_and_link "$DOTFILES/.agents"         "$HOME/.agents"
+  # .agents は意図的に symlink しない。step_agmsg は $DOTFILES/.agents/patches を
+  # 直接参照するので symlink は不要で、~/.agents が実体ディレクトリのマシンでは
+  # backup_and_link が db/ と teams/ ごとバックアップへ退避させてしまう。
+  # (このマシンの ~/.agents は手動で張られた $DOTFILES/.agents への symlink。
+  #  結果として agmsg の実体が repo 内に置かれるが、.gitignore で追跡外にしてある)
   backup_and_link "$DOTFILES/.claude"         "$HOME/.claude"
   backup_and_link "$DOTFILES/.claude-bedrock" "$HOME/.claude-bedrock"
   backup_and_link "$DOTFILES/.tmux"           "$HOME/.tmux"
@@ -374,6 +376,9 @@ step8_claude_code() {
 # あるファイルを丸ごと上書きする」overlay 方式だった。上流が更新されると追跡済みの
 # 古いファイルが新しい実装を無言で差し戻すため廃止した。パッチ方式なら、上流が
 # 該当箇所を変えた時点で適用が失敗して気づける。
+#
+# パッチの内容・新マシンで手動になる手順・未確認事項は
+# .agents/patches/agmsg/README.md を見ること。
 # ============================================================
 AGMSG_TAG="v1.2.2"
 
@@ -445,6 +450,27 @@ step_agmsg() {
     sed 's/__SKILL_NAME__/agmsg/g' \
       "$clone/scripts/drivers/types/claude-code/template.md" > "$bedrock_cmd"
     info "  Generated: $bedrock_cmd"
+  fi
+
+  # 上流で削除されたファイルの掃除。
+  # upstream installer の --update は `cp -R scripts/. $SKILL_DIR/scripts/` であって
+  # 削除同期ではないため、上流から消えたスクリプトが古いまま残り続ける。実際
+  # v1.0.x → v1.2.2 で hook.sh / disband.sh / init-db.sh / templates/ が残った。
+  # 対象は installer が所有する scripts/ と旧 templates/ のみ。db/ teams/ run/
+  # plugins/ には触れない（ユーザーのデータと opt-in した外部ドライバがある）。
+  local skill_dir="$HOME/.agents/skills/agmsg"
+  local rel
+  while IFS= read -r rel; do
+    info "    - removed (上流から削除済み): scripts/$rel"
+    rm -f "$skill_dir/scripts/$rel"
+  done < <(comm -23 \
+    <(cd "$skill_dir/scripts" && find . -type f | sed 's|^\./||' | sort) \
+    <(cd "$clone/scripts"     && find . -type f | sed 's|^\./||' | sort))
+  find "$skill_dir/scripts" -type d -empty -delete 2>/dev/null || true
+  # templates/ は v1.2.x で scripts/drivers/types/<type>/template.md へ移動した
+  if [[ -d "$skill_dir/templates" && ! -d "$clone/templates" ]]; then
+    rm -rf "$skill_dir/templates"
+    info "    - removed (上流から削除済み): templates/"
   fi
 
   # 実行権限の確保（installer が設定するはずだが念のため）
