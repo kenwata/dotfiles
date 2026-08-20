@@ -73,15 +73,12 @@
 .claude-foundry/tasks/
 .claude-foundry/chrome/
 
-# agents — runtime data (db/run/teams) and dated backups
-# teams/ and .claude/settings.local.json contain absolute paths and are regenerated at install time
-.agents/skills/*.bak*/
-.agents/skills/*/db/
-.agents/skills/*/run/
-.agents/skills/*/teams/
-.agents/skills/*/.claude/settings.local.json
-.agents/skills/*/.agmsg
-.agents/skills/*/*.db
+# agents — インストール実体は追跡しない
+# skills/ 配下は upstream installer が生成する成果物。追跡すると次回アップデート時に
+# 古いファイルで無言上書きする事故を招くため、丸ごと除外する (2026-08-20)。
+# カスタマイズは .agents/patches/<name>/*.patch として追跡し、install.sh が
+# git apply --3way で upstream clone に適用する。
+.agents/skills/
 
 # tmux plugins — installed by tpm, not stored in repo
 .tmux/plugins/tmux-resurrect/

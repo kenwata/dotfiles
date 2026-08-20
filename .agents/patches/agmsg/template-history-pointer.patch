@@ -1,0 +1,10 @@
+diff --git a/scripts/drivers/types/claude-code/template.md b/scripts/drivers/types/claude-code/template.md
+index 86fc0f4..7285276 100644
+--- a/scripts/drivers/types/claude-code/template.md
++++ b/scripts/drivers/types/claude-code/template.md
+@@ -345,3 +345,5 @@ If argument starts with "key rotate" followed by a team name:
+ 5. Messages before the acknowledged rotation boundary remain readable with the old key.
+ 
+ Device pairing (`key request` / `key approve`) is not implemented — they are not `key.sh` subcommands, so a call prints usage and exits 1. If the user asks for one, tell them so instead of attempting to run it.
++
++The intent and history of this command live in `~/workspace/Projects/Claude/devteam/sumi-asobi` (oldest `messages.db` entry id=30 / 2026-06-13, team `devteam-sumi-asobi`; entries before id=30 are not recoverable).

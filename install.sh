@@ -206,7 +206,9 @@ step4_symlinks() {
   backup_and_link "$DOTFILES/.tmux.conf"   "$HOME/.tmux.conf"
 
   # ディレクトリ
-  # .agents は step_agmsg で実体ディレクトリとして構築するため symlink しない
+  # .agents 配下の skills/ は追跡していない (.gitignore)。symlink しておくことで
+  # step_agmsg が入れる実体と、repo が持つ patches/ が同じ木の下に並ぶ。
+  backup_and_link "$DOTFILES/.agents"         "$HOME/.agents"
   backup_and_link "$DOTFILES/.claude"         "$HOME/.claude"
   backup_and_link "$DOTFILES/.claude-bedrock" "$HOME/.claude-bedrock"
   backup_and_link "$DOTFILES/.tmux"           "$HOME/.tmux"
@@ -363,13 +365,20 @@ step8_claude_code() {
 # ============================================================
 # Step 9: agmsg (multi-agent messaging)
 # ============================================================
-# ~/.agents/skills/agmsg を実体ディレクトリとして構築する。
-# symlink にしないのは: upstream installer が DB 初期化・実行権限付与など
-# マシン毎のセットアップを担うため。repo の .agents/skills/agmsg/ は
-# カスタマイズの差分ソースとして保持し、clone に overlay してから installer を実行する。
+# ~/.agents/skills/agmsg は upstream installer が構築する成果物なので repo では
+# 追跡しない (.gitignore)。repo が持つのはカスタマイズ差分だけ:
+#   .agents/patches/agmsg/*.patch
+# を pristine な upstream タグへ git apply --3way してから installer を回す。
+#
+# 2026-08-20 まではこれが「repo の .agents/skills/agmsg/ 配下で clone と差分が
+# あるファイルを丸ごと上書きする」overlay 方式だった。上流が更新されると追跡済みの
+# 古いファイルが新しい実装を無言で差し戻すため廃止した。パッチ方式なら、上流が
+# 該当箇所を変えた時点で適用が失敗して気づける。
 # ============================================================
+AGMSG_TAG="v1.2.2"
+
 step_agmsg() {
-  info "=== Step 9: agmsg ==="
+  info "=== Step 9: agmsg ($AGMSG_TAG) ==="
 
   if ! have git; then
     warn "git not found, skipping agmsg setup"
@@ -383,45 +392,35 @@ step_agmsg() {
   local clone="$HOME/.cache/agmsg/src"
   mkdir -p "$(dirname "$clone")"
 
-  # upstream を clone（既存なら ff-only で更新）
   if [[ -d "$clone/.git" ]]; then
-    info "  Updating agmsg upstream clone..."
-    git -C "$clone" pull --ff-only --quiet || warn "  agmsg upstream pull failed (offline?), using cached"
+    info "  Fetching agmsg $AGMSG_TAG..."
+    git -C "$clone" fetch --depth 1 --force --quiet \
+      origin "refs/tags/$AGMSG_TAG:refs/tags/$AGMSG_TAG" \
+      || warn "  agmsg fetch failed (offline?), using cached checkout"
   else
-    info "  Cloning fujibee/agmsg..."
-    git clone --depth 1 https://github.com/fujibee/agmsg.git "$clone"
+    info "  Cloning fujibee/agmsg $AGMSG_TAG..."
+    git clone --depth 1 --branch "$AGMSG_TAG" https://github.com/fujibee/agmsg.git "$clone"
   fi
 
-  # 差分自動適用: repo のカスタムファイル (scripts/ と templates/) のうち
-  # upstream clone と異なるものだけを clone に上書きする。
-  # clone 側は __SKILL_NAME__ プレースホルダ入りなので、比較前に agmsg へ展開して正規化する。
-  # これにより installer が「パッチ済みテンプレート」からコマンドファイルを生成できる。
-  local custom="$DOTFILES/.agents/skills/agmsg"
-  if [[ -d "$custom" ]]; then
-    info "  Applying customizations onto upstream clone..."
-    local rel clone_file repo_file clone_normalized repo_content
-    while IFS= read -r -d '' repo_file; do
-      rel="${repo_file#${custom}/}"
-      clone_file="$clone/$rel"
+  # パッチ適用前に必ず pristine なタグ状態へ戻す。前回適用した結果が残っていると
+  # 同じパッチの再適用に失敗し、この関数が冪等でなくなる。
+  info "  Resetting clone to $AGMSG_TAG..."
+  git -C "$clone" checkout -f --quiet "$AGMSG_TAG"
+  git -C "$clone" clean -fdq
 
-      if [[ ! -f "$clone_file" ]]; then
-        # 新規ファイル (disband.sh など) → そのままコピー
-        mkdir -p "$(dirname "$clone_file")"
-        cp "$repo_file" "$clone_file"
-        info "    + added: $rel"
-      else
-        # __SKILL_NAME__→agmsg で正規化してから比較（差分があれば上書き）
-        clone_normalized=$(sed 's/__SKILL_NAME__/agmsg/g' "$clone_file")
-        repo_content=$(cat "$repo_file")
-        if [[ "$clone_normalized" != "$repo_content" ]]; then
-          cp "$repo_file" "$clone_file"
-          info "    * patched: $rel"
-        fi
-      fi
-    done < <(find "$custom/scripts" "$custom/templates" -type f -print0 2>/dev/null)
-  else
-    warn "  $custom not found — installing upstream agmsg without local customizations"
-  fi
+  # カスタマイズを適用。失敗したら止める — 黙って素の上流を入れると、動いていた
+  # はずの機能が消えたことに気づけないまま完了扱いになる。
+  local patch_dir="$DOTFILES/.agents/patches/agmsg"
+  local p
+  for p in "$patch_dir"/*.patch; do
+    [[ -e "$p" ]] || continue
+    info "    applying: $(basename "$p")"
+    if ! git -C "$clone" apply --3way "$p"; then
+      warn "agmsg patch failed to apply: $p"
+      warn "$AGMSG_TAG で該当箇所が変わった可能性がある。パッチを作り直すこと。"
+      exit 1
+    fi
+  done
 
   # 既存インストール済みか確認（.agmsg マーカーファイルで判断）
   local upd_flag=""
@@ -431,26 +430,27 @@ step_agmsg() {
   fi
 
   # パッチ済み clone で upstream installer を実行
-  # --cmd agmsg: ~/.agents/skills/agmsg/ を実体ディレクトリとして構築、DB 初期化
-  #              ~/.claude/commands/agmsg.md を生成（パッチ済み cmd.claude-code.md から）
+  # --cmd agmsg: ~/.agents/skills/agmsg/ を構築し、~/.claude/commands/agmsg.md を
+  #              パッチ済みテンプレートから生成する
   info "  Running agmsg installer..."
   # shellcheck disable=SC2086
   bash "$clone/install.sh" --cmd agmsg $upd_flag
 
-  # ~/.claude-bedrock 対応: upstream installer は ~/.claude のみ扱うため手動生成
+  # ~/.claude-bedrock 対応: upstream installer は ~/.claude のみ扱う。
+  # 現環境では ~/.claude-bedrock/commands が ~/.claude/commands への symlink なので
+  # 生成物をそのまま共有しており、この分岐は素通りする。symlink が無い環境向けの保険。
   local bedrock_cmd="$HOME/.claude-bedrock/commands/agmsg.md"
-  if [[ ! -f "$bedrock_cmd" ]]; then
+  if [[ ! -e "$bedrock_cmd" ]]; then
     mkdir -p "$(dirname "$bedrock_cmd")"
-    sed 's/__SKILL_NAME__/agmsg/g' "$clone/templates/cmd.claude-code.md" > "$bedrock_cmd"
+    sed 's/__SKILL_NAME__/agmsg/g' \
+      "$clone/scripts/drivers/types/claude-code/template.md" > "$bedrock_cmd"
     info "  Generated: $bedrock_cmd"
-  else
-    info "  .claude-bedrock/commands/agmsg.md already exists, skipping"
   fi
 
   # 実行権限の確保（installer が設定するはずだが念のため）
   chmod +x "$HOME/.agents/skills/agmsg/scripts/"*.sh 2>/dev/null || true
 
-  info "agmsg setup complete"
+  info "agmsg setup complete (version $("$HOME/.agents/skills/agmsg/scripts/version.sh" 2>/dev/null || echo unknown))"
 }
 
 # ============================================================

@@ -1,0 +1,62 @@
+diff --git a/scripts/session-start.sh b/scripts/session-start.sh
+index 51f7ff4..60f8030 100755
+--- a/scripts/session-start.sh
++++ b/scripts/session-start.sh
+@@ -332,6 +332,44 @@ if [ -n "$_rec" ]; then
+   fi
+ fi
+ 
++# --- Auto-actas from the launch wrapper (AGMSG_ACTAS). ---
++# A role-specific launcher (e.g. `AGMSG_ACTAS=planner claude-bedrock`) exports
++# AGMSG_ACTAS=<role> so the session boots already holding that role, instead of
++# the human typing `/agmsg actas <role>` as the first turn of every session.
++# All this does is claim the exclusivity lock and set ROLE_NAME/ROLE_TEAM -- the
++# ROLE-FILTERED directive below then narrows the watcher and states the FROM,
++# exactly as it does for a resumed role.
++#
++# Takes precedence over the resumed-role record above: the launcher states an
++# intent for THIS boot, while the record only remembers a previous one.
++#
++# Fail-open, matching the resume path: a refused or unregistered role falls
++# through to the generic unfiltered directive, with ACTAS_NOTE saying why rather
++# than leaving the session silently unfiltered.
++ACTAS_NOTE=""
++if [ -n "${AGMSG_ACTAS:-}" ]; then
++  _claim="$("$SCRIPT_DIR/actas-claim.sh" "$PROJECT" "$TYPE" "$AGMSG_ACTAS" "$SESSION_ID" 2>/dev/null || true)"
++  # Match the `status=` LINE, not the head of the output: actas-claim.sh can
++  # print a multi-line notice ahead of it (e.g. the connected-but-not-syncing
++  # warning from sync-autostart), and a `case "$_claim" in status=ok*)` silently
++  # falls through to the unfiltered directive whenever that notice appears.
++  _claim_status="$(printf '%s\n' "$_claim" | sed -n '/^status=/p' | head -1)"
++  case "$_claim_status" in
++    status=ok*)
++      ROLE_NAME="$AGMSG_ACTAS"
++      # actas-claim.sh prints one `team=` per claimed team on the status line;
++      # the directive names a single team, so take the first.
++      ROLE_TEAM="$(printf '%s\n' "$_claim_status" | tr ' ' '\n' | sed -n 's/^team=//p' | head -1)"
++      ;;
++    status=held*)
++      ACTAS_NOTE="NOTE: could not auto-act as \`$AGMSG_ACTAS\` -- $_claim_status. Another live session holds that role. Run \`/agmsg drop $AGMSG_ACTAS\` there, then \`/agmsg actas $AGMSG_ACTAS\` here. The watcher below is unfiltered until then."
++      ;;
++    *)
++      ACTAS_NOTE="NOTE: role \`$AGMSG_ACTAS\` is not registered to a team in this project, so auto-actas did nothing. Run \`/agmsg actas $AGMSG_ACTAS\` to join it (it creates the role if needed). The watcher below is unfiltered until then."
++      ;;
++  esac
++fi
++
+ WATCH="$SKILL_DIR/scripts/watch.sh"
+ # Shell-quote each argv so the host can paste the command into Monitor and run
+ # it verbatim. A plain '...' wrap breaks on paths with an apostrophe
+@@ -359,6 +397,7 @@ Note: On a /clear or --continue/--resume re-fire, you may shortly see a
+ task. That is the previous watcher being cleaned up — expected. Do NOT
+ relaunch it; the Monitor you invoke from this directive replaces it.
+ EOF
++  if [ -n "$ACTAS_NOTE" ]; then printf '\n%s\n' "$ACTAS_NOTE"; fi
+   exit 0
+ fi
+ 
+@@ -382,3 +421,4 @@ task. That is the previous watcher being cleaned up to avoid duplicates
+ — it is expected. Do NOT relaunch it; the Monitor you invoke from this
+ directive replaces it.
+ EOF
++if [ -n "$ACTAS_NOTE" ]; then printf '\n%s\n' "$ACTAS_NOTE"; fi
