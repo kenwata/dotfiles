@@ -7,6 +7,7 @@ allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Bash(mkdir:*), Ba
 
 1. **入力**: 一次情報は **会話コンテキスト全体**(探索結果・検討済み代替案と不採用理由・制約・ユーザー発言の生の意図)。プランファイルはそれを要約した骨子に過ぎない。会話に承認済みプランが無い場合(別セッションでの後日実行)はその旨を明示し、プランファイルのパス提示または計画内容の再確認をユーザーに求める。**骨子だけから推測で膨らませない(捏造禁止)**。slug は計画内容から短いケバブケースで決める。
 2. **前提確認**: `HANDOFF.md`・`docs/decisions.md` の存在を確認。無ければ `/initialize` を先に実行するよう案内して中断する。
+   - **手順3で着地物を書き始める前に advisor を呼ぶ** — 計画の解釈・slug・タスク分割の粒度をレビューにかける。ここを飛ばすと、誤った解釈のまま永続文書が生成され、以後のセッションがそれを正として動く。
 3. **生成**(冪等)— **行間の復元義務**: 着地物はプランの転記・要約ではなく、プランで省略された前提・理由・境界条件を会話から復元して **プランより詳細に** 書く:
    - `mkdir -p docs/design` → `~/.claude/templates/skeletons/design.md` の placeholder を埋めて `docs/design/<slug>.md` を Write(既存 slug なら上書きせず diff 提示・承認後に更新)。「検討した代替案と不採用理由」を必ず埋める — 会話で検討したのに書き残さないことが最大の情報損失。
    - `TODO.md`: 無ければ `~/.claude/templates/skeletons/todo.md` から生成。既存なら冒頭の規約コメントと §0 セッションプロトコルを保持したまま計画見出し+タスクを追記。採番は `TODO.md` と `.claude/archive/TODO.md` を Grep して **最大番号 +1 から連番**(再利用・振り直し禁止)。
@@ -17,3 +18,5 @@ allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Bash(mkdir:*), Ba
 6. **報告**: 生成/更新ファイルの一覧・採番範囲(`T<n>〜T<m>`)・最初の一手を簡潔に示す。
 
 実行時機の原則: **plan mode 承認直後の同一セッションが標準**(検討の行間が生きているのは承認直後だけ。セッションを跨ぐと失われる)。実装に着手する前にこのコマンドの着地を完了させること。
+
+本コマンドの意図・経緯・変更理由は dotfiles の履歴(`2026-07-16 templates: HANDOFF/TODO/decisionsの四層設計と/breakdownを追加`)と、四層設計が最初に実運用された `~/workspace/Projects/Learning/PhysicalAI` に残っている。

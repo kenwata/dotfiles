@@ -181,3 +181,5 @@ If argument starts with "config set" (e.g. "config set hook.check_interval 30"):
 If argument is "reset":
 1. Run: `~/.agents/skills/agmsg/scripts/reset.sh "$(pwd)" claude-code`
 2. Tell the user the result.
+
+The intent and history of this command live in `~/workspace/Projects/Claude/devteam/sumi-asobi` (oldest `messages.db` entry id=30 / 2026-06-13, team `devteam-sumi-asobi`; entries before id=30 are not recoverable).

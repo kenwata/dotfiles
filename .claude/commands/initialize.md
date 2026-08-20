@@ -29,3 +29,5 @@ disable-model-invocation: true
 6. **報告**: ファイルごとに「作成 / 既存のためスキップ」の一覧表を出す(git init・初期コミットの実施有無も含める)。最後に一行:「`HANDOFF.md`・`docs/decisions.md` はコミット対象、`.claude/settings.local.json` は gitignore 推奨」。
 
 再実行時は全スキップ報告のみで変更ゼロであること。macOS の `cp -n` はスキップ時に exit 1 を返すが失敗ではない(BLUEPRINT §9)。
+
+本コマンドの意図・経緯・変更理由は dotfiles の履歴(`2026-07-08 templates: BLUEPRINTベースの初期化フローに再設計`)と `~/.claude/templates/BLUEPRINT.md` 本文の失敗事例に残っている。
