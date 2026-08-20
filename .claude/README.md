@@ -73,6 +73,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
+│   ├── follow-up.md             # /follow-up — 終了時に計画と成果の差分を検査・是正
 │   ├── agmsg.md                 # /agmsg — マルチエージェントメッセージング
 │   └── ingest.md, lint.md, query.md   # LLM Wiki 用(Wiki ディレクトリ内でのみ動く)
 └── templates/                   # /initialize と /breakdown が読むテンプレート群
@@ -136,6 +137,7 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
 
 ```
 /initialize(下地)→ plan mode(計画)→ /breakdown(着地)→ 実行(1 タスク = 1 コミット)
+  → /follow-up(終了時の検査と是正)
 ```
 
 - **開始時**: `HANDOFF.md` と `TODO.md` の 2 つを読む。着手点は HANDOFF.md の「次の一手」
@@ -143,9 +145,9 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
   変更を生まないタスクは `git commit --allow-empty` で記録を残す)
 - **複数ターンのタスク**: `/goal <検証可能な完了条件>, or stop after 20 turns` で
   完了まで自動駆動する(状態確認は `/goal`、解除は `/goal clear`)
-- **終了時**: ①チェックボックス更新の確認 ②`HANDOFF.md` を**全体上書き**(追記しない)
-  ③該当あれば `docs/decisions.md` へ 1 行追記 ④上書きした `HANDOFF.md`(と
-  `docs/decisions.md`)をコミット
+- **終了時**: `/follow-up` を実行する — 計画と成果の差分を検査・是正した上で、
+  ①チェックボックス更新 ②`HANDOFF.md` の**全体上書き** ③該当あれば
+  `docs/decisions.md` ④コミット、まで行う(手順の実体は BLUEPRINT §6)
 - **過去を辿る時**: `git log`(引数なし)の全件読み込みはしない。
   `git log --oneline -- <path>` → `git log --grep=<語>`(タスクIDは境界付き
   `-E --grep='T7([^0-9]|$)'` 形式)→ `git show <sha>` の順に絞る

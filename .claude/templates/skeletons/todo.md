@@ -18,7 +18,7 @@
 
 - 開始時に読む: このファイルと `HANDOFF.md` の 2 つ
 - タスク完了ごと: ①該当タスクを `[x]` に更新 ②git commit(要約に `T<n>` を含める。変更を生まないタスクは `git commit --allow-empty` で記録を残す)
-- 終了時: ①チェックボックス更新の確認 ②`HANDOFF.md` の全体上書き ③該当あれば `docs/decisions.md` へ 1 行追記 ④上書きした `HANDOFF.md`(と `docs/decisions.md`)をコミット
+- 終了時: `/follow-up` を実行する — 計画と成果の差分を検査・是正した上で、終了手順(チェックボックス更新・`HANDOFF.md` の全体上書き・`docs/decisions.md`・コミット)まで行う。手順の実体は `~/.claude/templates/BLUEPRINT.md` §6 が正
 
 ## {{slug}}(設計: docs/design/{{slug}}.md)
 
