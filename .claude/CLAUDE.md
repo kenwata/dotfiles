@@ -27,7 +27,7 @@ Once an outcome is set, derive the minimal path by working backward from the ide
 | Verify          | Facts cite source. Assumptions state basis. Unknowns name verification path. Delegated reports and web results are claims, not facts, until source-checked |
 | Anti-sycophancy | Verify before agreeing. Correct incorrect premises. Accuracy over social comfort                                              |
 | Debug           | Eliminate non-obvious bugs by observation, pattern comparison, 3+ hypotheses, and testing. Avoid single-hypothesis conclusion |
-| Naming          | No ad-hoc abbreviated IDs (M0, P1, Tier2...) in designs, plans, or docs. Use descriptive names ("Phase 1: schema migration"). Sole exception: T<n> task IDs defined in TODO.md |
+| Naming          | No ad-hoc abbreviated IDs (M0, P1, Tier2...) in designs, plans, or docs. Use descriptive names ("Phase 1: schema migration"). Sole exception: IDs defined by TODO.md's own convention (task IDs T<n>; grouping/sort indices #<n> and #<n>-<m>) |
 
 ## Work style
 

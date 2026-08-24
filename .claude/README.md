@@ -59,7 +59,12 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 8. **修正指摘は再発判定してルール化** — その場しのぎの修正で終えず、スコープに応じて
    ファイル内規約 / `.claude/rules/` / templates への還元 / auto memory へ振り分ける
    (BLUEPRINT §10)
-9. **構造は文書化して配線する** — ディレクトリ配置規約の実体は `rules/coding-principles.md` §13
+9. **TODO.md は2階層テーブル** — 計画テーブル(大分類)+計画ごとのタスクテーブル(小分類)に分ける。
+   ID は走査・グルーピング用の表示専用インデックス `#<n>`/`#<n>-<m>`(章・節番号相当)と、
+   タスク管理・外部参照の接続キー `T<n>` の二本立て。前者は密に保たれ再breakdownでも飛ばないが、
+   後者(接続キー)は従来どおり再利用禁止のため飛びうる。完了条件は表のセルではなく直下の
+   ブロックへ展開し、列崩れを防ぐ(BLUEPRINT §6)
+10. **構造は文書化して配線する** — ディレクトリ配置規約の実体は `rules/coding-principles.md` §13
    (常時ロード枠)。プロジェクトごとの適用結果は `docs/architecture.md`(初期化時に生成。
    新規プロジェクトは検出言語の標準レイアウトから、既存プロジェクトは実ツリーから起こす)に記録し、
    実態と同期させ続ける。配線は 3 段構え: `/breakdown` が新規ディレクトリを着地前に反映、
@@ -77,7 +82,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── statusline.sh                # ステータスライン用スクリプト
 ├── hooks/
 │   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md 陳腐化の起動時検知(設計方針 7)
-│   └── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 9)
+│   └── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
