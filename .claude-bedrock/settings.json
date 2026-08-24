@@ -1,13 +1,57 @@
 {
+  "effortLevel": "medium",
+  "enabledPlugins": {
+    "qmd@qmd": true
+  },
   "env": {
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "global.anthropic.claude-opus-5",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "global.anthropic.claude-sonnet-5"
   },
+  "extraKnownMarketplaces": {
+    "qmd": {
+      "source": {
+        "repo": "tobi/qmd",
+        "source": "github"
+      }
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/check-new-directory.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/check-handoff-stale.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|clear"
+      }
+    ]
+  },
+  "language": "japanese",
+  "model": "sonnet",
   "permissions": {
     "allow": [
       "Bash",
       "Bash(curl:*)"
     ],
+    "ask": [
+      "Bash(rm:*)",
+      "Bash(git push:*)",
+      "Bash(wget:*)"
+    ],
+    "defaultMode": "plan",
     "deny": [
       "Bash(sudo:*)",
       "Bash(shutdown:*)",
@@ -21,58 +65,14 @@
       "Bash(pkill:*)",
       "Bash(git push --force:*)",
       "Bash(git push -f:*)"
-    ],
-    "ask": [
-      "Bash(rm:*)",
-      "Bash(git push:*)",
-      "Bash(wget:*)"
-    ],
-    "defaultMode": "plan"
-  },
-  "model": "sonnet",
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude-bedrock/statusline.sh"
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|clear",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude-bedrock/hooks/check-handoff-stale.sh"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude-bedrock/hooks/check-new-directory.sh"
-          }
-        ]
-      }
     ]
   },
-  "enabledPlugins": {
-    "qmd@qmd": true
-  },
-  "extraKnownMarketplaces": {
-    "qmd": {
-      "source": {
-        "source": "github",
-        "repo": "tobi/qmd"
-      }
-    }
-  },
-  "language": "japanese",
-  "effortLevel": "medium",
-  "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "statusLine": {
+    "command": "~/.claude-bedrock/statusline.sh",
+    "type": "command"
+  },
   "theme": "dark",
+  "tui": "fullscreen",
   "useAutoModeDuringPlan": true
 }

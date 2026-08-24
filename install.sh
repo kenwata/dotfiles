@@ -223,6 +223,38 @@ step4_symlinks() {
   # git submodule 初期化（tpm など）
   info "  Initializing git submodules..."
   git -C "$DOTFILES" submodule update --init --recursive
+
+  # JSON 正規化 clean filter の登録
+  # Claude Code は /model や /theme の操作のたびに settings.json を丸ごと書き戻し、
+  # その際キーの並び順が変わる。値が同じでも git 上は差分になり、worktree が汚れて
+  # git pull が "local changes would be overwritten by merge" で止まる。
+  # 対象は .gitattributes、フィルタ本体は .git/config（= リポジトリに含められない）に
+  # 置く必要があるため、マシンごとにここで登録する。
+  #
+  # required=true が必須:
+  #   git は would_convert_to_git_filter_fd() で required 未設定のフィルタを
+  #   status/merge の内容比較時に適用しない。required=true にすると git は
+  #   smudge 側も定義済みであることを要求するため、恒等変換の cat を指定する。
+  #   フィルタ本体は jq 不在・不正 JSON でも原文を素通しして必ず成功する実装。
+  info "  Registering git clean filter (json-normalize)..."
+  chmod +x "$DOTFILES/.config/git/json-normalize.sh"
+  git -C "$DOTFILES" config filter.json-normalize.clean "$DOTFILES/.config/git/json-normalize.sh"
+  git -C "$DOTFILES" config filter.json-normalize.smudge cat
+  git -C "$DOTFILES" config filter.json-normalize.required true
+
+  # 既存 index を正規化済みの内容に揃える（未実行だと恒久的な差分として残る）
+  git -C "$DOTFILES" add --renormalize .claude/settings.json .claude-bedrock/settings.json 2>/dev/null || true
+
+  # `git sync` = stat キャッシュを直してから pull するエイリアス。
+  # 書き戻しでファイルサイズまで変わると git は内容比較を短絡して "変更あり" と
+  # 誤判定する（ie_modified() の DATA_CHANGED 早期 return）。内容差が無いときだけ
+  # --renormalize で stat を更新してから pull することで、この誤判定を回避する。
+  git -C "$DOTFILES" config alias.sync '!f() { \
+      for p in .claude/settings.json .claude-bedrock/settings.json; do \
+        git diff --quiet -- "$p" 2>/dev/null && git add --renormalize -- "$p" >/dev/null 2>&1; \
+      done; \
+      git pull "$@"; \
+    }; f'
 }
 
 # ============================================================

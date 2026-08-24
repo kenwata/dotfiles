@@ -1,61 +1,6 @@
 {
-  "env": {
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5"
-  },
-  "permissions": {
-    "defaultMode": "auto"
-  },
-  "model": "opusplan",
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|clear",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/check-handoff-stale.sh"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/check-new-directory.sh"
-          }
-        ]
-      }
-    ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/statusline.sh"
-  },
-  "enabledPlugins": {
-    "qmd@qmd": true
-  },
-  "extraKnownMarketplaces": {
-    "qmd": {
-      "source": {
-        "source": "github",
-        "repo": "tobi/qmd"
-      }
-    }
-  },
-  "language": "japanese",
-  "effortLevel": "high",
   "advisorModel": "fable",
-  "tui": "fullscreen",
-  "skipDangerousModePermissionPrompt": true,
-  "theme": "dark",
-  "remoteControlAtStartup": true,
-  "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
-  "useAutoModeDuringPlan": true,
   "autoMode": {
     "environment": [
       "### Org-wide",
@@ -82,5 +27,60 @@
       "**Trusted repo**: ~/workspace/repos/dotfiles (origin: github.com:kenwata/dotfiles.git, public) — since the repo is public, only this repo's own work is OK to commit/push there; content ported or first read from outside this session's repo is not its own work; secrets and sensitive personal data are never cleared into it regardless of visibility",
       "**Org-specific CLIs**: None configured"
     ]
-  }
+  },
+  "effortLevel": "high",
+  "enabledPlugins": {
+    "qmd@qmd": true
+  },
+  "env": {
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5"
+  },
+  "extraKnownMarketplaces": {
+    "qmd": {
+      "source": {
+        "repo": "tobi/qmd",
+        "source": "github"
+      }
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/check-new-directory.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/check-handoff-stale.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|clear"
+      }
+    ]
+  },
+  "inputNeededNotifEnabled": true,
+  "language": "japanese",
+  "model": "opusplan",
+  "permissions": {
+    "defaultMode": "auto"
+  },
+  "remoteControlAtStartup": true,
+  "skipDangerousModePermissionPrompt": true,
+  "statusLine": {
+    "command": "~/.claude/statusline.sh",
+    "type": "command"
+  },
+  "theme": "dark",
+  "tui": "fullscreen",
+  "useAutoModeDuringPlan": true
 }

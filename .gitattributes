@@ -1,0 +1,10 @@
+# Claude Code は /model や /theme の操作のたびに settings.json を丸ごと書き戻し、
+# その際キーの並び順が変わる。値が同じでも git 上は差分になり、worktree が汚れて
+# git pull が "local changes would be overwritten by merge" で止まる。
+# clean filter で index 側をキーソート済みに正規化し、並べ替えだけの差分を消す。
+#
+# フィルタ本体の定義は .git/config にしか置けない（= リポジトリに含められない）ため、
+# install.sh の step4 でマシンごとに登録する。未登録のマシンでは git が素通しするだけで
+# 壊れることはない（正規化が効かないだけ）。
+.claude/settings.json          filter=json-normalize
+.claude-bedrock/settings.json  filter=json-normalize
