@@ -30,6 +30,8 @@
 .claude/jobs/
 .claude/session-env/
 .claude/downloads/
+.claude/remote/
+.claude/.credentials.json
 
 # Claude Bedrock — runtime-generated, not config
 .claude-bedrock/image-cache/
