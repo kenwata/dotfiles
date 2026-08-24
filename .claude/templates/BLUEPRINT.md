@@ -17,6 +17,7 @@
 | /goal 運用指針 | 本書 §8 | `skeletons/CLAUDE.project.md` セッション運用 |
 | 再発ミスの振り分け | 本書 §10 | `skeletons/CLAUDE.project.md` 修正指摘の項 |
 | 規約配置の一般原則 | `rules/growing-docs.md`「Placement of durable rules」 | 本書 §10(再発ミス時のルーティングに限定) |
+| ディレクトリ配置規約 | `rules/coding-principles.md` §13 | `skeletons/architecture.md` 冒頭コメント(ポインタのみ・転記しない) |
 
 ## 1. 目的と原則
 
@@ -45,6 +46,9 @@
 - 既存プロジェクトで上記の常時コピー4件(§5)の一部が欠落していると気づいたら、
   `/initialize` 再実行(冪等)または個別 `cp` で補完する。特に `growing-docs.md` の欠落は
   TODO・changelog 系ファイルの無制限な肥大化に直結するため優先的に確認する
+- `docs/architecture.md`: **80 行以内**。自動ロードなし(必要時のみ読む)。ディレクトリ配置規約の
+  実体は `paths:` なしの `coding-principles.md` §13(常時ロード枠に含まれる)が持ち、本文書は
+  そのプロジェクトでの適用結果(ツリーと決定表)のみを持つ
 
 ## 2. 初期化フロー(検出 → 確認 → 生成)
 
@@ -92,6 +96,7 @@
 ├── TODO.md                # 初期化時は作らない。/breakdown 実行時に skeletons/todo.md から生成
 ├── docs/
 │   ├── decisions.md       # skeletons/decisions.md からコピー(git コミット対象)
+│   ├── architecture.md    # skeletons/architecture.md から生成(初期化時。既存プロジェクトは実ツリーから起こす)
 │   └── design/<slug>.md   # 初期化時は作らない。/breakdown 実行時に skeletons/design.md から生成
 ├── .claude/
 │   └── rules/             # §5 で選択したルールのみコピー
@@ -212,11 +217,19 @@ diff で無損失を機械的に検証する。archive は自動ロードされ�
   コミット要約の T<n>(git log --grep でタスク単位の全作業を抽出)⇔
   decisions.md のタスクID列(なぜ)⇔ HANDOFF.md の仕掛かり中(今)。
   通し番号・再利用禁止(規約の実体は `skeletons/todo.md` の冒頭コメントに同梱)
-- **三文書の境界**: 設計書 = why/what(安定・状態を書かない)、TODO.md = 実行状態、
-  HANDOFF.md = 今。**境界を跨ぐ転記が形骸化の始まり**(転記は必ず drift する。
+- **四文書の境界**: 設計書 = why/what(安定・状態を書かない)、TODO.md = 実行状態、
+  HANDOFF.md = 今、**docs/architecture.md = 今の形**(ディレクトリ構成。こちらも安定文書で
+  状態を書かない)。**境界を跨ぐ転記が形骸化の始まり**(転記は必ず drift する。
   ポインタで参照する)
 - TODO.md・docs/design/ は初期化時には作らない。/breakdown が
   `skeletons/todo.md`・`skeletons/design.md` から生成する
+- **`docs/architecture.md` の配線**: `/initialize` が生成(新規プロジェクトは検出言語の標準
+  レイアウトから初期形を、既存プロジェクトは実ツリーから起こす)。`/breakdown` は計画が新規
+  ディレクトリを要する時、実装着手前にツリーと決定表を更新する。`/follow-up` はセッション終了時に
+  実ツリーとの乖離を機械検査する(§11 と同じ検証を差分検査として流用)。加えて機構側の安全網として
+  `hooks/check-new-directory.sh`(PreToolUse)が新規ディレクトリ作成時に `docs/architecture.md` の
+  確認を促す(Write 経由の作成のみ検知。`mkdir` 等はプロンプト側の配線が一次的な強制手段)。
+  規約が書くだけで形骸化した過去の失敗(直下の「更新トリガー配線の原則」)を繰り返さないための配線
 
 **更新トリガー配線の原則**: 状態ファイルは「いつ読むか・いつ書くか」を必ずセッション
 プロトコル(CLAUDE.md の「セッション運用」節、または TODO.md を持つプロジェクトでは
@@ -322,7 +335,7 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 
 ## 11. 生成後検証(初期化完了を報告する前に必ず実施)
 
-以下4点を機械的に確認してから §2 の報告(作成/スキップ一覧)を行う。手作業の目視確認
+以下5点を機械的に確認してから §2 の報告(作成/スキップ一覧)を行う。手作業の目視確認
 だけに頼らない — frontmatter のような機械的トリガーの陳腐化は、動作させるまで気づけない。
 
 例外: 遅延生成ファイル(`.claude/archive/` — 初回ローテーション時に生成、
@@ -344,3 +357,6 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 4. **git repo であることの確認**: `git rev-parse --is-inside-work-tree` が成功すること。
    新規に `git init` した場合は、初期コミットが存在すること(`git log --oneline -1`)も
    確認する(§6 の作業ログ層は git repo が前提のため)
+5. **`docs/architecture.md` のツリー一致確認**: `git ls-files` から得た追跡対象ディレクトリの
+   一覧が、`docs/architecture.md`「ディレクトリツリー」節の記載と一致するか確認する。
+   既存プロジェクトで実ツリーから起こした場合は特に、書き漏らしがないか確認する

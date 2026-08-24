@@ -40,4 +40,4 @@ The following rules apply to all programming languages and projects.
 
 - Declare test data explicitly inside the test code; consolidate shared data into fixtures or factory functions. Never use production data.
 - Keep unit tests fast: move I/O, sleeps, and heavy computation behind mocks or into the integration layer, and tag slow tests so they can be run separately in CI.
-- Place test files following the language/framework conventions, corresponding to the source under test; keep test-only helpers inside the test directory, not mixed with production code.
+- Mirror the source directory structure under the test root (`src/users/services/auth.py` → `tests/users/services/test_auth.py`), unless the language/framework standard co-locates tests with source (e.g. Go, Rust) — follow that standard instead. The layout rule itself is defined in `coding-principles.md` §13; this only states how tests follow it. Keep test-only helpers inside the test directory, not mixed with production code.

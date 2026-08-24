@@ -59,6 +59,13 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 8. **修正指摘は再発判定してルール化** — その場しのぎの修正で終えず、スコープに応じて
    ファイル内規約 / `.claude/rules/` / templates への還元 / auto memory へ振り分ける
    (BLUEPRINT §10)
+9. **構造は文書化して配線する** — ディレクトリ配置規約の実体は `rules/coding-principles.md` §13
+   (常時ロード枠)。プロジェクトごとの適用結果は `docs/architecture.md`(初期化時に生成。
+   新規プロジェクトは検出言語の標準レイアウトから、既存プロジェクトは実ツリーから起こす)に記録し、
+   実態と同期させ続ける。配線は 3 段構え: `/breakdown` が新規ディレクトリを着地前に反映、
+   `/follow-up` がセッション終了時に実ツリーとの乖離を機械検査、機構側の安全網として
+   `hooks/check-new-directory.sh`(PreToolUse)が新規ディレクトリ作成時に確認を促す
+   (Write 経由のみ検知。`mkdir` 等はプロンプト側の配線が一次的な強制手段であり、これは既知の限界)
 
 ## ディレクトリ構成
 
@@ -69,7 +76,8 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── settings.json                # 中核設定 — model / effortLevel / autoMode / qmd プラグイン(github: tobi/qmd)有効化
 ├── statusline.sh                # ステータスライン用スクリプト
 ├── hooks/
-│   └── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md 陳腐化の起動時検知(設計方針 7)
+│   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md 陳腐化の起動時検知(設計方針 7)
+│   └── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 9)
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
@@ -77,12 +85,13 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   └── agmsg.md                 # /agmsg — マルチエージェントメッセージング
 └── templates/                   # /initialize と /breakdown が読むテンプレート群
     ├── BLUEPRINT.md             # 初期化設計書 — 判断基準と手順のすべてはここ
-    ├── skeletons/               # 機械的に穴埋め・コピーする雛形(5 ファイル)
+    ├── skeletons/               # 機械的に穴埋め・コピーする雛形(6 ファイル)
     │   ├── CLAUDE.project.md    # プロジェクト CLAUDE.md 雛形(ポインタ型)
     │   ├── handoff.md           # HANDOFF.md 雛形(書式規約をコメントで同梱)
     │   ├── todo.md              # TODO.md 雛形(§0 セッションプロトコル+タスクID規約)
     │   ├── design.md            # docs/design/<slug>.md 雛形
-    │   └── decisions.md         # docs/decisions.md 雛形
+    │   ├── decisions.md         # docs/decisions.md 雛形
+    │   └── architecture.md      # docs/architecture.md 雛形(構造の記録。ディレクトリ配置規約はここに書かず coding-principles.md §13 を参照)
     ├── rules/                   # コーディング規約+成長型ドキュメント規約(12 ファイル。原則 paths: 付き、
     │                            #   paths なし=常時ロードは coding-principles/testing の 2 件のみ — BLUEPRINT §1)
     └── roles/                   # ロール定義カタログ(計 9。目的に応じて選定・不足時は新規起草)
@@ -121,7 +130,8 @@ claude
 ├── CLAUDE.md              # ポインタ型(30-50 行)。コマンド表・ポインタ・セッション運用
 ├── HANDOFF.md             # 今の状態(40 行以内)。git コミット対象
 ├── docs/
-│   └── decisions.md       # なぜの記録(append-only)。git コミット対象
+│   ├── decisions.md       # なぜの記録(append-only)。git コミット対象
+│   └── architecture.md    # 今の形(ディレクトリ構成・置き場の決定表。80 行以内)。git コミット対象
 ├── .claude/
 │   └── rules/             # 検出言語別の規約+言語を問わず常時コピーの 4 件(coding-principles/testing/
 │                          #   markdown/growing-docs)。常時ロードは前 2 件のみ、後 2 件は path-scoped(BLUEPRINT §5)

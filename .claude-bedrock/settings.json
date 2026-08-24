@@ -45,6 +45,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude-bedrock/hooks/check-new-directory.sh"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
