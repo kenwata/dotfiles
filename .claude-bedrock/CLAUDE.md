@@ -13,8 +13,9 @@
 - そのレビュー役 subagent には **`model: "fable"` を明示指定する**。Agent tool は
   `model` 省略時に親セッションのモデルを継承するため、通常実行を fable より下位
   (opusplan 等)に置いているこの環境では、指定を省くとレビュー役が実行役より
-  弱くなる。難易度によらず advisor は fable 固定とする規約
-  (`templates/skeletons/todo.md` の難易度節)の Bedrock 版に相当する
+  弱くなる。advisor を難易度によらず fable 固定とする方針(`templates/skeletons/todo.md`
+  の難易度節。同節の exec 側モデル対応は目安であって拘束しないが、advisor の
+  fable 固定はこの環境でも守る)の Bedrock 版に相当する
 - モデルの明示指定はレビュー役に限る。広域探索・ログ解析・機械的作業の subagent は
   セッションからの継承のままでよい
 - 「Form your own assessment before consulting Advisor」の原則は subagent
