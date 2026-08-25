@@ -108,8 +108,10 @@ personal スコープに置くと無関係なプロジェクトでも候補に�
 上書きするためリポジトリ側に置いた実体が効かなくなるため)。
 
 dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあり(`install.sh` が
-`~/.claude-bedrock` へ symlink)、`settings.json` のみ実体を持ち、`commands/`・
-`statusline.sh`・`hooks/` は `../.claude/` への symlink で共有する。
+`~/.claude-bedrock` へ symlink)、実体を持つのは `settings.json` と `CLAUDE.md` のみで、
+`commands/`・`statusline.sh`・`hooks/` は `../.claude/` への symlink で共有する。
+`CLAUDE.md` は `@../.claude/CLAUDE.md` を import し、Advisor tool が使えない
+Bedrock 環境向けの読み替え差分節(Advisor → fresh-context subagent)だけを持つ。
 
 雛形は**他ファイルを参照させず自己完結**させる。書式規約は雛形冒頭のコメントに実体ごと
 同梱する(「テンプレートは A 参照」「A はテンプレート参照」の循環参照で実体がどこにも
