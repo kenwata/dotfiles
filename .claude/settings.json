@@ -54,6 +54,15 @@
           }
         ],
         "matcher": "Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/deny-subagent-git-write.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
       }
     ],
     "SessionStart": [
@@ -70,7 +79,7 @@
   },
   "inputNeededNotifEnabled": true,
   "language": "japanese",
-  "model": "opusplan",
+  "model": "opus",
   "permissions": {
     "defaultMode": "auto"
   },
