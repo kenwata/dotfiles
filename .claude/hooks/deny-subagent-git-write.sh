@@ -132,12 +132,14 @@ check_gh() {
   done
   [ -n "$sub" ] || return 0
 
-  # api は動詞がサブコマンドではなくフラグ側にある
+  # api は動詞がサブコマンドではなくフラグ側にある。
+  # gh は小文字のメソッド(-X post)も受け付けるため、小文字化してから照合する
   if [ "$sub" = "api" ]; then
-    local arg
+    local arg lowered
     for arg in "$@"; do
-      case "$arg" in
-        POST|PUT|PATCH|DELETE|--method=POST|--method=PUT|--method=PATCH|--method=DELETE)
+      lowered="$(printf '%s' "$arg" | tr 'A-Z' 'a-z')"
+      case "$lowered" in
+        post|put|patch|delete|--method=post|--method=put|--method=patch|--method=delete)
           deny "gh api($arg)" ;;
       esac
     done
@@ -154,9 +156,10 @@ check_gh() {
   [ -n "$action" ] || return 0
 
   case "$sub" in
+    # checkout を含めるのは git checkout と同じ理由(共有作業ツリーのブランチが切り替わる)
     pr)
       case "$action" in
-        create|merge|close|edit|review|comment|ready|reopen) deny "gh pr $action" ;;
+        create|merge|close|edit|review|comment|ready|reopen|checkout) deny "gh pr $action" ;;
       esac ;;
     issue)
       case "$action" in

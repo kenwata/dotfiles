@@ -22,7 +22,8 @@
   拘束しないが、advisor の fable 固定はこの環境でも守る)
 - 「Form your own assessment before consulting Advisor」の原則は subagent
   レビューにもそのまま適用する(自分の評価を先に作り、挑戦させる目的で使う)
-- Delegation 節の「読み取り専用の 3 エージェントは advisor を持たない」は、この環境には
-  そもそも Advisor が無いため差分にならない(結果は同じ)。
-  なお git の履歴・リモート変更を拒否する PreToolUse hook はこの環境でも有効である
+- Delegation 節の「`advisor` は subagent に対してブロックされない(定義側の指示で抑えている
+  だけ)」という注意は、この環境にはそもそも Advisor tool が無いため差分にならない
+  (結果として呼べないので同じ)
+- なお git の履歴・リモート変更を拒否する PreToolUse hook はこの環境でも有効である
   (`hooks/` は `../.claude/hooks/` の symlink、配線は当プロファイルの `settings.json`)
