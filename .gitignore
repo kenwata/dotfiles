@@ -46,13 +46,16 @@
 .claude-bedrock/paste-cache/
 .claude-bedrock/plans/
 .claude-bedrock/plugins/
-.claude-bedrock/projects/
+# .claude-bedrock/projects/ は .claude/projects への symlink(履歴・memory 共有)なので
+# 対象外。trailing slash パターンはディレクトリにのみマッチし symlink は素通しされる。
 .claude-bedrock/sessions/
 .claude-bedrock/session-env/
 .claude-bedrock/shell-snapshots/
 .claude-bedrock/settings.json.before-restore-*
 .claude-bedrock/tasks/
 .claude-bedrock/chrome/
+# 履歴共有への移行時の退避コピー。検証完了後に削除予定 (2026-08-25)
+.claude-bedrock/projects.bak-*/
 
 # Claude Foundry — runtime-generated, not config
 .claude-foundry/image-cache/

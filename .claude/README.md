@@ -113,6 +113,17 @@ dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあ
 `CLAUDE.md` は `@../.claude/CLAUDE.md` を import し、Advisor tool が使えない
 Bedrock 環境向けの読み替え差分節(Advisor → fresh-context subagent)だけを持つ。
 
+`projects/`(会話履歴・auto memory の実体)も同じ理由で `../.claude/projects` への
+symlink で共有する。設定(モデル ID・permissions・effort)は分離を維持したまま、
+プロジェクト単位の学習内容は両プロファイルで引き継がれる。ただし:
+
+- `--continue` は他方のプロファイルで直近に開いたセッションを開くことがある(共有の代償)
+- Bedrock 利用料の集計(`bedrock-cost`、`.config/zsh/40-aws.zsh`)は共有履歴から
+  Bedrock 発行分(`message.id` が `msg_bdrk_` 始まり)だけを抽出して行う。ラッパーの
+  抽出条件を変えずに履歴の形式が変わった場合は、抽出結果が空にならないか要確認
+- `history.jsonl`(↑キーのプロンプト履歴)・`file-history/`・`sessions/` は共有せず
+  分離のまま(同時起動時の追記競合を避けるため)
+
 雛形は**他ファイルを参照させず自己完結**させる。書式規約は雛形冒頭のコメントに実体ごと
 同梱する(「テンプレートは A 参照」「A はテンプレート参照」の循環参照で実体がどこにも
 無くなった実例があるため)。

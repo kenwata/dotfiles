@@ -215,6 +215,11 @@ step4_symlinks() {
   backup_and_link "$DOTFILES/.claude-bedrock" "$HOME/.claude-bedrock"
   backup_and_link "$DOTFILES/.tmux"           "$HOME/.tmux"
 
+  # .claude/projects は会話履歴・memory の実体で .gitignore 対象のため、clone 直後は
+  # 存在しない。.claude-bedrock/projects はそこへの symlink(Anthropic 直/Bedrock 経由で
+  # 履歴・memory を共有するため)なので、先に作っておかないと dangling symlink になる。
+  mkdir -p "$DOTFILES/.claude/projects"
+
   # ~/.config 配下
   backup_and_link "$DOTFILES/.config/nvim" "$HOME/.config/nvim"
   backup_and_link "$DOTFILES/.config/peco" "$HOME/.config/peco"
