@@ -62,7 +62,7 @@ Update the loop ledger and run the convergence decision algorithm below.
 
 ## Dispatch contract
 
-```
+````
 {
   "msg_id": "<uuid>",
   "from_role": "orchestrator",
@@ -79,10 +79,11 @@ Update the loop ledger and run the convergence decision algorithm below.
   "callback": "orchestrator",
   "parallel_safe": true
 }
-```
+````
 
 Fix dispatch (inside the loop) — goal targets only open_issues:
-```
+
+````
 {
   "to_role": "<role-id>",
   "phase": "fix",
@@ -92,7 +93,7 @@ Fix dispatch (inside the loop) — goal targets only open_issues:
   "reviewer_scope": "resolved+regression-only",
   "acceptance_ref": "<path>/criteria/<sid>.json"
 }
-```
+````
 
 ## agmsg role-id ↔ internal to_role mapping (only Orchestrator needs this)
 
@@ -118,7 +119,7 @@ Fix dispatch (inside the loop) — goal targets only open_issues:
 
 ## Loop ledger (one entry per slide)
 
-```json
+````json
 {
   "slide_id": "s05",
   "loop": "render-review",
@@ -131,11 +132,11 @@ Fix dispatch (inside the loop) — goal targets only open_issues:
   "caps": {"HARD": 3, "SOFT": 2},
   "escalation_target": "content-architect | human"
 }
-```
+````
 
 ## Convergence decision algorithm (run each time design-reviewer returns results)
 
-```
+````
 on review_result(slide, issues):
   L = ledgers[slide]; L.iter += 1
   L.issue_history.append({iter: L.iter, open: ids(issues)})
@@ -146,7 +147,7 @@ on review_result(slide, issues):
     L.state = "quarantined"; escalate(slide, route_for(cls)); return
   if L.iter >= L.caps[cls]: escalate(slide, route_for(cls)); return
   dispatch_fix(slide, issues, reviewer_scope="resolved+regression-only")
-```
+````
 
 Convergence detection:
 - **progress**: `open(iter) ⊊ open(iter-1)` → continue

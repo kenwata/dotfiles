@@ -61,7 +61,7 @@ Address only the specified open_issues. Do not touch other zukai files.
 
 ## Done contract
 
-```
+````
 {
   "from_role": "diagram-architect",
   "to_role": "orchestrator",
@@ -72,11 +72,11 @@ Address only the specified open_issues. Do not touch other zukai files.
   "validation": {"schema": "pass"},
   "notes": "<selected_pattern and 'one sentence this diagram communicates'>"
 }
-```
+````
 
 ## Required zukai/{sid}.json fields (§7.3)
 
-```json
+````json
 {
   "slide_id": "<sid>",
   "purpose": "<one sentence>",
@@ -92,7 +92,7 @@ Address only the specified open_issues. Do not touch other zukai files.
   "style_rules": {"step": "rounded-rect", "state": "hexagon", "emphasis_color": "accent"},
   "open_questions": []
 }
-```
+````
 
 ---
 

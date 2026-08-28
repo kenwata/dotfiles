@@ -14,18 +14,18 @@ disable-model-invocation: true
    - CLAUDE.md: 無ければ `~/.claude/templates/skeletons/CLAUDE.project.md` の placeholder を検出値で埋めて Write(不明コマンドは「(未設定 — 判明したら記入)」、捏造禁止)。**既存なら上書きせず**、不足節のみ diff 提示して承認後に追記
    - `cp -n ~/.claude/templates/skeletons/handoff.md HANDOFF.md`(プロジェクトルート直下)→ `{{date}}` を今日の日付に Edit
    - `mkdir -p docs` → `cp -n ~/.claude/templates/skeletons/decisions.md docs/decisions.md`
-   - `docs/architecture.md`: 無ければ `~/.claude/templates/skeletons/architecture.md` の placeholder を埋めて Write。新規プロジェクトなら検出言語の標準レイアウト(規約の実体は `.claude/rules/coding-principles.md` §13)から初期形を書く。既存プロジェクトなら**実ツリーから起こす**(検出したディレクトリ構造を正として記録する。現状が規約に反していても無断で移動せず、「未決」節に列挙する)。既存なら上書きせず、不足があれば diff 提示のうえ承認後に追記
+   - `docs/architecture.md`: 無ければ `~/.claude/templates/skeletons/architecture.md` の placeholder を埋めて Write。新規プロジェクトなら検出言語の標準レイアウト(規約の実体は `.claude/rules/coding-principles.md` §13)から初期形を書く。既存プロジェクトなら **実ツリーから起こす**(検出したディレクトリ構造を正として記録する。現状が規約に反していても無断で移動せず、「未決」節に列挙する)。既存なら上書きせず、不足があれば diff 提示のうえ承認後に追記
    - 旧方式 `.claude/handoff.md` を検出していた場合: BLUEPRINT §9 の移行手順(承認後に内容を `HANDOFF.md` へ整形移行→旧ファイル削除→`growing-docs.md` のパス確認)を実施
    - ロール配置ありの場合のみ: 選定した各ロールについて `mkdir -p agents/<role>` → `~/.claude/templates/roles/<role>.md` を `agents/<role>/CLAUDE.md` へ `cp -n`。カタログに無いロールは BLUEPRINT §7 に従い新規起草して Write(汎用性があればユーザー確認のうえ `~/.claude/templates/roles/` へも保存を提案)
 4. **検証**: BLUEPRINT §11 の生成後検証(ポインタ実在確認・rules の `paths:` frontmatter 一致確認・循環参照の不在確認・git repo であることの確認・`docs/architecture.md` のツリー一致確認)を実施する。Glob/Grep/Read/`git ls-files` で確認し、不一致があれば報告前に修正する。
 5. **初期コミット**(BLUEPRINT §6 の書式・§9 に従う): 新規に `git init` した場合は、生成ファイルのみを個別パス指定で `git add` し自動コミット。既存 repo の場合は生成ファイルをコミットしてよいか確認し、拒否されたらスキップとして報告。メッセージ例:
 
-   ```
+   ````
    chore: Claude Code プロジェクト初期化
 
    タスク: /initialize によるプロジェクト初期化
    対応: rules / CLAUDE.md / HANDOFF.md / docs/decisions.md / docs/architecture.md を BLUEPRINT に従い生成
-   ```
+   ````
 
 6. **報告**: ファイルごとに「作成 / 既存のためスキップ」の一覧表を出す(git init・初期コミットの実施有無も含める)。最後に一行:「`HANDOFF.md`・`docs/decisions.md`・`docs/architecture.md` はコミット対象、`.claude/settings.local.json` は gitignore 推奨」。
 

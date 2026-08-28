@@ -88,7 +88,7 @@
   },
   "inputNeededNotifEnabled": true,
   "language": "japanese",
-  "model": "opus",
+  "model": "opusplan",
   "permissions": {
     "defaultMode": "auto"
   },

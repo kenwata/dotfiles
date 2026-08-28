@@ -52,7 +52,7 @@ Address only the issues listed in open_issues (typically STRUCTURAL: excessive b
 
 ## Done contract (completion notification to Orchestrator)
 
-```
+````
 {
   "from_role": "content-architect",
   "to_role": "orchestrator",
@@ -63,11 +63,11 @@ Address only the issues listed in open_issues (typically STRUCTURAL: excessive b
   "validation": {"schema": "pass"},
   "notes": "<message text and density_tier in one line>"
 }
-```
+````
 
 ## Required content_spec fields (§7.2)
 
-```json
+````json
 {
   "deck_id": "<deck_id>",
   "slide_id": "<sid>",
@@ -83,7 +83,7 @@ Address only the issues listed in open_issues (typically STRUCTURAL: excessive b
   ],
   "emphasis": null
 }
-```
+````
 
 ---
 

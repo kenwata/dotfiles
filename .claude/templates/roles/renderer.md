@@ -52,7 +52,7 @@ Fix only the problem described in the specified open_issues. Do not touch other 
 
 ## Done contract
 
-```
+````
 {
   "from_role": "renderer",
   "to_role": "orchestrator",
@@ -63,7 +63,7 @@ Fix only the problem described in the specified open_issues. Do not touch other 
   "validation": {"build": "success"},
   "notes": "<slide count processed and any notable points>"
 }
-```
+````
 
 ---
 

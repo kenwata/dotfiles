@@ -111,7 +111,7 @@ If any box fails: it's `changes-requested` (must-fix) or an escalation — never
 
 ## Review-Result Contract (what every verdict records)
 
-```
+````
 [review-result round:N status:approved|changes-requested]
 
 ## What I checked
@@ -133,7 +133,7 @@ If any box fails: it's `changes-requested` (must-fix) or an escalation — never
  recommendation; if there's a tradeoff, look for the unsurfaced option rather
  than offering a forced binary. This does not block an otherwise-clean approve —
  it's an escalation alongside the verdict.>
-```
+````
 
 ---
 

@@ -59,7 +59,7 @@ Scope: confirming resolution of the specified open_issues + regression check on 
 
 ## Review-Result contract (review_report.json)
 
-```json
+````json
 {
   "deck_id": "<deck_id>",
   "summary": {"total": 0, "pass": 0, "fail": 0},
@@ -75,7 +75,7 @@ Scope: confirming resolution of the specified open_issues + regression check on 
     }
   ]
 }
-```
+````
 
 ---
 

@@ -123,16 +123,16 @@ paths:
   - Never place a synchronous `<script>` in `<head>` without `async` or `defer`.
 - Preload render-critical resources (fonts, hero images, CSS used above-the-fold):
 
-  ```html
+  ````html
   <link rel="preload" href="font.woff2" as="font" type="font/woff2" crossorigin>
-  ```
+  ````
 
 - Warm up third-party origins early:
 
-  ```html
+  ````html
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="dns-prefetch" href="https://analytics.example.com">
-  ```
+  ````
 
 - Avoid large inline `<style>` or `<script>` blocks. Externalize them to benefit from
   HTTP caching. Critical CSS (above-the-fold only) is the one justified exception.

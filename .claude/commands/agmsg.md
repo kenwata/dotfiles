@@ -51,7 +51,7 @@ Four possible outputs:
 
   5. **REQUIRED — Do NOT skip this step.** Ask the user to pick a delivery mode using exactly this prompt:
 
-     ```
+     ````
      Choose delivery mode for incoming messages:
 
        1) monitor — Real-time push (~5s latency)
@@ -68,7 +68,7 @@ Four possible outputs:
                      Manual /agmsg only.
 
      [1]:
-     ```
+     ````
 
      - **Wait for the user's answer before proceeding.** Empty input means `1` (monitor).
      - Map the chosen number to a mode and run:
@@ -101,7 +101,7 @@ Then continue with the user's subcommand. This catches the case where the user i
 
 **Permission prompts.** Every command here runs through the Bash tool, so each call is gated by the permission system until the script directory is allowlisted. Without this the user is asked to confirm essentially every `agmsg` call. Add to `~/.claude/settings.json` (or project-level `.claude/settings.local.json`):
 
-```json
+````json
 {
   "permissions": {
     "allow": [
@@ -112,7 +112,7 @@ Then continue with the user's subcommand. This catches the case where the user i
     ]
   }
 }
-```
+````
 
 Four entries because a rule matches the command string as written, and these scripts are invoked both as `~/...` and as an absolute path, with or without an explicit `bash` prefix. Replace `/Users/<you>` with the user's home directory.
 
@@ -120,7 +120,7 @@ Four entries because a rule matches the command string as written, and these scr
 
 **Sandbox compatibility.** When Claude Code's sandbox is enabled, `watch.sh` (monitor mode) runs inside the sandbox and needs to write pidfiles and SQLite WAL files under `~/.agents/skills/agmsg/`. If monitor mode fails with write/permission errors there, add an allowlist entry to `~/.claude/settings.json` (or project-level `.claude/settings.local.json`):
 
-```json
+````json
 {
   "sandbox": {
     "filesystem": {
@@ -130,7 +130,7 @@ Four entries because a rule matches the command string as written, and these scr
     }
   }
 }
-```
+````
 
 The allowlist does not enable sandboxing by itself. Use `/sandbox` in Claude Code to choose a sandbox mode, or add `"enabled": true` alongside `"filesystem"` under `"sandbox"` to configure it in settings. The allowlist has no effect until sandboxing is enabled.
 
@@ -170,10 +170,7 @@ If argument starts with "actas" followed by an agent name (e.g. "actas alice"):
    b. **If a matching task is found**: TaskStop it.
    c. **If no matching task is found** (typical when /agmsg actas runs as the first command of a fresh session — SessionStart hasn't fired the Monitor directive yet, or you're invoking actas before the agent acted on it): skip TaskStop entirely. There is no Monitor to stop. Do NOT attempt TaskStop with a guessed or empty task_id — it will fail with "Invalid tool parameters" and confuse the flow.
    d. Run `~/.agents/skills/agmsg/scripts/delivery.sh status claude-code "$(pwd)"` and read its **first line**.
-      - **`mode: monitor` or `mode: both`**: invoke a fresh Monitor, regardless of whether step b or c applied:
-        - command: `~/.agents/skills/agmsg/scripts/watch.sh $CLAUDE_CODE_SESSION_ID "$(pwd)" claude-code <name>`
-        - description: `agmsg inbox stream (acting as <name>)`
-        - persistent: true
+      - **`mode: monitor` or `mode: both`**: invoke a fresh Monitor, regardless of whether step b or c applied — command: `~/.agents/skills/agmsg/scripts/watch.sh $CLAUDE_CODE_SESSION_ID "$(pwd)" claude-code <name>`, description: `agmsg inbox stream (acting as <name>)`, persistent: true.
       - **`mode: turn`**: leave it stopped, silently. `has_st=1` is the one case `delivery.sh` can actually confirm was a deliberate choice — someone configured turn-based delivery for this project — so `actas` starting nothing here needs no explanation.
       - **`mode: off (no agmsg delivery hooks installed for this project)`**: leave it stopped (`actas` must not start automatic delivery a project wasn't configured for), but **do not treat this as silently deliberate**. `delivery.sh` cannot tell whether someone ran `mode off` here or this project was simply never configured — both leave the exact same settings file (#687 review round 3). **Tell the user** — e.g. "agmsg delivery hooks are not installed for this project; automatic delivery remains stopped. Run `/agmsg mode <choice>` if you want to configure it." Keep it matter-of-fact, not a warning. Do not report `actas` as complete without saying this.
       - **`mode: off (unrecognized: ...)`**: leave it stopped too (same rule — do not guess a mode), but this is a stronger case than the no-hooks-installed one above: `delivery.sh` could not even find or read a settings file for this project, most often because the working directory does not match how the project was actually registered. **Tell the user explicitly** — e.g. "agmsg could not find a delivery configuration for this project at `<path from the message>` — delivery is stopped, but this may mean the project isn't registered here rather than that it was deliberately turned off. Check the path, or run `/agmsg mode <choice>` to configure it explicitly." Do not report `actas` as complete without saying this — a silent stop here is indistinguishable from the other off cases and is what let this go unnoticed before (#687).
@@ -190,10 +187,7 @@ If argument starts with "drop" followed by an agent name (e.g. "drop alice"):
    b. **If a matching task is found**: TaskStop it.
    c. **If no matching task is found**: skip TaskStop. Do NOT attempt TaskStop with a guessed or empty task_id.
    d. Run `~/.agents/skills/agmsg/scripts/delivery.sh status claude-code "$(pwd)"` and read its **first line**.
-      - **`mode: monitor` or `mode: both`**: invoke a fresh Monitor with the default subscription (no `actas` name filter — receives every (team, agent) pair currently registered for this project that isn't held by another session):
-        - command: `~/.agents/skills/agmsg/scripts/watch.sh $CLAUDE_CODE_SESSION_ID "$(pwd)" claude-code`
-        - description: `agmsg inbox stream`
-        - persistent: true
+      - **`mode: monitor` or `mode: both`**: invoke a fresh Monitor with the default subscription (no `actas` name filter — receives every (team, agent) pair currently registered for this project that isn't held by another session) — command: `~/.agents/skills/agmsg/scripts/watch.sh $CLAUDE_CODE_SESSION_ID "$(pwd)" claude-code`, description: `agmsg inbox stream`, persistent: true.
       - **`mode: turn`**: leave it stopped, silently — the one case `delivery.sh` can confirm was deliberate.
       - **`mode: off (no agmsg delivery hooks installed for this project)`**: leave it stopped, but say so — same reasoning as the `actas` step this mirrors: this state is indistinguishable from "never configured" (#687 review round 3), so do not report it as deliberate. Do not report the drop as complete without mentioning it.
       - **`mode: off (unrecognized: ...)`**: leave it stopped, but say so with the stronger diagnostic — same reasoning as the `actas` step this mirrors (#687). Do not report the drop as complete without mentioning it.
@@ -329,11 +323,13 @@ If argument starts with "key handoff" followed by a team name:
 
 If argument starts with "key import" followed by a team name:
 1. **Do not ask the user to paste the private identity into this chat, and do not run this command yourself.** This identity is a permanent secret. Tell the user to run this directly in their own terminal:
-   ```
+
+   ````
    read -rsp 'Identity: ' IDENTITY; echo
    printf '%s' "$IDENTITY" | ~/.agents/skills/agmsg/scripts/key.sh import <team> --identity-stdin
    unset IDENTITY
-   ```
+   ````
+
 2. Ask them to paste back only the command's output (never the identity itself) once it's done.
 3. **No advanced/automation env-var path is offered for key import** — not even a pre-existing, before-session variable. An identity file is a permanent secret; always use the human-in-own-terminal flow above.
 

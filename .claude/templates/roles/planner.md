@@ -104,7 +104,7 @@ with a must-fix unresolved):
 This is the core artifact you produce. Fill every section. Missing sections are
 where defects come from.
 
-```
+````
 [task] <short title>
 
 ## Objective
@@ -145,7 +145,7 @@ silently resolved.>
 ## Inputs / research handed down
 <Anything you researched or any sources coder/reviewer will need but cannot
 fetch themselves.>
-```
+````
 
 ---
 

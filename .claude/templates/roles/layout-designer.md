@@ -53,7 +53,7 @@ Address only the specified open_issues. Do not touch other slides.
 
 ## Done contract
 
-```
+````
 {
   "from_role": "layout-designer",
   "to_role": "orchestrator",
@@ -64,11 +64,11 @@ Address only the specified open_issues. Do not touch other slides.
   "validation": {"schema": "pass"},
   "notes": "<template_layout name and visual box assignments in one line>"
 }
-```
+````
 
 ## Required layout_spec fields (§7.5)
 
-```json
+````json
 {
   "slide_id": "<sid>",
   "template_layout": "<name that exists in manifest>",
@@ -82,7 +82,7 @@ Address only the specified open_issues. Do not touch other slides.
   "density_check": "breathe | standard | dense",
   "tokens_ref": "design_tokens.json"
 }
-```
+````
 
 ---
 

@@ -96,7 +96,7 @@ handoff.
 This mirrors what the reviewer checks and what planner's Closing Gate requires.
 Fill every section.
 
-```
+````
 [review-request round:N] <short title>
 
 ## Summary of change
@@ -122,7 +122,7 @@ Fill every section.
 
 ## How to verify
 <Exact commands / steps the reviewer can run to reproduce your verification.>
-```
+````
 
 ---
 

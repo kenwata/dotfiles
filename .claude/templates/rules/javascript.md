@@ -35,7 +35,7 @@ paths:
 ## Async & Promises
 
 - Write async logic with `async`/`await`. Avoid nested callbacks and long `.then()` chains.
-- Never create floating Promises. Every Promise must be `await`ed or have a `.catch()` handler. Enable `no-floating-promises` in ESLint.
+- Never create floating Promises. Every Promise must be awaited (`await`) or have a `.catch()` handler. Enable `no-floating-promises` in ESLint.
 - Parallelize independent async operations with `Promise.all` / `Promise.allSettled`. Avoid unnecessary sequential `await`.
 - Use `for await...of` only when loop-body ordering matters. Never use `async` callbacks inside `forEach` — they are not awaited.
 

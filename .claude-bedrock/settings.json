@@ -58,7 +58,7 @@
     ]
   },
   "language": "japanese",
-  "model": "opusplan",
+  "model": "fable",
   "permissions": {
     "allow": [
       "Bash",
