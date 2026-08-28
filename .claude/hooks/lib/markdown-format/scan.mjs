@@ -53,6 +53,27 @@ export function splitTableRow(rowContent) {
   return cells.map((c) => c.trim());
 }
 
+// `\|` エスケープを考慮して table 行を cell の { start, end } 範囲(content 内オフセット、
+// trim なし)に分割する。GFM のインライン解析はセル単位で行われるため、装飾スペース
+// 挿入・lint の走査をセル境界(この関数が返す範囲)ごとに区切って、別セルの装飾記号と
+// 誤って対応付けられる事故(例: 表の行全体を 1 本の文字列として emphasis を走査すると、
+// 手前のセルの閉じられない開き `**` が後方セルの `**` と対になってしまう)を防ぐ。
+export function tableRowSegments(rowContent) {
+  const segments = [];
+  let start = 0;
+  for (let i = 0; i < rowContent.length; i++) {
+    const ch = rowContent[i];
+    if (ch === "\\" && rowContent[i + 1] === "|") {
+      i++;
+    } else if (ch === "|") {
+      segments.push({ start, end: i });
+      start = i + 1;
+    }
+  }
+  segments.push({ start, end: rowContent.length });
+  return segments;
+}
+
 export function scanDocument(source) {
   const rawLines = source.split("\n");
   const lineStarts = [];

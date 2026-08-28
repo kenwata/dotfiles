@@ -11,7 +11,7 @@
   },
   {
     "rule": "list-too-deep",
-    "line": 42,
+    "line": 44,
     "message": "list のネストが深い(3階層)"
   }
 ]

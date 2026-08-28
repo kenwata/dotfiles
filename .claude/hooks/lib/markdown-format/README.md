@@ -4,6 +4,19 @@
 保証する formatter/linter。PostToolUse hook(`hooks/format-markdown.sh`)から
 `node cli.mjs <file> <project-root>` として呼ばれる。
 
+**適用範囲は 2 経路に分かれる**(2026-08-28、未編集箇所への波及事故を受けて分離):
+
+- **hook 経由(自動)**: PostToolUse hook が受けた入力 JSON をそのまま stdin で渡す。
+  `tool_name === "Edit"` かつ `tool_input.new_string` が非空なら、保存後のファイル内で
+  `new_string` が出現する行だけに整形・lint を限定する(`scope.mjs`)。未編集の既存箇所
+  (過去に書いた逐語引用等)は構造的に触られない。`new_string` がファイル内に
+  見つからない場合はスコープを安全に決められないため、フェイルオープンで何もしない。
+  `Write` は全文を書き直すツールのため常に全体が対象
+- **CLI 直接実行 / `/markdown-cleanup` コマンド(明示)**: stdin 無しで起動するとファイル
+  全体が対象になる。全体の規約保証はこの明示実行 + 差分確認 + 単独コミットで担う。
+  **この経路でも逐語引用は規約どおりに書き換わる** — 引用の逐語性を守る責任は
+  hook ではなくこの経路を使う側(差分確認)にある
+
 **依存ゼロ**: Node 標準モジュール(`node:fs` / `node:path` / `node:os` / `node:test`)と
 RegExp の Unicode property escape のみ。npm・ビルド工程・node_modules は無い。
 最小 Node バージョンは 20(`node --test` の安定化ライン。開発時は mise 管理の Node 24)。
@@ -37,6 +50,7 @@ RegExp の Unicode property escape のみ。npm・ビルド工程・node_modules
 | `lint.mjs` | 検出 4 ルール |
 | `glob.mjs` | `paths:` 用の最小 glob マッチャ(micromatch 代替) |
 | `text-util.mjs` | isWordChar(かな・漢字・半角英数)と編集の一括適用 |
+| `scope.mjs` | hook 経由の Edit を「編集行のみ」に限定する行範囲計算(`editedLineRanges` 等) |
 
 テスト: `node --test test/*.test.mjs`(このディレクトリで実行)。
 
@@ -72,6 +86,50 @@ backslash エスケープ済みの `\*\*…\*\*` は lint が検出しない(rem
 非再現で run 長不一致の対は放置、段落の lazy continuation は list を閉じる扱い、
 ユーザーレベル rules の参照先は `~/.claude/rules/markdown.md` 固定
 (`CLAUDE_CONFIG_DIR` の別プロファイルには追従しない。旧実装と同一)。
+
+## 2026-08-28 の実害バグ修正(セル跨ぎペアリング・約物の単語文字扱い)
+
+書き直し直後の運用で、別プロジェクト(PhysicalAI-research/国内企業調査)の実ファイルへ
+2 種類の実害が出た:
+
+1. **セル跨ぎペアリング**: `inline.mjs` の emphasis 走査は 1 行を 1 本の文字列として
+   デリミタスタックを組む。table の行は GFM ではセル単位でインライン解析されるのに、
+   この実装は行全体を一括走査していたため、あるセルの「閉じられない開き `**`」
+   (直前が全角約物で右 flanking 不成立)が別セルの `**` と誤ってペアになり、
+   本来無関係な区間が 1 つの emphasis span として扱われた。span の内側にスペースを
+   挿入する箇所が span の「外側」判定と噛み合わず、`それは**表**であり` の開き `**`
+   直後にスペースが入り(`それは** 表**...`)、CommonMark の left-flanking 条件が
+   崩れて `**` がリテラルとして残る(レンダリング破壊)にまで至った。
+   修正: `scan.mjs` の `tableRowSegments()` で行をセル単位に分割し、`format.mjs`
+   の装飾スペース挿入・`lint.mjs` の残留装飾記号検出をセルごとに独立して走査する
+   (`decorationSpacingEdits` / `checkUnrenderedMarkers`)。
+2. **約物の単語文字扱い**: `text-util.mjs` の `WORD_CHAR` のカタカナ範囲
+   `U+30A0`–`U+30FF` が、約物である `゠`(U+30A0)と中黒 `・`(U+30FB)を含んでいた。
+   `` `a`・`b` `` のような区切りの中黒周りにも装飾スペースの対象と誤認され、
+   スペースが挿入された。修正: カタカナ範囲を `ァ-ヺ`(U+30A1–U+30FA)+
+   `ー-ヿ`(U+30FC–U+30FF)に分割し、この 2 字を除外した。
+
+いずれも `test/format.test.mjs` / `test/lint.test.mjs` の「実害バグの回帰」節と
+`test/fixtures/corpus/boundary-cases.*` に再現ケースを焼き込んで固定してある。
+
+## 適用範囲の分離(`scope.mjs`)
+
+同じ事故を受けて、hook 経由の自動整形は「今回編集した行」に限定した(上記「適用範囲は
+2 経路に分かれる」)。判定バグの修正だけでは、今後別のバグが見つかった場合に
+未編集箇所への波及が再発する可能性が残るため、多層防御として適用範囲そのものも
+狭めてある。`editedLineRanges(source, newString)` は保存後のファイル内容から
+`new_string` の全出現(非重複)を行番号集合に変換する。`formatMarkdown` /
+`lintMarkdown` はこの集合を `lineRanges` オプションとして受け取り、範囲外の
+装飾スペース・fence 編集・finding を抑制する(未指定時は従来どおり全体が対象)。
+
+**空行挿入による行シフトの補正**(diff-reviewer の指摘、2026-08-28): `lineRanges` は
+整形前の source を基準に作った行インデックス集合だが、`fenceBlankLineEdits` は
+空行を挿入して行数を増やす。整形後のテキストへ元の(整形前基準の)`lineRanges` を
+そのまま使うと、挿入位置より後ろの行が対象からずれ、`lintMarkdown` の検出が
+脱落・誤帰属する。これを防ぐため `formatMarkdown` は `{ text, changed, lineRanges }`
+を返し、`lineRanges` には挿入分を補正した(整形後基準の)集合が入る。呼び出し側
+(`cli.mjs`)は `lintMarkdown` にこの補正済みの値を渡す — 元の `lineRanges` を
+再利用してはならない。補正は `scope.mjs` の `translateLineRanges()` が行う。
 
 ## 規則を追加するとき
 

@@ -156,3 +156,68 @@ test("隣接する 2 つの fence の間の空行は 1 行だけ入れる", () =
   const { text } = formatMarkdown("````\na\n````\n````\nb\n````\n");
   assert.equal(text, "````\na\n````\n\n````\nb\n````\n");
 });
+
+// --- 実害バグの回帰(PhysicalAI-research/国内企業調査 で発生した実例、2026-08-28) ---
+
+test("中黒(・)の前後にはスペースを入れない(約物を単語文字扱いしない)", () => {
+  const { changed } = formatMarkdown("`file-history/`・`sessions/` は共有せず\n");
+  assert.equal(changed, false);
+});
+
+// --- lineRanges スコープ(hook の Edit スコープ限定、scope.mjs 参照) ---
+
+test("lineRanges 指定時は範囲外の装飾スペースを挿入しない", () => {
+  const src = "日本語**A**日本語\n日本語**B**日本語\n";
+  const { text, changed } = formatMarkdown(src, { lineRanges: new Set([1]) });
+  assert.equal(text, "日本語**A**日本語\n日本語 **B** 日本語\n");
+  assert.equal(changed, true);
+});
+
+test("lineRanges が対象行を含まなければ無変更", () => {
+  const src = "日本語**A**日本語\n";
+  const { changed } = formatMarkdown(src, { lineRanges: new Set([5]) });
+  assert.equal(changed, false);
+});
+
+test("lineRanges 指定時は範囲外の fence 昇格・空行挿入を行わない", () => {
+  const src = "前\n```js\ncode\n```\n後\n\n前2\n```js\ncode2\n```\n後2\n";
+  // 2 つ目の fence(行 6〜9、0-indexed)だけを範囲に含める
+  const { text } = formatMarkdown(src, { lineRanges: new Set([7]) });
+  assert.equal(text, "前\n```js\ncode\n```\n後\n\n前2\n\n````js\ncode2\n````\n\n後2\n");
+});
+
+test("lineRanges 省略時は従来どおり全行が対象", () => {
+  const src = "日本語**A**日本語\n日本語**B**日本語\n";
+  const { text } = formatMarkdown(src);
+  assert.equal(text, "日本語 **A** 日本語\n日本語 **B** 日本語\n");
+});
+
+test("lineRanges 省略時、戻り値の lineRanges は undefined", () => {
+  const { lineRanges } = formatMarkdown("日本語**A**日本語\n");
+  assert.equal(lineRanges, undefined);
+});
+
+// --- 実害バグの回帰(diff-reviewer の指摘、2026-08-28): 空行挿入による行シフト ---
+// fence 前後への空行挿入は行を追加するため、整形前基準で作った lineRanges を
+// そのまま整形後のテキストに使うと、挿入位置より後ろの行が対象からずれる。
+// formatMarkdown は挿入分を補正した lineRanges を返すことでこれを防ぐ。
+
+test("空行挿入で後続行がずれても、戻り値の lineRanges は補正済みになる", () => {
+  const src = "前文\n```js\ncode\n```\n語**「あ」**語\n";
+  const ranges = new Set([0, 1, 2, 3, 4]);
+  const result = formatMarkdown(src, { lineRanges: ranges });
+  // fence の前後に空行が 1 行ずつ挿入され、元の行4(語**「あ」**語)は行6へ移動する
+  assert.equal(result.text, "前文\n\n````js\ncode\n````\n\n語**「あ」**語\n");
+  assert.ok(result.lineRanges.has(6));
+});
+
+test("table の別セルにある閉じられない ** と誤って対応付けない(セル跨ぎペアリングの回避)", () => {
+  // 修正前は行全体を 1 本の文字列として emphasis を走査していたため、1 列目の
+  // 開きにしかなれない ** (直前が全角約物)が 2 列目の ** と誤ってペアになり、
+  // 「それは**表**であり」の内側(開き ** の直後)にスペースが挿入されて
+  // CommonMark のレンダリングが壊れた(左 flanking 条件を破壊)。
+  const src = "| a | b |\n| --- | --- |\n| 。**推奨 | それは**表**であり |\n";
+  const { text, changed } = formatMarkdown(src);
+  assert.equal(changed, true);
+  assert.equal(text, "| a | b |\n| --- | --- |\n| 。**推奨 | それは **表** であり |\n");
+});

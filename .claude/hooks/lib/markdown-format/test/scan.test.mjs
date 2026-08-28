@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { scanDocument, splitTableRow } from "../scan.mjs";
+import { scanDocument, splitTableRow, tableRowSegments } from "../scan.mjs";
 
 test("ファイル先頭の frontmatter を認識して以降の判定から外す", () => {
   const doc = scanDocument("---\npaths:\n  - '**/*.md'\n---\n本文**あ**\n");
@@ -84,4 +84,22 @@ test("list のネスト深さを push 単位で記録する(同階層の兄弟 i
 
 test("splitTableRow はエスケープされた \\| を区切りにしない", () => {
   assert.deepEqual(splitTableRow("| a \\| b | c |"), ["a | b", "c"]);
+});
+
+test("tableRowSegments は各セルの位置(trim なし)を返す", () => {
+  const content = "| a | bc |";
+  const segments = tableRowSegments(content);
+  assert.deepEqual(
+    segments.map((s) => content.slice(s.start, s.end)),
+    ["", " a ", " bc ", ""],
+  );
+});
+
+test("tableRowSegments はエスケープされた \\| を区切りにしない", () => {
+  const content = "| a \\| b | c |";
+  const segments = tableRowSegments(content);
+  assert.deepEqual(
+    segments.map((s) => content.slice(s.start, s.end)),
+    ["", " a \\| b ", " c ", ""],
+  );
 });

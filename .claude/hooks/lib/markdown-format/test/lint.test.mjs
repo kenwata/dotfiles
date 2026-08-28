@@ -95,3 +95,45 @@ test("非 BMP 文字(絵文字)を含む行で span がずれて誤検出しな�
   const findings = lintMarkdown("😀😀😀😀😀😀😀😀 `**ab** more code content` tail\n");
   assert.deepEqual(rules(findings), []);
 });
+
+// --- lineRanges スコープ(hook の Edit スコープ限定、scope.mjs 参照) ---
+
+test("lineRanges 指定時は範囲外の finding を報告しない", () => {
+  const src = "語**「あ」**語\n本文\n";
+  const findings = lintMarkdown(src, { lineRanges: new Set([1]) });
+  assert.deepEqual(rules(findings), []);
+});
+
+test("lineRanges 指定時は範囲内の finding は報告する", () => {
+  const src = "本文\n語**「あ」**語\n";
+  const findings = lintMarkdown(src, { lineRanges: new Set([1]) });
+  assert.ok(rules(findings).includes("possible-unrendered-bold"));
+});
+
+test("lineRanges 未指定時は従来どおり全行が対象", () => {
+  const findings = lintMarkdown("語**「あ」**語\n");
+  assert.ok(rules(findings).includes("possible-unrendered-bold"));
+});
+
+test("未閉 fence は範囲が交差する限り報告する(範囲アンカーの扱い)", () => {
+  const src = "本文\n`````js\ncode\n````\nend\n";
+  // fence の開き行(1)は範囲外だが、fence の範囲(1〜末尾)が範囲内の行4と交差する
+  const findings = lintMarkdown(src, { lineRanges: new Set([4]) });
+  assert.ok(rules(findings).includes("fence-unclosed-or-malformed"));
+});
+
+test("未閉 fence の範囲外(fence 出現より前の行)だけが編集範囲なら報告しない", () => {
+  const src = "本文A\n本文B\n`````js\ncode\n````\nend\n";
+  const findings = lintMarkdown(src, { lineRanges: new Set([0]) });
+  assert.deepEqual(
+    findings.filter((f) => f.rule === "fence-unclosed-or-malformed"),
+    [],
+  );
+});
+
+// --- 実害バグの回帰(PhysicalAI-research/国内企業調査 で発生した実例、2026-08-28) ---
+
+test("table の別セルにまたがる ** を残留装飾記号として誤検出しない(セル境界の mask)", () => {
+  const findings = lintMarkdown("| a | b |\n| --- | --- |\n| 。**推奨 | それは**表**であり |\n");
+  assert.deepEqual(rules(findings), []);
+});

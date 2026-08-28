@@ -19,6 +19,11 @@
 # 再読み込みを促す文、linter が検出した場合は検出内容を、まとめて stderr に出し exit 2。
 # 対象外・異常時は何も出力せず exit 0(フェイルオープン)。
 #
+# 適用範囲: cli.mjs にこの入力 JSON をそのまま stdin で渡す。Edit(部分編集ツール)で
+# new_string が非空の場合、cli.mjs 側で「今回編集した行」に整形・lint を限定する
+# (未編集の既存箇所への波及を防ぐ、scope.mjs 参照)。Write はファイル全文を書き直す
+# ため常に全体が対象。
+#
 # 既知の限界: .md のみが対象(.mdx は対象外)。Bash 経由のファイル変更(heredoc・
 # シェルリダイレクト等)は Write/Edit を経由しないため捕捉できない。
 
@@ -50,7 +55,7 @@ cli="$hook_dir/lib/markdown-format/cli.mjs"
 project_root="${CLAUDE_PROJECT_DIR:-}"
 
 err_file="$(mktemp)" || exit 0
-"$node_bin" "$cli" "$file_path" "$project_root" 2>"$err_file"
+printf '%s' "$input" | "$node_bin" "$cli" "$file_path" "$project_root" 2>"$err_file"
 status=$?
 err="$(cat "$err_file" 2>/dev/null)"
 rm -f "$err_file"

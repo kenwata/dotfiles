@@ -17,7 +17,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 | commands / skills | 起動時は description のみ。本文は呼び出し時 |
 | auto memory(`MEMORY.md` 先頭 200 行) | 毎セッション起動時 |
 | `HANDOFF.md` / `TODO.md` | 自動ロードではない。セッション運用の指示により開始時に読む |
-| `docs/` ・ `.claude/archive/` | 自動ロードされない。必要時のみ明示的に読む |
+| `docs/`・`.claude/archive/` | 自動ロードされない。必要時のみ明示的に読む |
 
 この前提から導かれる型:
 
@@ -128,7 +128,7 @@ personal スコープに置くと無関係なプロジェクトでも候補に�
 
 dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあり(`install.sh` が
 `~/.claude-bedrock` へ symlink)、実体を持つのは `settings.json` と `CLAUDE.md` のみで、
-`commands/` ・ `statusline.sh` ・ `hooks/` ・ `agents/` は `../.claude/` への symlink で共有する。
+`commands/`・`statusline.sh`・`hooks/`・`agents/` は `../.claude/` への symlink で共有する。
 `CLAUDE.md` は `@../.claude/CLAUDE.md` を import し、Advisor tool が使えない
 Bedrock 環境向けの読み替え差分節(Advisor → fresh-context subagent)だけを持つ。
 **hook スクリプトの実体は symlink で共有されるが、その配線は `settings.json` にあり
@@ -143,7 +143,7 @@ symlink で共有する。設定(モデル ID・permissions・effort)は分離�
 - Bedrock 利用料の集計(`bedrock-cost`、`.config/zsh/40-aws.zsh`)は共有履歴から
   Bedrock 発行分(`message.id` が `msg_bdrk_` 始まり)だけを抽出して行う。ラッパーの
   抽出条件を変えずに履歴の形式が変わった場合は、抽出結果が空にならないか要確認
-- `history.jsonl`(↑キーのプロンプト履歴)・ `file-history/` ・ `sessions/` は共有せず
+- `history.jsonl`(↑キーのプロンプト履歴)・`file-history/`・`sessions/` は共有せず
   分離のまま(同時起動時の追記競合を避けるため)
 
 雛形は **他ファイルを参照させず自己完結** させる。書式規約は雛形冒頭のコメントに実体ごと
