@@ -57,7 +57,7 @@ paths:
 
 ## Logging
 
-- The rules on prohibiting debug `puts` / `p` calls, log-level usage, debug mode, file output, and rotation follow the Programming › Logging section of `CLAUDE.md`.
+- The rules on prohibiting debug `puts` / `p` calls, log-level usage, debug mode, file output, and rotation follow `coding-principles.md` §6 (Logging).
 - Use Ruby's standard `Logger` class or a structured logger (`semantic_logger`, `lograge` for Rails). Do not leave `puts` or `p` calls in production code.
 - Obtain loggers at the class level: `logger = Logger.new($stdout)` in plain Ruby, or `include SemanticLogger::Loggable` in the class.
 - Control log level via environment variable (`LOG_LEVEL`). Do not hard-code levels in source.

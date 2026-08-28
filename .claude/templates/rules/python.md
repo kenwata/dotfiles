@@ -20,7 +20,7 @@ paths:
 
 - Conform to PEP 8.
 - Run `black` or `ruff format` before every commit and in CI to enforce consistent formatting automatically.
-- Use `ruff check` as the linter to detect and fix unused imports, naming violations, and similar issues.
+- Lint with `ruff check`. `pyproject.toml` selects at least `E, W, F, I, N, UP, B, ANN, D, T20, PL, C90, SIM` with `pydocstyle.convention = "google"` and the default thresholds (`max-args = 5`, `max-statements = 50`, `max-branches = 12`, `max-complexity = 10`). Sanctioned escapes live in `per-file-ignores`, nowhere else: `T201` for the entry module's result output, `PLR2004, D` under `tests/**` (see Docstrings). `ANN401` is the mechanical form of the `Any` ban above; `B905` requires `zip(strict=)`; `PLR2004` flags magic numbers (magic strings are governed by `coding-principles.md` §2 and the `Enum` rule below). Size rules (§3 gates) are never `# noqa`'d — split the function.
 - Order imports as: standard library → third-party → project-local. Auto-sort with `ruff` or `isort`.
 
 ## Exception Handling
@@ -38,7 +38,7 @@ paths:
 ## Data Representation
 
 - Define fixed sets of choices as `Enum` to eliminate magic strings and magic numbers.
-- Represent value objects with attributes using `dataclass` or a `pydantic` model instead of plain dicts or tuples.
+- Represent value objects with `dataclass`, `TypedDict`, or a `pydantic` model, never plain dicts or tuples; deserialize external JSON/YAML into one at the entry point (`coding-principles.md` §7, parse at the boundary) so no function past it takes `dict[str, object]`.
 
 ## Modules and Public Interface
 
@@ -47,7 +47,7 @@ paths:
 
 ## Logging
 
-- The rules on prohibiting `print` debugging, log-level usage, debug mode, file output, and rotation follow the Programming › Logging section of `CLAUDE.md`.
+- Debug-print prohibition, log levels, debug mode, file output, and rotation follow `coding-principles.md` §6 (Logging). The command's result output is the one `print` allowed, in the entry module only (see Code Style `per-file-ignores`).
 - In Python, use the standard library `logging` module. If a third-party library (e.g., `loguru`) is used, apply it consistently across the project.
 - Centralize logging configuration (handlers, formatters, levels) with `logging.config.dictConfig` or `logging.config.fileConfig`. Each module obtains its logger via `logging.getLogger(__name__)` and does not configure logging itself.
 - Use `logging.handlers.TimedRotatingFileHandler` for file output with `when="D"` and `backupCount=14` as the baseline.
@@ -56,6 +56,7 @@ paths:
 ## Docstrings
 
 - Write docstrings in English and follow Google style.
+- Test functions are exempt from docstrings (the test name is the contract — `testing.md` Naming); `per-file-ignores` carries `D` for `tests/**`. Type hints stay mandatory in tests.
 - Do not leave docstrings as a short one-line summary when the function, method, class, or data structure has a caller-visible contract.
 - For functions and methods, include:
   - A concise description of what the callable does.
@@ -83,5 +84,4 @@ paths:
 
 ## Performance Optimization
 
-- Avoid nested for-loops in pure Python as much as possible. Actively use built-in functions and comprehensions instead.
-- Actively use Numpy/SciPy for numerical and array calculations.
+- Comprehensions and built-ins are the readable form of a loop (`coding-principles.md` §5); use NumPy/SciPy for numerical and array work. Any other optimization follows `coding-principles.md` §6 — measure first.

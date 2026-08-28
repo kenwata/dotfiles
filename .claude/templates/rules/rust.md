@@ -49,7 +49,7 @@ paths:
 
 ## Logging
 
-- The rules on prohibiting debug `println!` calls, log-level usage, debug mode, file output, and rotation follow the Programming › Logging section of `CLAUDE.md`.
+- The rules on prohibiting debug `println!` calls, log-level usage, debug mode, file output, and rotation follow `coding-principles.md` §6 (Logging).
 - Use `tracing` (preferred) for structured, async-aware logging. For simple cases, use the `log` facade with a concrete backend (e.g., `env_logger`, `tracing-subscriber`).
 - Initialize the subscriber/logger once at the application entry point. Library crates must never install a global subscriber; emit events through the `log`/`tracing` facades only.
 - Control log level via the `RUST_LOG` environment variable.

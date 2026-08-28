@@ -56,7 +56,7 @@ paths:
 
 ## Logging
 
-- The rules on prohibiting debug `System.out.println` calls, log-level usage, debug mode, file output, and rotation follow the Programming › Logging section of `CLAUDE.md`.
+- The rules on prohibiting debug `System.out.println` calls, log-level usage, debug mode, file output, and rotation follow `coding-principles.md` §6 (Logging).
 - Use SLF4J as the logging facade and Logback as the backend. Never use `java.util.logging` or `Log4j` directly in new code.
 - Always use parameterized log messages: `logger.debug("value={}", val)`. String concatenation inside log calls is forbidden.
 - Obtain loggers as `private static final Logger logger = LoggerFactory.getLogger(MyClass.class)`.

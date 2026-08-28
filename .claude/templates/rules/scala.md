@@ -51,7 +51,7 @@ paths:
 
 ## Logging
 
-- The rules on prohibiting debug `println` calls, log-level usage, debug mode, file output, and rotation follow the Programming › Logging section of `CLAUDE.md`.
+- The rules on prohibiting debug `println` calls, log-level usage, debug mode, file output, and rotation follow `coding-principles.md` §6 (Logging).
 - Use SLF4J as the facade and Logback as the backend via the `scala-logging` wrapper (`com.typesafe.scala-logging`). Call `LazyLogging` or `StrictLogging` as a mixin.
 - In effect-typed code (Cats Effect / ZIO), prefer structured logging libraries that integrate with the effect system (e.g., `log4cats`, `ZIO Logging`).
 - Control log level via environment variables (`LOG_LEVEL`, `logging.level.*`). Do not hard-code levels in source.

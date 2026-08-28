@@ -49,7 +49,7 @@ paths:
 
 ## Logging
 
-- The rules on prohibiting debug `putStrLn` / `print` calls, log-level usage, debug mode, file output, and rotation follow the Programming › Logging section of `CLAUDE.md`.
+- The rules on prohibiting debug `putStrLn` / `print` calls, log-level usage, debug mode, file output, and rotation follow `coding-principles.md` §6 (Logging).
 - Use `katip` (preferred for structured logging) or `co-log`. Initialize the logging environment once at `main` and thread it through the application via `ReaderT` or a similar pattern.
 - Control log level via an environment variable (e.g., `LOG_LEVEL`). Do not hard-code levels in source.
 
