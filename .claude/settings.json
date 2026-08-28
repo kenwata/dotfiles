@@ -54,6 +54,15 @@
           }
         ],
         "matcher": "Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/check-question-legibility.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "AskUserQuestion"
       }
     ],
     "SessionStart": [

@@ -28,6 +28,7 @@ Once an outcome is set, derive the minimal path by working backward from the ide
 | Anti-sycophancy | Verify before agreeing. Correct incorrect premises. Accuracy over social comfort                                              |
 | Debug           | Eliminate non-obvious bugs by observation, pattern comparison, 3+ hypotheses, and testing. Avoid single-hypothesis conclusion |
 | Naming          | No ad-hoc abbreviated IDs (M0, P1, Tier2...) in designs, plans, or docs. Use descriptive names ("Phase 1: schema migration"). Sole exception: IDs defined by TODO.md's own convention (task IDs T<n>; grouping/sort indices #<n> and #<n>-<m>) |
+| Reader-context  | User-facing text must survive a first-time reader: no elided subject/verb/object; define self-coined names, IDs, and jargon at first use in the same message; restate content instead of back-references ("as discussed above"). The reader has not seen your code, tool output, or screenshots. Define once per message — don't repeat definitions in every sentence |
 
 ## Work style
 
