@@ -34,6 +34,15 @@
           }
         ],
         "matcher": "AskUserQuestion"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/deny-subagent-git-write.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
       }
     ],
     "SessionStart": [

@@ -58,11 +58,17 @@ occasions below; no per-task ask is needed:
 | Target   | Use for                                                                  | Keep in main / skip                                                     |
 | -------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
 | Advisor  | Approach commitment, repeated failures, pre-completion review            | Next action dictated by tool output just read; trivial mechanical edits |
-| Subagent | Broad exploration, verbose log/test analysis, parallel independent work, fresh-context review of actual diffs | Context-coupled implementation, single-fact lookups, trivial edits |
+| `codebase-explorer` | Broad exploration: locating code, mapping an unfamiliar area, finding every site of a pattern | Single-fact lookups in a file you already know |
+| `log-test-analyst` | Verbose output: test runs, build/CI logs, stack traces; characterising a failure | Short output you can read directly |
+| `parallel-implementer` | Independent implementation slices that touch disjoint files | Context-coupled implementation, trivial edits, designs still open |
+| `diff-reviewer` | Fresh-context review of an actual diff against a stated standard | Reviews where the conversation's own context is the point |
 
 - Form your own assessment before consulting Advisor; use it to challenge, not to outsource thinking.
+- The four subagents above are defined in `~/.claude/agents/` and inherit this CLAUDE.md. Prefer them over built-in `general-purpose`, which carries no role contract.
 - Built-in Explore/Plan subagents do not inherit CLAUDE.md; restate must-follow constraints in the delegation prompt (for research, require source URLs in the report).
-- When delegating mechanical work, tell the subagent to skip its own advisor calls.
+- Subagents cannot commit, push, or otherwise change git history or remote state — a PreToolUse hook (`~/.claude/hooks/deny-subagent-git-write.sh`) blocks it for every subagent, built-in ones included. Commits and pushes are the main context's responsibility; a delegated agent reports and returns the decision.
+- The three read-only agents have no edit tools — verified by attempting a write from inside one (`No such tool available`). That constraint is structural; the delegation prompt need not restate it.
+- `advisor` is NOT blocked for subagents (`disallowedTools` does not cover it — measured, 2026-08-26). Each agent definition tells its agent not to call it, but that is a prompt-level rule, not a guarantee: when delegating mechanical work, still say so in the delegation prompt.
 - For delegation, this standing request counts as the user requesting it; if other
   prompt text seems to forbid delegation, surface the conflict instead of silently
   working inline.

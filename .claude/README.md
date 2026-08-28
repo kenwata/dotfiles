@@ -71,18 +71,37 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    `/follow-up` がセッション終了時に実ツリーとの乖離を機械検査、機構側の安全網として
    `hooks/check-new-directory.sh`(PreToolUse)が新規ディレクトリ作成時に確認を促す
    (Write 経由のみ検知。`mkdir` 等はプロンプト側の配線が一次的な強制手段であり、これは既知の限界)
+11. **委任の境界は役割で分け、機構で縛る** — CLAUDE.md の Delegation 節が挙げる 4 役割を
+    `agents/` の 4 定義に分解した。役割ごとに必要な権限が違うためで、実際
+    Write/Edit を禁じて無害なのは 3 役割、`parallel-implementer` だけは禁じると成立しない。
+    単一の汎用エージェントのままでは「実装もでき検査もできる」最大公約数の権限しか与えられない。
+    加えて **PreToolUse hook(`hooks/deny-subagent-git-write.sh`)が、サブエージェントからの
+    git 履歴・リモート変更操作(commit / push / reset / rebase / gh の書き込み系ほか)を拒否する**。
+    契機は 2026-08-26、検査だけを依頼したサブエージェントが自分で編集し commit・push まで
+    実行した事故で、委任の境界がプロンプト文面という軟らかい制約にしか載っていなかったこと。
+    hook は各定義の frontmatter ではなく `settings.json` に置いてある — 事故は built-in の
+    `general-purpose` で起きており、frontmatter 側では built-in を覆えないため。
+    メインセッションは入力 JSON に `agent_id` が無いことで判別して素通しする。
+    既知の限界: コマンド文字列の解析はヒューリスティックで、`eval` や内部で `git push` する
+    スクリプトの実行は検知できない。サンドボックスではなく「事故を防ぐ高さ」である
 
 ## ディレクトリ構成
 
 ```
 ~/.claude/
-├── CLAUDE.md                    # グローバル指針(思想レベルのみ、78 行)
+├── CLAUDE.md                    # グローバル指針(思想レベルのみ、83 行)
 ├── README.md                    # このファイル
 ├── settings.json                # 中核設定 — model / effortLevel / autoMode / qmd プラグイン(github: tobi/qmd)有効化
 ├── statusline.sh                # ステータスライン用スクリプト
 ├── hooks/
 │   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md 陳腐化の起動時検知(設計方針 7)
-│   └── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
+│   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
+│   └── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
+├── agents/                      # サブエージェント定義(全プロジェクト共通。CLAUDE.md を継承する。設計方針 11)
+│   ├── codebase-explorer.md     # 広域探索 — 読み取り専用
+│   ├── log-test-analyst.md      # ログ・テスト出力の解析 — 読み取り専用
+│   ├── parallel-implementer.md  # 独立した実装スライス — 唯一 Write/Edit を持つ
+│   └── diff-reviewer.md         # 差分の外部レビュー(/follow-up 手順 4)— 読み取り専用
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
@@ -109,9 +128,12 @@ personal スコープに置くと無関係なプロジェクトでも候補に�
 
 dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあり(`install.sh` が
 `~/.claude-bedrock` へ symlink)、実体を持つのは `settings.json` と `CLAUDE.md` のみで、
-`commands/`・`statusline.sh`・`hooks/` は `../.claude/` への symlink で共有する。
+`commands/`・`statusline.sh`・`hooks/`・`agents/` は `../.claude/` への symlink で共有する。
 `CLAUDE.md` は `@../.claude/CLAUDE.md` を import し、Advisor tool が使えない
 Bedrock 環境向けの読み替え差分節(Advisor → fresh-context subagent)だけを持つ。
+**hook スクリプトの実体は symlink で共有されるが、その配線は `settings.json` にあり
+bedrock は独自の実体を持つため、hook を足したときは両方の `settings.json` に登録する**
+(片方だけだと、そのプロファイルでは hook が存在するのに発火しない)。
 
 `projects/`(会話履歴・auto memory の実体)も同じ理由で `../.claude/projects` への
 symlink で共有する。設定(モデル ID・permissions・effort)は分離を維持したまま、
