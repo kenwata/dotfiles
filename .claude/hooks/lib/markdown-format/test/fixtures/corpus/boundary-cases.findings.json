@@ -1,0 +1,17 @@
+[
+  {
+    "rule": "possible-unrendered-bold",
+    "line": 17,
+    "message": "装飾記号が地の文に残っている可能性: \"**「重要」**\""
+  },
+  {
+    "rule": "possible-unrendered-strikethrough",
+    "line": 24,
+    "message": "装飾記号が地の文に残っている可能性: \"~~三連チルダ~~\""
+  },
+  {
+    "rule": "list-too-deep",
+    "line": 42,
+    "message": "list のネストが深い(3階層)"
+  }
+]

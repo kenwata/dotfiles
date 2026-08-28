@@ -1,0 +1,7 @@
+[
+  {
+    "rule": "fence-unclosed-or-malformed",
+    "line": 3,
+    "message": "code fence の閉じが見つからない、または不整形(自動修正していない)"
+  }
+]

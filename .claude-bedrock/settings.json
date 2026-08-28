@@ -16,6 +16,17 @@
     }
   },
   "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/format-markdown.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      }
+    ],
     "PreToolUse": [
       {
         "hooks": [

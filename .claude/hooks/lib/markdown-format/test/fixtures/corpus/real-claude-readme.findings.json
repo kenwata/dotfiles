@@ -1,0 +1,12 @@
+[
+  {
+    "rule": "table-cell-too-complex",
+    "line": 14,
+    "message": "table cell が長い/複雑(41文字): \".claude/rules/*.md(p…\""
+  },
+  {
+    "rule": "table-cell-too-complex",
+    "line": 32,
+    "message": "table cell が長い/複雑(56文字): \"ゼロ。1 タスク完了 = 1 コミット(…\""
+  }
+]
