@@ -84,6 +84,18 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     メインセッションは入力 JSON に `agent_id` が無いことで判別して素通しする。
     既知の限界: コマンド文字列の解析はヒューリスティックで、`eval` や内部で `git push` する
     スクリプトの実行は検知できない。サンドボックスではなく「事故を防ぐ高さ」である
+12. **確認文の可読性は書く瞬間に介入** — CLAUDE.md の Reader-context 規約は常時ロードされていても、
+    AskUserQuestion を書く瞬間には想起されず、主語・述語・目的語の省略や内輪の略称の再発が
+    止まらなかった。PreToolUse hook(`hooks/check-question-legibility.sh`)が呼び出しごとに
+    1回 deny してチェックリストで書き直しを強制する(セッション中に何度呼ばれても deny→
+    書き直し→通過のサイクルを繰り返す。1回きりの静的ルールでは届かない「書いた瞬間」に効く)
+13. **Markdown の装飾規則は formatter/linter で決定論的に保証** — `templates/rules/markdown.md`
+    のうち機械判定できる規則(装飾の外側スペース・code fence の backtick 数)を、プロンプト遵守に
+    頼らず PostToolUse hook(`hooks/format-markdown.sh` → `hooks/lib/markdown-format/`、
+    依存ゼロ・ビルドなし)が Write/Edit 保存のたびに適用する。hook は編集行のみに限定し
+    (未編集の逐語引用・既存箇所への波及を防ぐ)、ファイル全体への適用は `/markdown-cleanup`
+    コマンドが単独コミットとして担う。適用範囲はプロジェクト側の `.claude/rules/markdown.md` の
+    `paths:` frontmatter で判定するため、規約を配布していないプロジェクトでは no-op
 
 ## ディレクトリ構成
 
@@ -96,7 +108,10 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── hooks/
 │   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md 陳腐化の起動時検知(設計方針 7)
 │   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
-│   └── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
+│   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認文の可読性ゲート(呼び出しごとに1回 deny→書き直し)
+│   ├── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
+│   ├── format-markdown.sh       # PostToolUse(Write|Edit) hook — 保存された .md を markdown-format CLI に通す(編集行のみ。全体整形は /markdown-cleanup)
+│   └── lib/markdown-format/     # 上記 hook が呼ぶ formatter/linter 本体(依存ゼロ・ビルドなし。cli/format/lint/scope 等 + test/。詳細は同所の README.md)
 ├── agents/                      # サブエージェント定義(全プロジェクト共通。CLAUDE.md を継承する。設計方針 11)
 │   ├── codebase-explorer.md     # 広域探索 — 読み取り専用
 │   ├── log-test-analyst.md      # ログ・テスト出力の解析 — 読み取り専用
@@ -106,7 +121,8 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
 │   ├── follow-up.md             # /follow-up — 終了時に計画と成果の差分を検査・是正
-│   └── agmsg.md                 # /agmsg — マルチエージェントメッセージング
+│   ├── agmsg.md                 # /agmsg — マルチエージェントメッセージング
+│   └── markdown-cleanup.md      # /markdown-cleanup — markdown-format CLI をファイル全体モードで適用し単独コミット
 └── templates/                   # /initialize と /breakdown が読むテンプレート群
     ├── BLUEPRINT.md             # 初期化設計書 — 判断基準と手順のすべてはここ
     ├── skeletons/               # 機械的に穴埋め・コピーする雛形(6 ファイル)
