@@ -53,6 +53,32 @@ info() { printf '\033[1;32m[INFO]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[WARN]\033[0m %s\n' "$*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+ensure_mikefarah_yq() {
+  if have yq && yq --version 2>&1 | grep -q 'mikefarah/yq'; then
+    return
+  fi
+
+  if [[ "$OS" == "mac" ]]; then
+    brew install yq
+    return
+  fi
+
+  local yq_tmp
+  case "$ARCH" in
+    amd64|arm64) ;;
+    *) warn "  yq installation failed: unsupported architecture $ARCH"; return 1 ;;
+  esac
+  yq_tmp="$(mktemp)"
+  if ! curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${ARCH}" \
+    -o "$yq_tmp"; then
+    rm -f "$yq_tmp"
+    return 1
+  fi
+  sudo install -m 0755 "$yq_tmp" /usr/local/bin/yq
+  rm -f "$yq_tmp"
+  info "  Installed mikefarah/yq v4"
+}
+
 # シンボリックリンクを安全に貼る
 #   - 既存 symlink → 削除して張り直し
 #   - 既存実体ファイル / ディレクトリ → $BACKUP_DIR へ退避してから張る
@@ -214,6 +240,13 @@ step4_symlinks() {
   backup_and_link "$DOTFILES/.claude"         "$HOME/.claude"
   backup_and_link "$DOTFILES/.claude-bedrock" "$HOME/.claude-bedrock"
   backup_and_link "$DOTFILES/.tmux"           "$HOME/.tmux"
+
+  # Codex は auth/session/history/cache も ~/.codex に保存するため、ディレクトリ
+  # 全体を symlink しない。宣言的ファイル・custom agents・hooks・skills だけを
+  # 個別に配線し、runtime state は実体ディレクトリに残す。
+  ensure_mikefarah_yq
+  bash "$DOTFILES/.codex/install.sh" \
+    "$DOTFILES/.codex" "$HOME/.codex" "$BACKUP_DIR/codex"
 
   # .claude/projects は会話履歴・memory の実体で .gitignore 対象のため、clone 直後は
   # 存在しない。.claude-bedrock/projects はそこへの symlink(Anthropic 直/Bedrock 経由で
@@ -537,6 +570,7 @@ step9_summary() {
   have rg     && printf '  rg:     %s\n' "$(rg --version | head -1)"
   have fd     && printf '  fd:     %s\n' "$(fd --version)"
   have jq     && printf '  jq:     %s\n' "$(jq --version)"
+  have yq     && printf '  yq:     %s\n' "$(yq --version)"
   have fzf    && printf '  fzf:    %s\n' "$(fzf --version)"
   have claude && printf '  claude: %s\n' "$(claude --version 2>&1 | head -1)"
   printf '\n'

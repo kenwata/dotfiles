@@ -21,5 +21,5 @@ bash install.sh
 | ランタイム管理 | mise、uv、pnpm |
 | ランタイム | Python 3.12、Node.js LTS |
 | シェル | zsh、Prezto |
-| CLIツール | peco、ripgrep、fd、jq、fzf、tree、neovim、tmux、gh |
-| その他 | Claude Code、agmsg、tpm |
+| CLIツール | peco、ripgrep、fd、jq、yq、fzf、tree、neovim、tmux、gh |
+| その他 | Claude Code、Codex 設定、agmsg、tpm |

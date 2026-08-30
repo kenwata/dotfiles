@@ -31,6 +31,7 @@
 .claude/session-env/
 .claude/downloads/
 .claude/remote/
+.claude/debug/
 .claude/.credentials.json
 
 # Claude Bedrock — runtime-generated, not config
@@ -46,6 +47,7 @@
 .claude-bedrock/paste-cache/
 .claude-bedrock/plans/
 .claude-bedrock/plugins/
+.claude-bedrock/debug/
 # .claude-bedrock/projects/ は .claude/projects への symlink(履歴・memory 共有)なので
 # 対象外。trailing slash パターンはディレクトリにのみマッチし symlink は素通しされる。
 .claude-bedrock/sessions/
@@ -70,6 +72,7 @@
 .claude-foundry/paste-cache/
 .claude-foundry/plans/
 .claude-foundry/plugins/
+.claude-foundry/debug/
 .claude-foundry/projects/
 .claude-foundry/sessions/
 .claude-foundry/session-env/

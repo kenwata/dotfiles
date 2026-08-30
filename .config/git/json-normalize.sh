@@ -15,14 +15,18 @@
 # フィルタ未設定のマシンでも壊れない。
 set -uo pipefail
 
-tmp="$(mktemp)"
-out="$(mktemp)"
-trap 'rm -f "$tmp" "$out"' EXIT
+# A clean filter is also executed by read-only review agents during
+# `git status` and `git diff`. Buffer in memory rather than using mktemp so
+# those read-only operations do not require filesystem writes. The sentinel
+# prevents command substitution from stripping the input's trailing newlines.
+input="$(cat; printf '\034')"
+input="${input%$'\034'}"
 
-cat >"$tmp"
-
-if command -v jq >/dev/null 2>&1 && jq -S . "$tmp" >"$out" 2>/dev/null; then
-  cat "$out"
-else
-  cat "$tmp"
+if command -v jq >/dev/null 2>&1; then
+  if normalized="$(printf '%s' "$input" | jq -S . 2>/dev/null)"; then
+    [[ -z "$normalized" ]] || printf '%s\n' "$normalized"
+    exit 0
+  fi
 fi
+
+printf '%s' "$input"

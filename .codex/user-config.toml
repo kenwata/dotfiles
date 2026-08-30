@@ -1,0 +1,44 @@
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+project_doc_fallback_filenames = ["CLAUDE.md"]
+
+[tui]
+alternate_screen = "always"
+status_line = ["model-with-reasoning", "context-remaining", "current-dir", "git-branch"]
+
+[sandbox_workspace_write]
+writable_roots = [
+  "{{HOME}}/.agents/skills/agmsg/run",
+  "{{HOME}}/.agents/skills/agmsg/db",
+  "{{HOME}}/.agents/skills/agmsg/teams",
+]
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 4
+default_subagent_model = "gpt-5.6-terra"
+default_subagent_reasoning_effort = "high"
+
+[agents.advisor]
+description = "Fresh-context challenger for approach commitment, repeated failures, and pre-completion review."
+config_file = "./agents/advisor.toml"
+
+[agents.codebase_explorer]
+description = "Read-only explorer for broad codebase mapping and exhaustive pattern searches."
+config_file = "./agents/codebase-explorer.toml"
+
+[agents.log_test_analyst]
+description = "Read-only analyst for long test, build, CI, stack-trace, and profiler output."
+config_file = "./agents/log-test-analyst.toml"
+
+[agents.parallel_implementer]
+description = "Implementation worker for a bounded slice that is independent from other edits."
+config_file = "./agents/parallel-implementer.toml"
+
+[agents.diff_reviewer]
+description = "Fresh-context reviewer that checks an actual diff against the original standard."
+config_file = "./agents/diff-reviewer.toml"
+
+[features]
+hooks = true
+multi_agent = true

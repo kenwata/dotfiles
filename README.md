@@ -21,5 +21,5 @@ Re-runnable — existing files are backed up to `~/.dotfiles-backup/`.
 | Runtime manager | mise, uv, pnpm |
 | Runtimes | Python 3.12, Node.js LTS |
 | Shell | zsh, Prezto |
-| CLI tools | peco, ripgrep, fd, jq, fzf, tree, neovim, tmux, gh |
-| Other | Claude Code, agmsg, tpm |
+| CLI tools | peco, ripgrep, fd, jq, yq, fzf, tree, neovim, tmux, gh |
+| Other | Claude Code, Codex configuration, agmsg, tpm |

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Initialize project"
+  short_description: "Bootstrap the Codex project workflow safely"
+  default_prompt: "Use $initialize to initialize this project with my Codex conventions."
+policy:
+  allow_implicit_invocation: false

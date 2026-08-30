@@ -1,0 +1,55 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "command": "bash ~/.codex/hooks/check-handoff-stale.sh",
+            "timeout": 10,
+            "type": "command"
+          },
+          {
+            "command": "bash ~/.codex/hooks/herdr-agent-state.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|apply_patch",
+        "hooks": [
+          {
+            "command": "bash ~/.codex/hooks/check-new-directory.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "matcher": "request_user_input",
+        "hooks": [
+          {
+            "command": "bash ~/.codex/hooks/check-question-legibility.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|apply_patch",
+        "hooks": [
+          {
+            "command": "bash ~/.codex/hooks/format-markdown.sh",
+            "timeout": 30,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}
