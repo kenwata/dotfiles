@@ -38,6 +38,33 @@ backup_and_link() {
   info "linked: $destination -> $source_path"
 }
 
+backup_and_copy() {
+  local source_path="$1" destination="$2"
+  mkdir -p "$(dirname "$destination")"
+
+  if [[ ! -L "$destination" && -f "$destination" ]] \
+    && cmp -s "$source_path" "$destination"; then
+    info "already copied: $destination"
+    return
+  fi
+
+  if [[ -d "$destination" && ! -L "$destination" ]]; then
+    printf '[codex] cannot replace directory with file: %s\n' "$destination" >&2
+    return 1
+  fi
+
+  if [[ -e "$destination" || -L "$destination" ]]; then
+    local relative backup_path
+    relative="${destination#"$codex_home"/}"
+    backup_path="$(next_backup_path "$relative")"
+    mv "$destination" "$backup_path"
+    info "backed up: $destination -> $backup_path"
+  fi
+
+  cp "$source_path" "$destination"
+  info "copied: $destination <- $source_path"
+}
+
 install_user_config() {
   local template="$source_dir/user-config.toml"
   local destination="$codex_home/config.toml"
@@ -109,7 +136,7 @@ install_user_config
 
 for source_path in "$source_dir"/agents/*.toml; do
   [[ -e "$source_path" ]] || continue
-  backup_and_link "$source_path" "$codex_home/agents/$(basename "$source_path")"
+  backup_and_copy "$source_path" "$codex_home/agents/$(basename "$source_path")"
 done
 
 for source_path in "$source_dir"/hooks/*; do

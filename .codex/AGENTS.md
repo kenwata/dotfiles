@@ -91,3 +91,4 @@ The main context owns the outcome, plan, and final decisions. This section is a 
 - Use `jq` or `yq` to inspect large structured files without loading irrelevant content.
 - Use `ast-grep` when structural search or replacement is materially more accurate than text matching.
 - Preserve user changes in a dirty worktree and avoid destructive git commands unless explicitly requested.
+- If a tool fails before reading its target with `writable root ... contains symlink component`, treat it as a sandbox-initialization failure rather than a target-file permission error. Do not repeat the same `apply_patch`; inspect configured writable roots, replace symlinked path components with canonical real paths, and start a new session. If the session cannot reload corrected permissions, report the blocker before using any alternate editing mechanism.

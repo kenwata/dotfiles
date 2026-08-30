@@ -12,6 +12,11 @@ mkdir -p "$fake_codex/skills/.system" "$fake_codex/sessions"
 printf 'secret-placeholder\n' > "$fake_codex/auth.json"
 printf 'system-marker\n' > "$fake_codex/skills/.system/marker"
 printf 'session-marker\n' > "$fake_codex/sessions/marker"
+mkdir -p "$fake_codex/agents"
+ln -s "$repo_root/.codex/agents/advisor.toml" "$fake_codex/agents/advisor.toml"
+printf 'legacy-codebase-explorer\n' > "$fake_codex/agents/codebase-explorer.toml"
+mkdir -p "$backup/agents"
+printf 'existing-advisor-backup\n' > "$backup/agents/advisor.toml"
 printf '%s\n' \
   'model = "old-model"' \
   'notify = ["runtime-notifier"]' \
@@ -42,7 +47,19 @@ grep -qx 'secret-placeholder' "$fake_codex/auth.json"
 grep -qx 'system-marker' "$fake_codex/skills/.system/marker"
 grep -qx 'session-marker' "$fake_codex/sessions/marker"
 [[ -L "$fake_codex/skills/follow-up" ]]
-[[ -L "$fake_codex/agents/advisor.toml" ]]
+grep -qx 'existing-advisor-backup' "$backup/agents/advisor.toml"
+migrated_advisor_backup="$(find "$backup/agents" -maxdepth 1 -type l -name 'advisor.toml.*')"
+[[ -n "$migrated_advisor_backup" ]]
+[[ -L "$migrated_advisor_backup" ]]
+[[ "$(readlink "$migrated_advisor_backup")" == "$repo_root/.codex/agents/advisor.toml" ]]
+[[ "$(find "$backup/agents" -maxdepth 1 -type l -name 'advisor.toml.*' | wc -l | tr -d ' ')" -eq 1 ]]
+grep -qx 'legacy-codebase-explorer' "$backup/agents/codebase-explorer.toml"
+for source_path in "$repo_root"/.codex/agents/*.toml; do
+  installed_path="$fake_codex/agents/$(basename "$source_path")"
+  [[ -f "$installed_path" ]]
+  [[ ! -L "$installed_path" ]]
+  cmp -s "$source_path" "$installed_path"
+done
 
 fresh_home="$fixture_root/fresh-home"
 fresh_codex="$fresh_home/.codex"
@@ -52,6 +69,9 @@ HOME="$fresh_home" bash "$repo_root/.codex/install.sh" \
 [[ -s "$fresh_codex/config.toml" ]]
 [[ "$(yq -p=toml -o=json -r '.model' "$fresh_codex/config.toml")" == "gpt-5.6-sol" ]]
 [[ "$(yq -p=toml -o=json -r '.sandbox_workspace_write.writable_roots[0]' "$fresh_codex/config.toml")" == "$fresh_home/.agents/skills/agmsg/run" ]]
+[[ -f "$fresh_codex/agents/advisor.toml" ]]
+[[ ! -L "$fresh_codex/agents/advisor.toml" ]]
+cmp -s "$repo_root/.codex/agents/advisor.toml" "$fresh_codex/agents/advisor.toml"
 
 printf '%s\n' \
   '#!/usr/bin/env bash' \
