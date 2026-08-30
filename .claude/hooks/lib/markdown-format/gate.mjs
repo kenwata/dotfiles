@@ -32,20 +32,27 @@ function ruleMatches(rulePath, relTarget) {
   return globMatch(relTarget, patterns);
 }
 
-// 対象ファイルに `.claude/rules/markdown.md`(プロジェクト優先、次にユーザーレベル)が
-// ロードされる条件と同じ条件でのみ formatter を動かす。rules を配布していない
-// プロジェクトでは既存の diff 規約に影響を与えないため、常に false を返す。
+// 対象ファイルに `<ruleDirs[i]>/rules/markdown.md`(プロジェクト優先、次に
+// ユーザーレベル)がロードされる条件と同じ条件でのみ formatter を動かす。rules を
+// 配布していないプロジェクトでは既存の diff 規約に影響を与えないため、常に false を
+// 返す。
+// ruleDirs の既定は Claude Code 本来の `.claude` のみ。Codex アダプター
+// (.codex/hooks/format-markdown.mjs)は自身の呼び出しでのみ `--rules-dir=.codex` を
+// 明示指定し、Claude Code から呼ばれた場合の判定基準は変えない(.codex/rules/*.md を
+// 自動ロードする概念は Claude Code 側には無い)。
 // userHome はテストでの注入用(既定は実ホームディレクトリ)。
-export function shouldFormat(absFilePath, projectRoot, userHome = homedir()) {
+export function shouldFormat(absFilePath, projectRoot, userHome = homedir(), ruleDirs = [".claude"]) {
   if (!projectRoot || !isAbsolute(absFilePath)) return false;
   const rel = relative(projectRoot, absFilePath);
   if (rel.startsWith("..") || isAbsolute(rel)) return false;
 
-  const projectRule = resolve(projectRoot, ".claude/rules/markdown.md");
-  if (ruleMatches(projectRule, rel)) return true;
+  for (const dir of ruleDirs) {
+    if (ruleMatches(resolve(projectRoot, dir, "rules/markdown.md"), rel)) return true;
+  }
 
-  const userRule = resolve(userHome, ".claude/rules/markdown.md");
-  if (ruleMatches(userRule, rel)) return true;
+  for (const dir of ruleDirs) {
+    if (ruleMatches(resolve(userHome, dir, "rules/markdown.md"), rel)) return true;
+  }
 
   return false;
 }

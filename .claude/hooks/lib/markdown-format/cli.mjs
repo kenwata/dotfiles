@@ -6,10 +6,14 @@ import { shouldFormat } from "./gate.mjs";
 import { editedLineRanges } from "./scope.mjs";
 
 // 呼び出し規約(hooks/format-markdown.sh から呼ばれる):
-//   node cli.mjs <対象ファイルの絶対パス> [プロジェクトルートの絶対パス]
+//   node cli.mjs <対象ファイルの絶対パス> [プロジェクトルートの絶対パス] [--rules-dir=<dir>]...
 //   stdin: PostToolUse hook の入力 JSON(省略可)
+// --rules-dir は繰り返し指定可。無指定なら既定 [".claude"](Claude Code 本来の判定基準)。
+// Codex アダプター(.codex/hooks/format-markdown.mjs)のみが自身の spawnSync 呼び出しで
+// `--rules-dir=.codex --rules-dir=.claude` を明示指定する。Claude Code からの通常呼び出し
+// (hooks/format-markdown.sh)はこのフラグを渡さないため既定のまま。
 // 出力規約:
-//   - .md 以外、または対象ファイルが .claude/rules/markdown.md の paths: にマッチしない
+//   - .md 以外、または対象ファイルがいずれの rules/markdown.md の paths: にもマッチしない
 //     場合は何も出力せず exit 0(no-op)。
 //   - formatter が書き換えた場合と linter が検出した場合: stderr に内容を出力して exit 2
 //     (PostToolUse hook の exit 2 は stderr が Claude に見える、と文書化されている
@@ -38,14 +42,28 @@ function readStdinJson() {
   }
 }
 
+// --rules-dir=<dir> を除いた残りを位置引数として返す。`ruleDirs` は undefined
+// (フラグ無し、gate.mjs の既定を使う)または指定順を保った配列。
+function parseArgs(argv) {
+  const positional = [];
+  const ruleDirs = [];
+  for (const arg of argv) {
+    const m = arg.match(/^--rules-dir=(.+)$/);
+    if (m) ruleDirs.push(m[1]);
+    else positional.push(arg);
+  }
+  return { positional, ruleDirs: ruleDirs.length > 0 ? ruleDirs : undefined };
+}
+
 function main() {
-  const [, , filePath, projectRoot] = process.argv;
+  const { positional, ruleDirs } = parseArgs(process.argv.slice(2));
+  const [filePath, projectRoot] = positional;
 
   if (!filePath || !filePath.endsWith(".md")) {
     process.exit(0);
   }
 
-  if (!shouldFormat(filePath, projectRoot ?? "")) {
+  if (!shouldFormat(filePath, projectRoot ?? "", undefined, ruleDirs)) {
     process.exit(0);
   }
 

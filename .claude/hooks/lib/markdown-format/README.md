@@ -2,7 +2,13 @@
 
 `templates/rules/markdown.md` の規則のうち機械的に直せるものを、LLM の遵守に頼らず
 保証する formatter/linter。PostToolUse hook(`hooks/format-markdown.sh`)から
-`node cli.mjs <file> <project-root>` として呼ばれる。
+`node cli.mjs <file> <project-root> [--rules-dir=<dir>]...` として呼ばれる。
+
+`--rules-dir`(繰り返し可)は gate が参照する rules ディレクトリの指定。**無指定の既定は
+`.claude` のみ**で、これが Claude Code 本来の判定基準。指定した場合は既定を置き換える
+(追加ではない)ため、広げるときも `.claude` を明示的に含める必要がある。現状これを渡す
+唯一の呼び出し元は Codex アダプター(`~/.codex/hooks/format-markdown.mjs` と
+`~/.codex/skills/markdown-cleanup/`)で、`--rules-dir=.codex --rules-dir=.claude` を指定する。
 
 **適用範囲は 2 経路に分かれる**(2026-08-28、未編集箇所への波及事故を受けて分離):
 
@@ -43,7 +49,7 @@ RegExp の Unicode property escape のみ。npm・ビルド工程・node_modules
 | ファイル | 責務 |
 | --- | --- |
 | `cli.mjs` | エントリポイント。gate → format → 書き戻し → lint → stderr + exit 2 |
-| `gate.mjs` | プロジェクト/ユーザーの `.claude/rules/markdown.md` の `paths:` にマッチする場合のみ動く |
+| `gate.mjs` | プロジェクト/ユーザーの `<rules-dir>/rules/markdown.md`(既定は `.claude` のみ)の `paths:` にマッチする場合のみ動く |
 | `scan.mjs` | 行単位のブロック走査器(frontmatter / fence / table / list 深さ / blockquote) |
 | `inline.mjs` | インライン走査器(code span / math / emphasis の flanking 判定) |
 | `format.mjs` | scan/inline の結果を編集(スペース挿入・fence 昇格・空行)へ変換 |
@@ -84,8 +90,9 @@ backslash エスケープ済みの `\*\*…\*\*` は lint が検出しない(rem
 その他の既知の簡略化(同じく safe 側 = 「触らない」方向にのみ倒れる): CRLF 非対応、
 タブは 1 文字換算、`<…>` 内は一律保護、remark の delimiter stack(rule of 3 等)は
 非再現で run 長不一致の対は放置、段落の lazy continuation は list を閉じる扱い、
-ユーザーレベル rules の参照先は `~/.claude/rules/markdown.md` 固定
-(`CLAUDE_CONFIG_DIR` の別プロファイルには追従しない。旧実装と同一)。
+ユーザーレベル rules の参照先は既定呼び出しでは `~/.claude/rules/markdown.md` 固定
+(`--rules-dir` 指定時はプロジェクトレベルと同様に `~/<rules-dir>/rules/markdown.md` へ
+展開される。いずれも `CLAUDE_CONFIG_DIR` の別プロファイルには追従しない。旧実装と同一)。
 
 ## 2026-08-28 の実害バグ修正(セル跨ぎペアリング・約物の単語文字扱い)
 
