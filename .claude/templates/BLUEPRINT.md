@@ -18,6 +18,7 @@
 | 再発ミスの振り分け | 本書 §10 | `skeletons/CLAUDE.project.md` 修正指摘の項 |
 | 規約配置の一般原則 | `rules/growing-docs.md`「Placement of durable rules」 | 本書 §10(再発ミス時のルーティングに限定) |
 | ディレクトリ配置規約 | `rules/coding-principles.md` §13 | `skeletons/architecture.md` 冒頭コメント(ポインタのみ・転記しない) |
+| plan mode 粒度の判定基準(計画粒度 / タスク粒度) | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用 |
 
 ## 1. 目的と原則
 
@@ -91,13 +92,14 @@
 
 ````
 <project>/
+├── plan.md                # 初期化時は作らない。ユーザーが通常モードの壁打ちで作る全体構想(五層目。§6)
 ├── CLAUDE.md              # skeletons/CLAUDE.project.md から生成(30-50 行)
 ├── HANDOFF.md             # skeletons/handoff.md からコピー(git コミット対象)
 ├── TODO.md                # 初期化時は作らない。/breakdown 実行時に skeletons/todo.md から生成
 ├── docs/
 │   ├── decisions.md       # skeletons/decisions.md からコピー(git コミット対象)
 │   ├── architecture.md    # skeletons/architecture.md から生成(初期化時。既存プロジェクトは実ツリーから起こす)
-│   └── design/<slug>.md   # 初期化時は作らない。/breakdown 実行時に skeletons/design.md から生成
+│   └── design/<slug>.md   # 初期化時は作らない。/elaborate 実行時に skeletons/design.md から生成
 ├── .claude/
 │   └── rules/             # §5 で選択したルールのみコピー
 └── agents/                # ロールを配置する時のみ(構成は §7 で目的に応じて選定)
@@ -137,11 +139,12 @@
 
 言語が後から増えた場合は、該当ルールを手動で `cp` すればよい(再 `/initialize` でも可)。
 
-## 6. ハンドオフ四層設計とアーカイブ
+## 6. ハンドオフ五層設計とアーカイブ
 
 | 層 | 担当 | 管理 |
 | -- | ---- | ---- |
 | auto memory(組み込み) | 個人的な学び・環境固有の事実・好み | Claude Code が自動管理。何も作らない |
+| `plan.md`(ルート直下) | 全体構想・フェーズ構造・スコープ(最上位の why/what。状態を書かない) | git 管理。ユーザーが通常モードの壁打ちで作る。全体構想に関わる決定時に更新し `docs/decisions.md` に 1 行。`~/.claude/plans/` の plan mode プランファイル(repo 外・揮発性)とは別物 |
 | `HANDOFF.md`(ルート直下) | タスク状態・仕掛かり中・次の一手・要確認 | git 管理。**毎セッション終了時に全体上書き**(追記しない) |
 | git log | タスク単位の作業ログ(何を依頼され・どう対応したか) | **1 タスク完了 = 1 コミット**。自動ロードなし、検索で必要箇所のみ引く |
 | `docs/decisions.md` | 仕様解釈・設計からの逸脱・ユーザー決定(1行/件) | git 管理。セッション終了時、該当があれば追記(ローテーション対象外) |
@@ -156,8 +159,9 @@ HANDOFF.md は全体上書きで過去が消え、decisions.md は判断(なぜ)
 - **粒度**: 1 タスク完了 = 1 コミット。Claude が自動で実行する。変更を生まないタスク
   (調査・見送り判断)も `git commit --allow-empty` で T<n> 付きコミットを残し、
   調査結果の要点は本文「対応:」に書く(diff ゼロの作業を作業ログ層から欠落させない)
-- **メッセージ書式**(prefix は feat / fix / docs / refactor / plan / chore または
-  スコープ名。plan は /breakdown による計画着地コミット用):
+- **メッセージ書式**(prefix は feat / fix / docs / refactor / design / plan / chore または
+  スコープ名。design は /elaborate による設計書コミット用、plan は /breakdown による
+  計画着地コミット用):
 
   ````
   <prefix>: <タスク要約(50字以内)>
@@ -197,36 +201,54 @@ TODO.md 側が完了タスクを積極的にローテーションして手放す
 diff で無損失を機械的に検証する。archive は自動ロードされないため、肥大化しても
 コンテキストコストはゼロのまま(必要時のみ明示的に読む)。
 
-### 実行計画フェーズとの接続(/breakdown)
+### 実行計画フェーズとの接続(/elaborate・/breakdown)
 
 プロジェクトのライフサイクルは次の流れを標準とする(本節が正):
 
 ````
-/initialize(下地)→ plan mode(計画)→ /breakdown(着地)→ 実行(1タスク=1コミット)→ /follow-up(終了時の検査と是正)
-                                          │
-                                          ├─ docs/design/<slug>.md  … 安定文書(why/what。状態を書かない)
-                                          └─ TODO.md                … 実行状態(タスクID通し番号+完了条件)
+壁打ち(通常モード)→ plan.md(全体構想)→ /initialize(下地)
+  → /elaborate(設計書へ。入力は plan.md の 1 フェーズ、または plan mode の承認済みプラン+会話)
+  → /breakdown(TODO へ。入力は設計書だけ)→ 実行(1タスク=1コミット)→ /follow-up(終了時の検査と是正)
+  → 次フェーズ: /elaborate へ戻る
+        ├─ docs/design/<slug>.md  … 安定文書(フェーズ内の why/what。状態を書かない。plan.md §n へのポインタを持つ)
+        └─ TODO.md                … 実行状態(計画 #n = plan.md のフェーズ。タスクID通し番号+完了条件)
+実行中の plan mode(既存 T<n> を実行する手段の計画 = タスク粒度)は /elaborate・/breakdown の対象外
 ````
 
-- **着地が必要な理由**: plan mode のプランファイルは `~/.claude/plans/` にあり
-  **repo 外・揮発性** で、しかも会話の検討過程を要約した骨子に過ぎない。耐久形は
-  /breakdown が生成する着地物である。着地は **plan 承認直後の同一セッション** で行う
-  (探索結果・代替案・意図の行間が生きているのは承認直後だけ)。/breakdown は
-  プランの転記ではなく、会話コンテキストを一次情報としてプランより詳細に起こす
-- **タスクID(T<n>)が四層をつなぐ接続キー**: TODO.md(定義・チェック状態)⇔
+- **着地が必要な理由**: `plan.md` は repo 内の安定文書だが、骨子から詳細まで粒度がまちまちで
+  フェーズ内の未決定事項を含む。plan mode のプランファイルは `~/.claude/plans/` にあり
+  **repo 外・揮発性** で、しかも会話の検討過程を要約した骨子に過ぎない。どちらも耐久形は
+  /elaborate が生成する設計書と /breakdown が生成する TODO.md である。plan.md 経路では
+  **plan.md が一次情報** で、未決定事項は質問で埋める(推測で埋めない)。plan mode 経路では
+  **承認直後の同一セッション** で /elaborate を行う(探索結果・代替案・意図の行間が生きているのは
+  承認直後だけ)。/elaborate はプランの転記ではなく、会話コンテキストを一次情報として
+  プランより詳細に起こす
+- **粒度の区別(暴走防止)**: plan mode には 2 種類ある。**計画粒度**(新しいフェーズ・施策。
+  既存のどの T<n> の完了条件にも収まらない)→ /elaborate → /breakdown。**タスク粒度**(既存 T<n> を
+  実行する手段の計画)→ 何もしない(プランは T<n> の実行手段に過ぎず、成果は T<n> の完了条件で
+  検証される)。判定基準は「このプランの成果は既存のどの T<n> の完了条件で検証されるか」
+  (正は `skeletons/todo.md` §0)。区別が無かった実例: 2026-08 のプロジェクトで 25 日間に
+  /breakdown が 40 回走り、タスクの実行計画がさらにタスクを産み続けた
+- **タスクID(T<n>)が五層をつなぐ接続キー**: TODO.md(定義・チェック状態)⇔
   コミット要約の T<n>(git log --grep でタスク単位の全作業を抽出)⇔
   decisions.md のタスクID列(なぜ)⇔ HANDOFF.md の仕掛かり中(今)。
   通し番号・再利用禁止(規約の実体は `skeletons/todo.md` の冒頭コメントに同梱)。
   TODO.md 内のグルーピング・ソート用インデックス `#<n>`/`#<n>-<m>` は表示専用であり、
-  四層の接続には使わない(接続キーは常に T<n>)
-- **四文書の境界**: 設計書 = why/what(安定・状態を書かない)、TODO.md = 実行状態、
+  五層の接続には使わない(接続キーは常に T<n>)。プロジェクトが plan.md を持つ場合、
+  計画 `#<n>` は plan.md のフェーズに対応する(1 フェーズ = 1 回の /elaborate = 1 設計書 = 1 計画行)
+- **五文書の境界**: plan.md = 全体構想(フェーズ構成・スコープ・方針。最上位の why/what)、
+  設計書 = フェーズ内の why/what(安定・状態を書かない)、TODO.md = 実行状態、
   HANDOFF.md = 今、**docs/architecture.md = 今の形**(ディレクトリ構成。こちらも安定文書で
   状態を書かない)。**境界を跨ぐ転記が形骸化の始まり**(転記は必ず drift する。
   ポインタで参照する)
-- TODO.md・docs/design/ は初期化時には作らない。/breakdown が
-  `skeletons/todo.md`・`skeletons/design.md` から生成する
+- **plan.md の更新契機**: 全体構想に関わる決定(フェーズ構成・スコープ・方針の変更)が
+  /elaborate の対話や実装中に出たら、plan.md を更新し `docs/decisions.md` に 1 行追記する。
+  フェーズ内の詳細は設計書に書く(plan.md に書き戻さない)。plan.md を持たないプロジェクト
+  (plan mode 起点のみ)では、設計書の「全体構想」行は「なし」とする
+- TODO.md・docs/design/ は初期化時には作らない。設計書は /elaborate が
+  `skeletons/design.md` から、TODO.md は /breakdown が `skeletons/todo.md` から生成する
 - **`docs/architecture.md` の配線**: `/initialize` が生成(新規プロジェクトは検出言語の標準
-  レイアウトから初期形を、既存プロジェクトは実ツリーから起こす)。`/breakdown` は計画が新規
+  レイアウトから初期形を、既存プロジェクトは実ツリーから起こす)。`/elaborate` は計画が新規
   ディレクトリを要する時、実装着手前にツリーと決定表を更新する。`/follow-up` はセッション終了時に
   実ツリーとの乖離を機械検査する(§11 と同じ検証を差分検査として流用)。加えて機構側の安全網として
   `hooks/check-new-directory.sh`(PreToolUse)が新規ディレクトリ作成時に `docs/architecture.md` の
@@ -349,7 +371,7 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 だけに頼らない — frontmatter のような機械的トリガーの陳腐化は、動作させるまで気づけない。
 
 例外: 遅延生成ファイル(`.claude/archive/` — 初回ローテーション時に生成、
-`TODO.md`・`docs/design/` — /breakdown 実行時に生成、`CHANGELOG` 等)の不在は
+`docs/design/` — /elaborate 実行時に生成、`TODO.md` — /breakdown 実行時に生成、`CHANGELOG` 等)の不在は
 エラー扱いしない。ポインタ実在確認(1)および `paths:` 一致確認(2)の対象から除外する。
 
 1. **ポインタの実在確認**: `CLAUDE.md`(および `HANDOFF.md` ヘッダコメント)が言及する

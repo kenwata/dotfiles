@@ -6,13 +6,13 @@ disable-model-invocation: true
 
 `~/.claude/templates/BLUEPRINT.md` を読み、その手順に従ってこのプロジェクトを初期化してください。要点:
 
-1. **検出**(ユーザー入力なし): プロジェクト名(cwd の basename)、言語(BLUEPRINT §5 のマーカーファイルを Glob)、build/test/lint コマンド(package.json / Makefile / justfile / pyproject.toml / Cargo.toml 等から)、一行説明(README.md)、**目的の仮説**(README・既存コードから推測。新規空プロジェクトでは仮説なし)、既存の CLAUDE.md・`.claude/`・`HANDOFF.md`・旧方式 `.claude/handoff.md` の有無と内容、**既存のディレクトリ構造**(`git ls-files` で追跡対象ディレクトリを把握)、**git repo の有無**(`git rev-parse --is-inside-work-tree`)。
+1. **検出**(ユーザー入力なし): プロジェクト名(cwd の basename)、言語(BLUEPRINT §5 のマーカーファイルを Glob)、build/test/lint コマンド(package.json / Makefile / justfile / pyproject.toml / Cargo.toml 等から)、一行説明(README.md)、**目的の仮説**(README・既存コードから推測。新規空プロジェクトでは仮説なし)、**`plan.md`**(引数でパスが渡された、またはリポジトリ直下に存在する場合。壁打ちで作った全体構想 — BLUEPRINT §6 の五層目。あれば **目的の仮説とロール選定の一次情報** にし、README・既存コードより優先する)、既存の CLAUDE.md・`.claude/`・`HANDOFF.md`・旧方式 `.claude/handoff.md` の有無と内容、**既存のディレクトリ構造**(`git ls-files` で追跡対象ディレクトリを把握)、**git repo の有無**(`git rev-parse --is-inside-work-tree`)。
 2. **確認**: AskUserQuestion を **1 回だけ** 呼ぶ(最大 3 問)。①言語構成の確認(検出済みを事前選択、multiSelect)②目的とロール構成(BLUEPRINT §3 の出し方・§7 の選定原則に従う。仮説が立てば「目的+推奨ロールセット」を第一候補に、立たなければ「ロールなし/開発/調査系/文書系」を提示。デフォルト: ロールなし)③一行説明(README が無い/空の時のみ)。旧方式 `.claude/handoff.md` を検出した場合は BLUEPRINT §9 の移行手順に従い別途確認する。それ以外は聞かない。
 3. **生成**(BLUEPRINT §4-§5、冪等性は §9 に厳密に従う):
    - git repo でなければ `git init`(既存 repo ではスキップ)
    - `mkdir -p .claude/rules` → 常時ルール(coding-principles / testing / markdown / growing-docs)+ 選択言語のルールを `~/.claude/templates/rules/` から `cp -n`
    - CLAUDE.md: 無ければ `~/.claude/templates/skeletons/CLAUDE.project.md` の placeholder を検出値で埋めて Write(不明コマンドは「(未設定 — 判明したら記入)」、捏造禁止)。**既存なら上書きせず**、不足節のみ diff 提示して承認後に追記
-   - `cp -n ~/.claude/templates/skeletons/handoff.md HANDOFF.md`(プロジェクトルート直下)→ `{{date}}` を今日の日付に Edit
+   - `cp -n ~/.claude/templates/skeletons/handoff.md HANDOFF.md`(プロジェクトルート直下)→ `{{date}}` を今日の日付に Edit。`plan.md` を検出している場合は「次セッションの最初の一手」を `/elaborate`(plan.md の最初のフェーズ)に書き換える(次の工程が設計書の詳細化であることを配線する)
    - `mkdir -p docs` → `cp -n ~/.claude/templates/skeletons/decisions.md docs/decisions.md`
    - `docs/architecture.md`: 無ければ `~/.claude/templates/skeletons/architecture.md` の placeholder を埋めて Write。新規プロジェクトなら検出言語の標準レイアウト(規約の実体は `.claude/rules/coding-principles.md` §13)から初期形を書く。既存プロジェクトなら **実ツリーから起こす**(検出したディレクトリ構造を正として記録する。現状が規約に反していても無断で移動せず、「未決」節に列挙する)。既存なら上書きせず、不足があれば diff 提示のうえ承認後に追記
    - 旧方式 `.claude/handoff.md` を検出していた場合: BLUEPRINT §9 の移行手順(承認後に内容を `HANDOFF.md` へ整形移行→旧ファイル削除→`growing-docs.md` のパス確認)を実施

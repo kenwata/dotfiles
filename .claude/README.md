@@ -23,24 +23,28 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 
 1. **CLAUDE.md はポインタ型**(50 行以内)— 規約の中身を書かず、「どこに何があるか」と
    セッション運用だけを書く。規約本体は path-scoped な rules に置き、必要時のみロードさせる
-2. **ハンドオフは四層** — 役割を分けて、常時ロードされる層を最小に保つ(BLUEPRINT §6)
+2. **ハンドオフは五層** — 役割を分けて、常時ロードされる層を最小に保つ(BLUEPRINT §6)
 
    | 層 | 担当 | コンテキストコスト |
    | -- | ---- | ------------------ |
    | auto memory | 個人的な学び・環境固有の事実 | 組み込み。何も作らない |
+   | `plan.md`(ルート直下) | 全体構想・フェーズ構造(最上位の why/what) | ゼロ。壁打ちで作り、全体に関わる決定時のみ更新。`/elaborate` が読む |
    | `HANDOFF.md`(ルート直下) | 今の状態・仕掛かり中・次の一手 | 40 行以内。毎セッション終了時に **全体上書き**(追記しない) |
    | git log | 何を依頼され・どう対応したか(逐語) | ゼロ。**1 タスク完了 = 1 コミット**(変更ゼロのタスクは `--allow-empty`)、検索で必要箇所のみ引く |
    | `docs/decisions.md` | 仕様解釈・逸脱・ユーザー決定(1 行/件) | ゼロ。append-only |
    | `.claude/archive/` | TODO 等の予算超過分の逐語退避 | ゼロ。初回ローテーション時に生成 |
 
-   **タスクID `T<n>` が四層をつなぐ接続キー**。TODO.md が定義し、コミット要約に含め
+   **タスクID `T<n>` が五層をつなぐ接続キー**。TODO.md が定義し、コミット要約に含め
    (境界付き `git log -E --grep='T7([^0-9]|$)'` でタスク単位の全作業を引ける。裸の
    `--grep='T7'` は T70 等に誤マッチする)、decisions.md のタスクID列と
    HANDOFF.md の仕掛かり中が参照する。通し番号・再利用禁止
-3. **計画は /breakdown で着地させる** — plan mode のプランファイルは `~/.claude/plans/` にあり
-   **repo 外・揮発性** で、しかも会話の検討過程を要約した骨子に過ぎない。承認直後の同一
-   セッションで `docs/design/<slug>.md`(why/what。状態を書かない)と `TODO.md`(実行状態)へ
-   落とす。行間が生きているのは承認直後だけなので、後回しにしない
+3. **計画は /elaborate で設計書に、/breakdown で TODO に着地させる** — 壁打ちで作った
+   `plan.md`(repo 内の全体構想)は 1 フェーズずつ `/elaborate` で対話的に詳細化して
+   `docs/design/<slug>.md`(why/what。状態を書かない)へ、設計書は `/breakdown` で `TODO.md`
+   (実行状態)へ落とす。plan mode のプランファイルは `~/.claude/plans/` にあり **repo 外・揮発性**
+   で骨子に過ぎないので、承認直後の同一セッションで `/elaborate` に合流させる(行間が生きているのは
+   承認直後だけ)。**タスク `T<n>` を実行するための plan mode には両コマンドを走らせない**
+   (タスクの実行計画がさらにタスクを産む暴走の防止。判定基準は `TODO.md` §0)
 4. **ロール指示は遅延ロード** — マルチエージェント(agmsg)のロール定義は
    プロジェクト内 `agents/<role>/CLAUDE.md` に置く。その配下で作業するセッションにしか
    ロードされないため、他セッションを汚染しない
@@ -67,7 +71,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 10. **構造は文書化して配線する** — ディレクトリ配置規約の実体は `rules/coding-principles.md` §13
    (常時ロード枠)。プロジェクトごとの適用結果は `docs/architecture.md`(初期化時に生成。
    新規プロジェクトは検出言語の標準レイアウトから、既存プロジェクトは実ツリーから起こす)に記録し、
-   実態と同期させ続ける。配線は 3 段構え: `/breakdown` が新規ディレクトリを着地前に反映、
+   実態と同期させ続ける。配線は 3 段構え: `/elaborate` が新規ディレクトリを設計時に反映、
    `/follow-up` がセッション終了時に実ツリーとの乖離を機械検査、機構側の安全網として
    `hooks/check-new-directory.sh`(PreToolUse)が新規ディレクトリ作成時に確認を促す
    (Write 経由のみ検知。`mkdir` 等はプロンプト側の配線が一次的な強制手段であり、これは既知の限界)
@@ -119,11 +123,12 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   └── diff-reviewer.md         # 差分の外部レビュー(/follow-up 手順 4)— 読み取り専用
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
-│   ├── breakdown.md             # /breakdown — 承認済みプランを設計書+TODO へ着地
+│   ├── elaborate.md             # /elaborate — 計画(plan.md の 1 フェーズ / plan mode)を対話で詳細化し設計書へ
+│   ├── breakdown.md             # /breakdown — 設計書を TODO へ分解(設計書だけを入力)
 │   ├── follow-up.md             # /follow-up — 終了時に計画と成果の差分を検査・是正
 │   ├── agmsg.md                 # /agmsg — マルチエージェントメッセージング
 │   └── markdown-cleanup.md      # /markdown-cleanup — markdown-format CLI をファイル全体モードで適用し単独コミット
-└── templates/                   # /initialize と /breakdown が読むテンプレート群
+└── templates/                   # /initialize・/elaborate・/breakdown が読むテンプレート群
     ├── BLUEPRINT.md             # 初期化設計書 — 判断基準と手順のすべてはここ
     ├── skeletons/               # 機械的に穴埋め・コピーする雛形(6 ファイル)
     │   ├── CLAUDE.project.md    # プロジェクト CLAUDE.md 雛形(ポインタ型)
@@ -194,8 +199,9 @@ claude
 └── agents/                # ロール配置ありの時のみ(構成は目的に応じて選定)
 ````
 
-`TODO.md` と `docs/design/<slug>.md` は初期化時には作らない。plan mode で計画を立て、
-`/breakdown` を実行した時に生成される。`.claude/archive/` も初期化時には作られず、
+`TODO.md` と `docs/design/<slug>.md` は初期化時には作らない。設計書は `/elaborate` を、
+`TODO.md` は `/breakdown` を実行した時に生成される。`plan.md` は `/initialize` より前に
+ユーザーが壁打ちで作る(無くてもよい。その場合は plan mode 起点になる)。`.claude/archive/` も初期化時には作られず、
 TODO 等が行数予算を超えた初回ローテーション時に生成される(溢れた分は逐語移動・要約禁止)。
 
 冪等なので既存プロジェクトで実行しても安全(既存ファイルは上書きせず全スキップ報告。
@@ -203,12 +209,22 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
 
 ## セッションの回し方
 
-ライフサイクルの標準形:
+ライフサイクルの標準形(BLUEPRINT §6 が正):
 
 ````
-/initialize(下地)→ plan mode(計画)→ /breakdown(着地)→ 実行(1 タスク = 1 コミット)
-  → /follow-up(終了時の検査と是正)
+1. 壁打ち(通常モード)→ plan.md(全体構想)をリポジトリ直下に作る
+2. /initialize → 下地(rules / CLAUDE.md / HANDOFF.md / docs/decisions.md / docs/architecture.md /
+   agents/<role>/)。plan.md があればロール構成の一次情報にし、HANDOFF の次の一手を /elaborate にする
+3. 壁打ち続行(必要な分)→ 全体構想に関わる決定は plan.md を更新 + docs/decisions.md に 1 行
+4. /elaborate → plan.md の 1 フェーズ(または plan mode の承認済みプラン+会話)を対話で詳細化し、
+   docs/design/<slug>.md を生成。新規ディレクトリが要るなら docs/architecture.md もここで更新
+5. /breakdown docs/design/<slug>.md → TODO.md の計画 #n + タスク T<n>…。HANDOFF の次の一手 = T<n>
+6. 実行(1 タスク = 1 コミット)→ /follow-up(終了時の検査と是正)→ 次フェーズは 4 へ戻る
 ````
+
+plan mode は 4 の入口としてだけ `/elaborate` に合流する。**6 の実行中に `T<n>` を実行するための
+plan mode を通っても、`/elaborate`・`/breakdown` は走らせない**(成果は既存 `T<n>` の完了条件で
+検証される。判定基準は `TODO.md` §0)。
 
 - **開始時**: `HANDOFF.md` と `TODO.md` の 2 つを読む。着手点は HANDOFF.md の「次の一手」
 - **タスク完了ごと**: ①TODO.md の該当タスクを `[x]` に更新 ②コミット(要約に `T<n>` を含める。

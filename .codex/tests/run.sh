@@ -47,6 +47,7 @@ grep -qx 'secret-placeholder' "$fake_codex/auth.json"
 grep -qx 'system-marker' "$fake_codex/skills/.system/marker"
 grep -qx 'session-marker' "$fake_codex/sessions/marker"
 [[ -L "$fake_codex/skills/follow-up" ]]
+[[ -L "$fake_codex/skills/elaborate" ]]
 grep -qx 'existing-advisor-backup' "$backup/agents/advisor.toml"
 migrated_advisor_backup="$(find "$backup/agents" -maxdepth 1 -type l -name 'advisor.toml.*')"
 [[ -n "$migrated_advisor_backup" ]]
