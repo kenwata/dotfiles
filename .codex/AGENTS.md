@@ -73,6 +73,8 @@ The main context owns the outcome, plan, and final decisions. This section is a 
 - `AGENTS.md` is the Codex instruction file. `CLAUDE.md` is configured as a fallback during migration when a project has no `AGENTS.md`.
 - When a project has `.codex/rules/*.md`, load only the rule files relevant to the files being changed. Codex has no Claude-compatible `paths:` auto-loader, so path applicability must be checked explicitly.
 - At session start, read `HANDOFF.md` and `TODO.md` when present. Use the next action in `HANDOFF.md` as the default starting point.
+- When a `TODO.md` task table carries the execution column (`実`), its format is defined by the 実行系/モデル section of `~/.claude/templates/skeletons/todo.md`. The Codex value is `Codex/<configured model>`, for example `Codex/gpt-5.6-sol`. Fill it in when marking the task `[x]`.
+- The model guidance in that skeleton's 難易度 section names Claude Code models (sonnet, opus, fable) and does not apply here. In Codex, treat difficulty as a weight estimate only and do not switch models by difficulty.
 - Use the `initialize`, `breakdown`, `follow-up`, and `markdown-cleanup` skills for their corresponding workflows.
 - Use the `agmsg` skill for cross-agent messaging. Never read or edit its SQLite/config state directly.
 
