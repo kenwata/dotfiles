@@ -1,0 +1,2 @@
+-- Autocommands live here. Empty for now; the first entries are expected when a
+-- terminal plugin or an LSP server needs per-event setup.
