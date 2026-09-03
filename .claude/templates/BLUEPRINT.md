@@ -19,6 +19,8 @@
 | 規約配置の一般原則 | `rules/growing-docs.md`「Placement of durable rules」 | 本書 §10(再発ミス時のルーティングに限定) |
 | ディレクトリ配置規約 | `rules/coding-principles.md` §13 | `skeletons/architecture.md` 冒頭コメント(ポインタのみ・転記しない) |
 | plan mode 粒度の判定基準(計画粒度 / タスク粒度) | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用 |
+| 設計書索引の書式・列定義 | `skeletons/design-index.md` 冒頭コメント | 本書 §6(位置づけと更新配線のみ)・`README.md`(列名の列挙のみ) |
+| 設計書の「全体構想」行の書式 | `skeletons/design.md` 冒頭コメント | `commands/elaborate.md` 手順4(生成側)・`commands/follow-up.md` 機械チェック⑨(検査側。書式を検査するため逐語で持つ) |
 
 ## 1. 目的と原則
 
@@ -99,7 +101,9 @@
 ├── docs/
 │   ├── decisions.md       # skeletons/decisions.md からコピー(git コミット対象)
 │   ├── architecture.md    # skeletons/architecture.md から生成(初期化時。既存プロジェクトは実ツリーから起こす)
-│   └── design/<slug>.md   # 初期化時は作らない。/elaborate 実行時に skeletons/design.md から生成
+│   └── design/
+│       ├── <slug>.md      # 初期化時は作らない。/elaborate 実行時に skeletons/design.md から生成
+│       └── index.md       # 同。設計書索引(派生ビュー。skeletons/design-index.md から生成)
 ├── .claude/
 │   └── rules/             # §5 で選択したルールのみコピー
 └── agents/                # ロールを配置する時のみ(構成は §7 で目的に応じて選定)
@@ -210,7 +214,8 @@ diff で無損失を機械的に検証する。archive は自動ロードされ�
   → /elaborate(設計書へ。入力は plan.md の 1 フェーズ、または plan mode の承認済みプラン+会話)
   → /breakdown(TODO へ。入力は設計書だけ)→ 実行(1タスク=1コミット)→ /follow-up(終了時の検査と是正)
   → 次フェーズ: /elaborate へ戻る
-        ├─ docs/design/<slug>.md  … 安定文書(フェーズ内の why/what。状態を書かない。plan.md §n へのポインタを持つ)
+        ├─ docs/design/<slug>.md  … 安定文書(フェーズ内の why/what。状態を書かない。plan.md のフェーズへのポインタを持つ)
+        ├─ docs/design/index.md   … 派生ビュー(設計書の索引。列定義は skeletons/design-index.md が正。/elaborate が追記・/breakdown が T 列)
         └─ TODO.md                … 実行状態(計画 #n = plan.md のフェーズ。タスクID通し番号+完了条件)
 実行中の plan mode(既存 T<n> を実行する手段の計画 = タスク粒度)は /elaborate・/breakdown の対象外
 ````
@@ -240,13 +245,21 @@ diff で無損失を機械的に検証する。archive は自動ロードされ�
   設計書 = フェーズ内の why/what(安定・状態を書かない)、TODO.md = 実行状態、
   HANDOFF.md = 今、**docs/architecture.md = 今の形**(ディレクトリ構成。こちらも安定文書で
   状態を書かない)。**境界を跨ぐ転記が形骸化の始まり**(転記は必ず drift する。
-  ポインタで参照する)
+  ポインタで参照する)。**`docs/design/index.md`(設計書索引)は五文書に含めない** —
+  各設計書の実体(`# 設計: <表題>` 見出しと「全体構想」行)と git の追加履歴から起こす
+  **派生ビュー** であり、正を持たない。内容を写すのではなく実体から導出するため転記禁止に
+  反しないが、正でないので索引を根拠に設計判断をしない(必ず設計書本体を開く)。導入の理由は、
+  設計書が増えるとファイル名からは作成順が追えず、名前が似た設計書(`deck-` で始まる 5 件が
+  同一プロジェクトに実在した)の内容を判別できなくなること。書式・列定義の正は
+  `skeletons/design-index.md` 冒頭コメント、更新の配線は `/elaborate`(新規行)・
+  `/breakdown`(`T` 列)・`/follow-up` 機械チェック⑩(漏れと食い違いの検出)
 - **plan.md の更新契機**: 全体構想に関わる決定(フェーズ構成・スコープ・方針の変更)が
   /elaborate の対話や実装中に出たら、plan.md を更新し `docs/decisions.md` に 1 行追記する。
   フェーズ内の詳細は設計書に書く(plan.md に書き戻さない)。plan.md を持たないプロジェクト
   (plan mode 起点のみ)では、設計書の「全体構想」行は「なし」とする
 - TODO.md・docs/design/ は初期化時には作らない。設計書は /elaborate が
-  `skeletons/design.md` から、TODO.md は /breakdown が `skeletons/todo.md` から生成する
+  `skeletons/design.md` から、索引 `docs/design/index.md` も /elaborate が
+  `skeletons/design-index.md` から、TODO.md は /breakdown が `skeletons/todo.md` から生成する
 - **`docs/architecture.md` の配線**: `/initialize` が生成(新規プロジェクトは検出言語の標準
   レイアウトから初期形を、既存プロジェクトは実ツリーから起こす)。`/elaborate` は計画が新規
   ディレクトリを要する時、実装着手前にツリーと決定表を更新する。`/follow-up` はセッション終了時に
@@ -371,7 +384,7 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 だけに頼らない — frontmatter のような機械的トリガーの陳腐化は、動作させるまで気づけない。
 
 例外: 遅延生成ファイル(`.claude/archive/` — 初回ローテーション時に生成、
-`docs/design/` — /elaborate 実行時に生成、`TODO.md` — /breakdown 実行時に生成、`CHANGELOG` 等)の不在は
+`docs/design/`(`<slug>.md` と `index.md`)— /elaborate 実行時に生成、`TODO.md` — /breakdown 実行時に生成、`CHANGELOG` 等)の不在は
 エラー扱いしない。ポインタ実在確認(1)および `paths:` 一致確認(2)の対象から除外する。
 
 1. **ポインタの実在確認**: `CLAUDE.md`(および `HANDOFF.md` ヘッダコメント)が言及する

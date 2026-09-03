@@ -44,7 +44,12 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    (実行状態)へ落とす。plan mode のプランファイルは `~/.claude/plans/` にあり **repo 外・揮発性**
    で骨子に過ぎないので、承認直後の同一セッションで `/elaborate` に合流させる(行間が生きているのは
    承認直後だけ)。**タスク `T<n>` を実行するための plan mode には両コマンドを走らせない**
-   (タスクの実行計画がさらにタスクを産む暴走の防止。判定基準は `TODO.md` §0)
+   (タスクの実行計画がさらにタスクを産む暴走の防止。判定基準は `TODO.md` §0)。
+   設計書が増えるとファイル名から作成順が追えず、名前の似た設計書の内容も判別できなくなるため、
+   `docs/design/index.md`(作成日 / フェーズ / 設計書 / 表題 / タスクID範囲の索引)を併せて持つ。
+   索引は設計書の実体と git の追加履歴から起こす **派生ビュー** であり正ではない
+   (`/elaborate` が行を足し、`/breakdown` が `T` 列を埋め、`/follow-up` の機械チェック⑩が
+   漏れと食い違いを検出する)
 4. **ロール指示は遅延ロード** — マルチエージェント(agmsg)のロール定義は
    プロジェクト内 `agents/<role>/CLAUDE.md` に置く。その配下で作業するセッションにしか
    ロードされないため、他セッションを汚染しない
@@ -130,11 +135,12 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   └── markdown-cleanup.md      # /markdown-cleanup — markdown-format CLI をファイル全体モードで適用し単独コミット
 └── templates/                   # /initialize・/elaborate・/breakdown が読むテンプレート群
     ├── BLUEPRINT.md             # 初期化設計書 — 判断基準と手順のすべてはここ
-    ├── skeletons/               # 機械的に穴埋め・コピーする雛形(6 ファイル)
+    ├── skeletons/               # 機械的に穴埋め・コピーする雛形(7 ファイル)
     │   ├── CLAUDE.project.md    # プロジェクト CLAUDE.md 雛形(ポインタ型)
     │   ├── handoff.md           # HANDOFF.md 雛形(書式規約をコメントで同梱)
     │   ├── todo.md              # TODO.md 雛形(§0 セッションプロトコル+タスクID規約)
-    │   ├── design.md            # docs/design/<slug>.md 雛形
+    │   ├── design.md            # docs/design/<slug>.md 雛形(「全体構想」行の書式規約を同梱)
+    │   ├── design-index.md      # docs/design/index.md 雛形(索引。作成日 / フェーズ / 設計書 / 表題 / T)
     │   ├── decisions.md         # docs/decisions.md 雛形
     │   └── architecture.md      # docs/architecture.md 雛形(構造の記録。ディレクトリ配置規約はここに書かず coding-principles.md §13 を参照)
     ├── rules/                   # コーディング規約+成長型ドキュメント規約(12 ファイル。原則 paths: 付き、
@@ -199,7 +205,7 @@ claude
 └── agents/                # ロール配置ありの時のみ(構成は目的に応じて選定)
 ````
 
-`TODO.md` と `docs/design/<slug>.md` は初期化時には作らない。設計書は `/elaborate` を、
+`TODO.md` と `docs/design/`(`<slug>.md`・`index.md`)は初期化時には作らない。設計書と索引は `/elaborate` を、
 `TODO.md` は `/breakdown` を実行した時に生成される。`plan.md` は `/initialize` より前に
 ユーザーが壁打ちで作る(無くてもよい。その場合は plan mode 起点になる)。`.claude/archive/` も初期化時には作られず、
 TODO 等が行数予算を超えた初回ローテーション時に生成される(溢れた分は逐語移動・要約禁止)。
@@ -217,8 +223,9 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
    agents/<role>/)。plan.md があればロール構成の一次情報にし、HANDOFF の次の一手を /elaborate にする
 3. 壁打ち続行(必要な分)→ 全体構想に関わる決定は plan.md を更新 + docs/decisions.md に 1 行
 4. /elaborate → plan.md の 1 フェーズ(または plan mode の承認済みプラン+会話)を対話で詳細化し、
-   docs/design/<slug>.md を生成。新規ディレクトリが要るなら docs/architecture.md もここで更新
-5. /breakdown docs/design/<slug>.md → TODO.md の計画 #n + タスク T<n>…。HANDOFF の次の一手 = T<n>
+   docs/design/<slug>.md を生成 + docs/design/index.md に 1 行追記。
+   新規ディレクトリが要るなら docs/architecture.md もここで更新
+5. /breakdown docs/design/<slug>.md → TODO.md の計画 #n + タスク T<n>…(索引の T 列も埋める)。HANDOFF の次の一手 = T<n>
 6. 実行(1 タスク = 1 コミット)→ /follow-up(終了時の検査と是正)→ 次フェーズは 4 へ戻る
 ````
 
