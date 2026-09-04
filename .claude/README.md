@@ -143,7 +143,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     │   ├── design-index.md      # docs/design/index.md 雛形(索引。作成日 / フェーズ / 設計書 / 表題 / T)
     │   ├── decisions.md         # docs/decisions.md 雛形
     │   └── architecture.md      # docs/architecture.md 雛形(構造の記録。ディレクトリ配置規約はここに書かず coding-principles.md §13 を参照)
-    ├── rules/                   # コーディング規約+成長型ドキュメント規約(12 ファイル。原則 paths: 付き、
+    ├── rules/                   # コーディング規約+成長型ドキュメント規約(14 ファイル。原則 paths: 付き、
     │                            #   paths なし=常時ロードは coding-principles/testing の 2 件のみ — BLUEPRINT §1)
     └── roles/                   # ロール定義カタログ(計 9。目的に応じて選定・不足時は新規起草)
 ````
