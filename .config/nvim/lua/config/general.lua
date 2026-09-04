@@ -23,3 +23,11 @@ vim.o.clipboard = "unnamedplus"
 -- Candidates are tried in order when opening a file. ucs-bom comes first so a
 -- BOM is honoured before any heuristic runs; cp932 covers legacy Japanese files.
 vim.o.fileencodings = "ucs-bom,utf-8,cp932"
+
+-- Completion
+-- Built-in autocompletion (no plugin): pop up candidates while typing.
+vim.o.autocomplete = true
+-- Prepend "o" (omnifunc, wired to the LSP client automatically) so language-server
+-- candidates get priority; see :help ins-autocompletion on source ordering.
+vim.opt.complete:prepend("o")
+vim.opt.completeopt:append("fuzzy")
