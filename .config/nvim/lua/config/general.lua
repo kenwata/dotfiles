@@ -31,3 +31,7 @@ vim.o.autocomplete = true
 -- candidates get priority; see :help ins-autocompletion on source ordering.
 vim.opt.complete:prepend("o")
 vim.opt.completeopt:append("fuzzy")
+-- Without this, fuzzy matching on a short prefix (e.g. "os") can rank an unrelated
+-- long candidate (e.g. ChildProcessError) first and auto-select it; noselect shows
+-- the menu without pre-selecting anything, so nothing is inserted until confirmed.
+vim.opt.completeopt:append("noselect")
