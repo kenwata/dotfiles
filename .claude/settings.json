@@ -230,7 +230,12 @@
   },
   "inputNeededNotifEnabled": true,
   "language": "japanese",
-  "model": "opusplan",
+  "model": "opus[1m]",
+  "modelSettings": {
+    "claude-fable-5-1": {
+      "effortLevel": "medium"
+    }
+  },
   "permissions": {
     "defaultMode": "auto"
   },
