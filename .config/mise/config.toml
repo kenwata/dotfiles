@@ -1,0 +1,11 @@
+[tools]
+node = "lts"
+python = "3.12"
+uv = "latest"
+rust-analyzer = "2026-08-31"
+"npm:pyright" = "1.1.413"
+ruff = "0.16.5"
+lua-language-server = "3.19.1"
+"npm:bash-language-server" = "5.6.0"
+marksman = "2026-02-08"
+"npm:typescript-language-server" = "6.0.0"

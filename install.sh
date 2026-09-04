@@ -254,6 +254,7 @@ step4_symlinks() {
   mkdir -p "$DOTFILES/.claude/projects"
 
   # ~/.config 配下
+  backup_and_link "$DOTFILES/.config/mise" "$HOME/.config/mise"
   backup_and_link "$DOTFILES/.config/nvim" "$HOME/.config/nvim"
   backup_and_link "$DOTFILES/.config/peco" "$HOME/.config/peco"
   backup_and_link "$DOTFILES/.config/zsh"  "$HOME/.config/zsh"
