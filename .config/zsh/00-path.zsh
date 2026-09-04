@@ -19,3 +19,7 @@ if [[ -d "$HOME/.antigravity-ide/antigravity-ide/bin" ]]; then
     *) export PATH="$HOME/.antigravity-ide/antigravity-ide/bin:$PATH" ;;
   esac
 fi
+
+# Ghostty
+# ghostty +edit-config ができるようになる
+export PATH="/Applications/Ghostty.app/Contents/MacOS:$PATH"
