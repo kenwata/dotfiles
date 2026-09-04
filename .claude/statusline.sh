@@ -3,6 +3,7 @@
 input=$(cat)
 
 MODEL=$(echo "$input" | jq -r '.model.display_name // "?"')
+EFFORT=$(echo "$input" | jq -r '.effort.level // empty')
 DIR=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // "?"')
 COST=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
 DURATION_MS=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
@@ -96,5 +97,8 @@ MINS=$((DURATION_MS / 60000))
 SECS=$(((DURATION_MS % 60000) / 1000))
 COST_FMT=$(printf '$%.2f' "$COST")
 
-echo -e "${CYAN}[$MODEL]${RESET} 📁 ${DIR##*/}${GIT_STATUS}"
+EFFORT_TAG=""
+[ -n "$EFFORT" ] && EFFORT_TAG=" ${GRAY}·${RESET} ${EFFORT}"
+
+echo -e "${CYAN}[$MODEL${EFFORT_TAG}${CYAN}]${RESET} 📁 ${DIR##*/}${GIT_STATUS}"
 echo -e "ctx ${CTX_BAR}${LIMIT_BARS} | ${YELLOW}${COST_FMT}${RESET} | ⏱️ ${MINS}m ${SECS}s"
