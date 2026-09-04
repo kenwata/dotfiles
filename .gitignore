@@ -5,6 +5,7 @@
 
 # Claude Code — runtime-generated, not config
 .claude/history.jsonl
+.claude/feedback/
 .claude/backups/
 .claude/cache/
 .claude/projects/
@@ -91,6 +92,10 @@
 # tmux plugins — installed by tpm, not stored in repo
 .tmux/plugins/tmux-resurrect/
 .tmux/plugins/tmux-continuum/
+
+# Orca agent-hooks — インストーラが hooks 注入前に残す退避コピー (2026-09-04)
+.claude/settings.json.bak
+.codex/user-hooks.json.bak
 
 # Editor temporaries
 *.swp
