@@ -12,3 +12,5 @@ fi
 
 # 自分用設定
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
+
+export PATH="$HOME/.local/bin:$PATH"
