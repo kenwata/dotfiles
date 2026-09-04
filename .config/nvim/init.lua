@@ -9,3 +9,4 @@ vim.g.mapleader = " "
 require("config.general")
 require("config.keybind")
 require("config.autocmd")
+require("plugins")
