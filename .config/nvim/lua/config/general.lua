@@ -18,3 +18,8 @@ vim.o.incsearch = true
 
 -- Clipboard
 vim.o.clipboard = "unnamedplus"
+
+-- Encoding
+-- Candidates are tried in order when opening a file. ucs-bom comes first so a
+-- BOM is honoured before any heuristic runs; cp932 covers legacy Japanese files.
+vim.o.fileencodings = "ucs-bom,utf-8,cp932"
