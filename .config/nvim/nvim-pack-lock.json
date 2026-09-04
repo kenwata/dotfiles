@@ -4,6 +4,11 @@
       "rev": "2e6ea6f2a63cdf4fd3c05e6a054151d46848d319",
       "src": "https://github.com/coder/claudecode.nvim",
       "version": "0.3.0 - 0.4.0"
+    },
+    "nvim-lspconfig": {
+      "rev": "b89138d9af0a96e6048e202a15765fc6b6416bd4",
+      "src": "https://github.com/neovim/nvim-lspconfig",
+      "version": "2.0.0 - 3.0.0"
     }
   }
 }
