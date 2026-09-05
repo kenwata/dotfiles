@@ -26,9 +26,7 @@ symlink.
   `require("plugins")`.
 - `lua/config/general.lua`: `vim.o`/`vim.opt` settings, grouped by section comment.
 - `lua/config/keybind.lua`: `vim.keymap.set` mappings, each with an English `desc`.
-- `lua/config/autocmd.lua`: `vim.api.nvim_create_autocmd` entries. Turns on the LSP completion
-  source on `LspAttach`, and asks for candidates once on `InsertEnter` when the cursor follows
-  a keyword character (the built-in `'autocomplete'` only fires on typed input).
+- `lua/config/autocmd.lua`: `vim.api.nvim_create_autocmd` entries (currently empty).
 - `lua/plugins/init.lua`: declares every plugin in a single `vim.pack.add({...})` call with
   `load = function() end` (deferred), then `require`s each per-plugin config file below.
 - `lua/plugins/claudecode.lua`: config for `coder/claudecode.nvim`. Not loaded at startup;
