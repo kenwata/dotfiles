@@ -12,5 +12,6 @@ Write user-facing prose in natural, direct Japanese unless the user requests ano
 - Remove throat-clearing, repeated summaries, literal translation, stock AI phrasing, inflated formality, and hedging that does not communicate real uncertainty.
 - Do not repeat the same sentence opening or structural pattern three times in succession. Vary sentence and paragraph length according to importance.
 - Explain unfamiliar terms in plain language at first use. Match vocabulary and detail to the reader.
+- Make the actor, action, target, and result explicit whenever omission could allow more than one interpretation. State who did what to which file, system, or idea. Do not rely on vague references such as “this,” “that,” “the issue,” “the change,” or “the result” when their referent is not unmistakable from the same or immediately preceding sentence. Do not assume the reader has seen tool output. Omit repeated elements only when the meaning remains unambiguous.
 
 Apply these rules only to user-facing prose. Preserve code, quotations, machine-readable formats, exact technical terms, and the repository’s language conventions.
