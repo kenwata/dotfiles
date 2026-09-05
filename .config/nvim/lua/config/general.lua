@@ -41,3 +41,7 @@ vim.opt.complete:prepend("o")
 -- EX_TEMPFAIL) above the intended os.path. noselect shows the menu without
 -- pre-selecting anything, so nothing is inserted until confirmed.
 vim.opt.completeopt:append("noselect")
+-- The default "menu" hides the popup as soon as a single candidate remains, so narrowing
+-- "std::pr" (5 matches) to "std::pro" (only process) made the menu vanish with nothing
+-- inserted. menuone keeps it open for a lone match.
+vim.opt.completeopt:append("menuone")
