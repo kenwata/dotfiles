@@ -15,6 +15,12 @@ vim.o.softtabstop = 4
 -- Search
 vim.o.hlsearch = true
 vim.o.incsearch = true
+-- Case-insensitive by default; typing an uppercase letter switches a search back to
+-- case-sensitive (smartcase). Popup-menu completion follows the same setting
+-- (see :help compl-ignore-case), which is why this lives here rather than under
+-- Completion below.
+vim.o.ignorecase = true
+vim.o.smartcase = true
 
 -- Clipboard
 vim.o.clipboard = "unnamedplus"
@@ -30,8 +36,8 @@ vim.o.autocomplete = true
 -- Prepend "o" (omnifunc, wired to the LSP client automatically) so language-server
 -- candidates get priority; see :help ins-autocompletion on source ordering.
 vim.opt.complete:prepend("o")
-vim.opt.completeopt:append("fuzzy")
--- Without this, fuzzy matching on a short prefix (e.g. "os") can rank an unrelated
--- long candidate (e.g. ChildProcessError) first and auto-select it; noselect shows
--- the menu without pre-selecting anything, so nothing is inserted until confirmed.
+-- Plain prefix matching (no "fuzzy"): fuzzy matching on a short prefix (e.g. "os.pa")
+-- ranked unrelated candidates that merely contain the same letters in order (e.g.
+-- EX_TEMPFAIL) above the intended os.path. noselect shows the menu without
+-- pre-selecting anything, so nothing is inserted until confirmed.
 vim.opt.completeopt:append("noselect")
