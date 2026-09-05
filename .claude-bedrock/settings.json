@@ -70,6 +70,7 @@
   },
   "language": "japanese",
   "model": "opusplan",
+  "outputStyle": "Natural Japanese",
   "permissions": {
     "allow": [
       "Bash",
