@@ -32,7 +32,13 @@ require("gruvbox").setup({
   inverse = true,
   contrast = "",
   palette_overrides = {},
-  overrides = {},
+  -- mini.pick links its current-item highlight to CursorLine, which gruvbox paints the same
+  -- #3c3836 as NormalFloat. That leaves the selected entry indistinguishable from the rest of
+  -- the picker. PmenuSel is this colorscheme's own treatment for the selected entry of a list,
+  -- so the picker borrows it and keeps following the colorscheme if it ever changes.
+  overrides = {
+    MiniPickMatchCurrent = { link = "PmenuSel" },
+  },
   dim_inactive = false,
   transparent_mode = false,
 })
