@@ -8,7 +8,9 @@
 -- actually applies the highlights.
 vim.cmd.packadd({ args = { "gruvbox.nvim" }, bang = true })
 
--- vim.o.termguicolors is deliberately not set here: gruvbox's load() sets it unconditionally.
+-- vim.o.termguicolors is deliberately not set anywhere in this config: gruvbox's load() sets it
+-- unconditionally, and Neovim enables it on its own when the terminal supports 24-bit color.
+
 vim.o.background = "dark"
 
 -- Every option gruvbox.nvim accepts is listed, including the ones left at their default, so
