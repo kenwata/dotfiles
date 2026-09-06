@@ -3,7 +3,7 @@
 vim.pack.add({
   { src = "https://github.com/coder/claudecode.nvim", version = vim.version.range("0.3") },
   { src = "https://github.com/neovim/nvim-lspconfig", version = vim.version.range("2") },
-  { src = "https://github.com/echasnovski/mini.pick", version = vim.version.range("0.17") },
+  { src = "https://github.com/echasnovski/mini.pick", version = vim.version.range("0.18") },
 }, {
   -- Without this, vim.pack loads plugin/ files during this same startup sequence even
   -- though `load` defaults to false here (see :packadd! in :help repeat.txt). Loading is
