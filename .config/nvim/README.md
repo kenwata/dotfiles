@@ -19,6 +19,7 @@ symlink.
     └── plugins/
         ├── init.lua        # vim.pack.add() (single call, deferred load), then requires below
         ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>ac
+        ├── gruvbox.lua     # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
         ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
         └── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff / <leader>fg
 ```
@@ -32,6 +33,12 @@ symlink.
   `load = function() end` (deferred), then `require`s each per-plugin config file below.
 - `lua/plugins/claudecode.lua`: config for `coder/claudecode.nvim`. Not loaded at startup;
   `<leader>ac` runs `vim.cmd.packadd()` and `setup()` on first press.
+- `lua/plugins/gruvbox.lua`: config for `ellisonleao/gruvbox.nvim` (colorscheme). Unlike
+  `claudecode.lua` and `minipick.lua`, this one is loaded at startup with `packadd!`, because a
+  colorscheme affects the first frame drawn and deferring it would leave the default colors on
+  screen until something triggered the load. Sets `background` to `dark`, passes every option
+  the plugin accepts to `setup()` (each one chosen by looking at the result on screen), then
+  applies it with `:colorscheme`.
 - `lua/plugins/lspconfig.lua`: loads `nvim-lspconfig` at startup with `packadd!` (a pure
   configuration-data repository, not a runtime plugin, so this costs nothing measurable),
   overrides `lua_ls` to recognize Neovim's `vim` global and runtime files, and enables the
