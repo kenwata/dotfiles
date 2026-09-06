@@ -18,7 +18,7 @@ symlink.
     │   └── autocmd.lua      # Autocommands
     └── plugins/
         ├── init.lua        # vim.pack.add() (single call, deferred load), then requires below
-        ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>ac
+        ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>a* key
         ├── gruvbox.lua     # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
         ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
         └── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff / <leader>fg
@@ -32,7 +32,9 @@ symlink.
 - `lua/plugins/init.lua`: declares every plugin in a single `vim.pack.add({...})` call with
   `load = function() end` (deferred), then `require`s each per-plugin config file below.
 - `lua/plugins/claudecode.lua`: config for `coder/claudecode.nvim`. Not loaded at startup;
-  `<leader>ac` runs `vim.cmd.packadd()` and `setup()` on first press.
+  every `<leader>a*` key (toggle, focus, resume, continue, model, add buffer, send selection,
+  accept/deny diff) runs `vim.cmd.packadd()` and `setup()` on first press, so no single key has
+  to come first. `<C-q>` in terminal mode closes the Claude window without being an entry point.
 - `lua/plugins/gruvbox.lua`: config for `ellisonleao/gruvbox.nvim` (colorscheme). Unlike
   `claudecode.lua` and `minipick.lua`, this one is loaded at startup with `packadd!`, because a
   colorscheme affects the first frame drawn and deferring it would leave the default colors on
