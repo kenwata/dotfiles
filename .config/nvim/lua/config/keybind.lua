@@ -1,5 +1,10 @@
 -- Insert mode cursor movement
 vim.keymap.set("i", "jj", "<Esc>", { noremap = true, silent = true, desc = "Exit insert mode" })
+-- Same finger motion as the insert-mode jj: leave terminal mode and go back to the window
+-- that was active before the terminal (a bare <C-\><C-n> would leave the cursor in the
+-- terminal window). Like the insert-mode jj, a lone j is held back until the next key or
+-- timeoutlen expires.
+vim.keymap.set("t", "jj", [[<C-\><C-n><C-w>p]], { noremap = true, silent = true, desc = "Exit terminal mode to previous window" })
 vim.keymap.set("i", "<C-h>", "<Left>", { noremap = true, silent = true, desc = "Move cursor left" })
 vim.keymap.set("i", "<C-l>", "<Right>", { noremap = true, silent = true, desc = "Move cursor right" })
 vim.keymap.set("i", "<C-k>", "<Up>", { noremap = true, silent = true, desc = "Move cursor up" })
