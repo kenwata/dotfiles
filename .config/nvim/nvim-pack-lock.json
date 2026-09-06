@@ -5,6 +5,11 @@
       "src": "https://github.com/coder/claudecode.nvim",
       "version": "0.3.0 - 0.4.0"
     },
+    "gruvbox.nvim": {
+      "rev": "61b0b3be2f0cfd521667403a0367298144d6c165",
+      "src": "https://github.com/ellisonleao/gruvbox.nvim",
+      "version": "2.0.0 - 3.0.0"
+    },
     "mini.pick": {
       "rev": "8c1f75f8ddd8c9f75d07ed2ab5718d2c3cb65a66",
       "src": "https://github.com/echasnovski/mini.pick",
