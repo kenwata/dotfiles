@@ -44,7 +44,11 @@ symlink.
 - `lua/plugins/lspconfig.lua`: loads `nvim-lspconfig` at startup with `packadd!` (a pure
   configuration-data repository, not a runtime plugin, so this costs nothing measurable),
   overrides `lua_ls` to recognize Neovim's `vim` global and runtime files, and enables the
-  7 language servers listed below with `vim.lsp.enable()`.
+  7 language servers listed below with `vim.lsp.enable()`. The `lua_ls` override applies to
+  every Lua workspace except one that carries its own `.luarc.json` / `.luarc.jsonc`, which
+  is the opt-out; the header comment in that file explains why the condition is that broad.
+  Every other setting each server receives comes from nvim-lspconfig's own `lsp/*.lua` and is
+  deliberately left untouched.
 - `lua/plugins/minipick.lua`: config for `echasnovski/mini.pick` (fuzzy finder). Not loaded
   at startup; `<leader>ff` (find files) or `<leader>fg` (live grep) runs `vim.cmd.packadd()`
   and `setup()` on first press.
