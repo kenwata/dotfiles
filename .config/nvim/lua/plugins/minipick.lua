@@ -1,4 +1,4 @@
--- mini.pick is loaded on first use, not at startup. The two mappings and vim.ui.select below
+-- mini.pick is loaded on first use, not at startup. The three mappings and vim.ui.select below
 -- are the entry points that can trigger it before the plugin is on disk.
 --
 -- setup() re-creates highlight groups and user commands and reassigns vim.ui.select on every
@@ -38,6 +38,11 @@ vim.keymap.set("n", "<leader>fg", function()
     load_minipick().builtin.grep_live()
   end)
 end, { noremap = true, silent = true, desc = "Search file contents (live grep)" })
+
+-- Not wrapped in with_ripgreprc: this picker lists buffers from :buffers and never spawns rg.
+vim.keymap.set("n", "<leader>fb", function()
+  load_minipick().builtin.buffers()
+end, { noremap = true, silent = true, desc = "Switch to an open file (buffers)" })
 
 -- Forwards to the real MiniPick.ui_select explicitly (not by re-reading vim.ui.select): once
 -- load_minipick() runs setup(), it reassigns vim.ui.select to MiniPick.ui_select itself, so
