@@ -6,8 +6,16 @@
 vim.cmd.packadd({ args = { "nvim-lspconfig" }, bang = true })
 
 -- lua_ls does not know about Neovim's globals (the `vim` table, bundled runtime Lua files)
--- unless told. This mirrors nvim-lspconfig's own documented example (lsp/lua_ls.lua), so
--- that it still leaves projects with their own .luarc.json alone.
+-- unless told. The shape below is nvim-lspconfig's own documented example (lsp/lua_ls.lua),
+-- kept verbatim so that an upstream change to the recommendation shows up as a diff. Its
+-- broad apply condition (override everywhere except a workspace that carries its own
+-- .luarc.json / .luarc.jsonc) was reviewed and approved as-is on 2026-09-07.
+--
+-- Note on the `stdpath("config")` comparison: lua_ls resolves the workspace by walking up to
+-- the nearest .git, so opening files under ~/.config/nvim (a symlink) still yields
+-- ~/workspace/repos/dotfiles. That never equals stdpath("config"), so the comparison is
+-- always true here and whether the override is skipped is decided solely by the presence of
+-- .luarc.json / .luarc.jsonc in the workspace. dotfiles has neither, so the override applies.
 vim.lsp.config("lua_ls", {
   on_init = function(client)
     if client.workspace_folders then
