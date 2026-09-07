@@ -6,10 +6,14 @@
 vim.cmd.packadd({ args = { "nvim-lspconfig" }, bang = true })
 
 -- lua_ls does not know about Neovim's globals (the `vim` table, bundled runtime Lua files)
--- unless told. The shape below is nvim-lspconfig's own documented example (lsp/lua_ls.lua),
--- kept verbatim so that an upstream change to the recommendation shows up as a diff. Its
--- broad apply condition (override everywhere except a workspace that carries its own
--- .luarc.json / .luarc.jsonc) was reviewed and approved as-is on 2026-09-07.
+-- unless told. The on_init guard below is taken as-is from nvim-lspconfig's own documented
+-- example (lsp/lua_ls.lua), so that an upstream change to the recommended condition shows up
+-- as a diff. Its broad apply condition (override everywhere except a workspace that carries
+-- its own .luarc.json / .luarc.jsonc) was reviewed and approved as-is on 2026-09-07. The
+-- settings the guard merges in are a deliberate subset of that example: it also offers
+-- runtime.path and an nvim-lspconfig type-annotation directory in workspace.library, and
+-- neither is adopted here (the default runtime.path already resolves this repo's lua/
+-- modules, and the only settings table written below is `Lua = {}`).
 --
 -- Note on the `stdpath("config")` comparison: lua_ls resolves the workspace by walking up to
 -- the nearest .git, so opening files under ~/.config/nvim (a symlink) still yields
