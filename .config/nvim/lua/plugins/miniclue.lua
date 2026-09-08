@@ -9,6 +9,7 @@ local lazy = require("util.lazy")
 -- so mini.clue's own (buffer-local) triggers can take over from the second press onward.
 
 -- init.lua sets this before any module that defines a <leader> mapping is required.
+---@type string
 local mapleader = vim.g.mapleader
 
 ---@class util.miniclue.Trigger
