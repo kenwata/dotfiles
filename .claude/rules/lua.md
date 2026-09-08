@@ -76,7 +76,6 @@ Project-specific rules for the config under `~/.config/nvim` (the real files liv
   `lua/config/`, `lua/plugins/`, or `lua/util/`.
 - One responsibility per file. `init.lua` loads modules and nothing else.
 - Group related options inside a file with a section comment (`-- UI`, `-- Indent`).
-  Split a section into its own file once it passes ~30 lines, or the file passes ~80 lines.
 
 ### Options and mappings
 
