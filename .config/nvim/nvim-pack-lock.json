@@ -15,6 +15,11 @@
       "src": "https://github.com/echasnovski/mini.clue",
       "version": "0.18.0 - 0.19.0"
     },
+    "mini.files": {
+      "rev": "a5689dae6b732955e33eec225b798d6815063179",
+      "src": "https://github.com/echasnovski/mini.files",
+      "version": "0.18.0 - 0.19.0"
+    },
     "mini.pick": {
       "rev": "8c1f75f8ddd8c9f75d07ed2ab5718d2c3cb65a66",
       "src": "https://github.com/echasnovski/mini.pick",

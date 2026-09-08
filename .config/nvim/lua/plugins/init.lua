@@ -5,6 +5,7 @@ vim.pack.add({
   { src = "https://github.com/neovim/nvim-lspconfig", version = vim.version.range("2") },
   { src = "https://github.com/echasnovski/mini.pick", version = vim.version.range("0.18") },
   { src = "https://github.com/echasnovski/mini.clue", version = vim.version.range("0.18") },
+  { src = "https://github.com/echasnovski/mini.files", version = vim.version.range("0.18") },
   { src = "https://github.com/ellisonleao/gruvbox.nvim", version = vim.version.range("2") },
 }, {
   -- Without this, vim.pack loads plugin/ files during this same startup sequence even
@@ -19,4 +20,5 @@ require("plugins.claudecode")
 require("plugins.lspconfig")
 require("plugins.minipick")
 require("plugins.miniclue")
+require("plugins.minifiles")
 require("plugins.gruvbox")
