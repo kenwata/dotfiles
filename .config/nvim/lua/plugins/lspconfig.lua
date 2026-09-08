@@ -15,12 +15,23 @@ vim.cmd.packadd({ args = { "nvim-lspconfig" }, bang = true })
 -- neither is adopted here (the default runtime.path already resolves this repo's lua/
 -- modules, and the only settings table written below is `Lua = {}`).
 --
--- Note on the `stdpath("config")` comparison: lua_ls resolves the workspace by walking up to
--- the nearest .git, so opening files under ~/.config/nvim (a symlink) still yields
--- ~/workspace/repos/dotfiles. That never equals stdpath("config"), so the comparison is
--- always true here and whether the override is skipped is decided solely by the presence of
--- .luarc.json / .luarc.jsonc in the workspace. dotfiles has neither, so the override applies.
+-- Note on the `stdpath("config")` comparison: with the markers below the workspace resolves
+-- to the Neovim config directory, reached either through the ~/.config/nvim symlink or as
+-- the real path under dotfiles. The first spelling equals stdpath("config") and the second
+-- does not, so the comparison alone no longer decides anything; what does is that neither
+-- .luarc.json nor .luarc.jsonc exists there, which leaves the override applying in both cases.
+--
+-- Keep the workspace at the config directory rather than the whole dotfiles repository.
+-- Upstream's marker list ends in ".git" and ~/.config/nvim carries none of the earlier
+-- markers, so the search used to walk up to the dotfiles root and index all 6597 files there
+-- to reach the 9 Lua ones. Loading that workspace took 6.3s cold and still 4.9s on a third
+-- run, and until it finished there was no semantic highlighting and no diagnostics.
+-- nvim-pack-lock.json exists only at the config root, so it stops the search there; ".git"
+-- stays last so any other Lua project resolves as before.
+local LUA_LS_ROOT_MARKERS = { ".luarc.json", ".luarc.jsonc", "nvim-pack-lock.json", ".git" }
+
 vim.lsp.config("lua_ls", {
+  root_markers = LUA_LS_ROOT_MARKERS,
   on_init = function(client)
     if client.workspace_folders then
       local path = client.workspace_folders[1].name
