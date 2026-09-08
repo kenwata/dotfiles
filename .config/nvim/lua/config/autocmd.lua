@@ -17,6 +17,18 @@ vim.api.nvim_create_autocmd("TextYankPost", {
   end,
 })
 
+-- Terminal buffers start out 'buflisted', so every :terminal and every terminal a plugin opens
+-- would join the buffer list. Dropping them is a decision about the buffer list as a whole, not
+-- about any one plugin: it also takes terminals out of [b / ]b and out of <Leader>fb
+-- (mini.pick's buffer picker), and only then out of the tabline that lua/plugins/minitabline.lua
+-- draws. :ls stops listing them; :ls! still does.
+vim.api.nvim_create_autocmd("TermOpen", {
+  desc = "Keep terminal buffers out of the buffer list",
+  callback = function()
+    vim.bo.buflisted = false
+  end,
+})
+
 -- Code lenses are not drawn by default: the server sends them, nothing renders them, and grx
 -- (run code lens) has nothing to act on. Enabling once covers every buffer and keeps the
 -- lenses current on its own -- the older vim.lsp.codelens.refresh() plus a refresh autocmd is

@@ -9,6 +9,10 @@ vim.cmd.packadd({ args = { "mini.tabline" }, bang = true })
 -- pages rather than buffers, and this config uses no tab pages, so 1 would keep the tabline
 -- hidden forever.
 --
+-- Which buffers get a tab is not decided here: mini.tabline draws every buffer whose 'buflisted'
+-- is true, and the TermOpen autocommand in lua/config/autocmd.lua is what keeps terminals out of
+-- that list.
+--
 -- mini.tabline accepts exactly three options. The two below are written out; the third,
 -- `format` (a function that builds each tab's label), stays at its default. It is left out of
 -- the table rather than written as `format = nil` because a Lua table literal cannot tell the
