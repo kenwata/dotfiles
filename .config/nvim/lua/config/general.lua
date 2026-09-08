@@ -8,7 +8,11 @@ vim.o.relativenumber = false
 vim.o.wrap = true
 vim.o.list = true
 -- listchars holds a table value, which vim.o cannot accept.
-vim.opt.listchars = { space = "·", tab = "▸ ", trail = "·", eol = "↲" }
+-- precedes and extends never show up in the buffer text here, because that only happens when a
+-- line runs past the window edge with wrap off, and wrap is on above. They are set for
+-- mini.tabline, which draws them at the ends of the tabline when the tabs do not all fit, and
+-- which reads them from the global listchars rather than from an option of its own.
+vim.opt.listchars = { space = "·", tab = "▸ ", trail = "·", eol = "↲", precedes = "«", extends = "»" }
 -- Keep the sign column always present. With "auto" the text shifts two cells sideways the
 -- moment a diagnostic appears and back when it clears.
 vim.o.signcolumn = "yes"
