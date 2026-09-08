@@ -1,21 +1,19 @@
+local lazy = require("util.lazy")
+
 -- claudecode.nvim is loaded on first use, not at startup. Every <leader>a* key below is an
 -- entry point that can be pressed before the plugin is on disk: each one loads the plugin
 -- first, then runs its command. ClaudeCodeSend / ClaudeCodeAdd queue the mention and open
 -- the terminal themselves when Claude is not running yet, and --resume / --continue can be
 -- the first action of a session, so no single key can be assumed to come first.
-local function load_and_setup()
-  -- setup() re-registers commands and, since auto_start defaults to true, restarts the
-  -- server on every call, so guard against re-running it once claudecode is loaded.
-  if package.loaded["claudecode"] then
-    return
-  end
-
-  vim.cmd.packadd("claudecode.nvim")
+--
+-- setup() re-registers commands and, since auto_start defaults to true, restarts the server
+-- on every call; util.lazy guards against re-running it once claudecode is loaded.
+local function setup(claudecode)
   -- Every option the plugin reads is written out, including the ones kept at their default,
   -- so that each value is a deliberate choice rather than an inherited one. Options whose
   -- default is nil (terminal_cmd, terminal.cwd, terminal.cwd_provider) are omitted because a
   -- nil entry in a Lua table literal is indistinguishable from no entry.
-  require("claudecode").setup({
+  claudecode.setup({
     -- Server: the WebSocket server Claude Code connects to. The wide port range and
     -- auto-start are the plugin's defaults and nothing here needs to pin them.
     port_range = { min = 10000, max = 65535 },
@@ -72,7 +70,7 @@ end
 -- because it does not exist until setup() has registered it.
 local function load_then_run(command)
   return function()
-    load_and_setup()
+    lazy.require("claudecode.nvim", "claudecode", setup)
     vim.cmd(command)
   end
 end

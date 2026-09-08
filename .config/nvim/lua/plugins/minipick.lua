@@ -1,15 +1,14 @@
+local lazy = require("util.lazy")
+
 -- mini.pick is loaded on first use, not at startup. The three mappings and vim.ui.select below
 -- are the entry points that can trigger it before the plugin is on disk.
 --
 -- setup() re-creates highlight groups and user commands and reassigns vim.ui.select on every
--- call, so package.loaded marks that it has already run.
+-- call; util.lazy guards against re-running it once mini.pick is loaded.
 local function load_minipick()
-  if not package.loaded["mini.pick"] then
-    vim.cmd.packadd("mini.pick")
-    require("mini.pick").setup()
-  end
-
-  return require("mini.pick")
+  return lazy.require("mini.pick", "mini.pick", function(minipick)
+    minipick.setup()
+  end)
 end
 
 -- rg does not search hidden files/dirs by default; ripgreprc turns that on. Setting
