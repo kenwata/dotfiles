@@ -14,7 +14,7 @@ symlink.
 ├── ripgreprc               # rg config, applied only while <leader>ff/<leader>fg run (not the shell's rg)
 └── lua/
     ├── config/
-    │   ├── general.lua     # Editor options (UI, indent, search, clipboard, encoding, completion)
+    │   ├── general.lua     # Editor options (UI, window, indent, search, editing, timing, clipboard, etc.)
     │   ├── keybind.lua      # Key mappings
     │   └── autocmd.lua      # Autocommands
     └── plugins/
@@ -28,8 +28,14 @@ symlink.
 - `init.lua`: sets `vim.g.mapleader`, then `require`s each module in `lua/config/`, then
   `require("plugins")`.
 - `lua/config/general.lua`: `vim.o`/`vim.opt` settings, grouped by section comment.
-- `lua/config/keybind.lua`: `vim.keymap.set` mappings, each with an English `desc`.
-- `lua/config/autocmd.lua`: `vim.api.nvim_create_autocmd` entries (currently empty).
+- `lua/config/keybind.lua`: `vim.keymap.set` mappings, each with an English `desc`. Covers
+  cursor movement and deletion (Emacs-style in Insert mode), the completion menu, search,
+  and window management.
+- `lua/config/autocmd.lua`: `vim.api.nvim_create_autocmd` entries, plus one-shot switches for
+  LSP displays Neovim leaves off. Flashes the yanked region on `TextYankPost`; enables code
+  lenses for every buffer with `vim.lsp.codelens.enable(true)`; and holds back the built-in
+  `'autocomplete'` menu while the cursor sits inside an existing word (`InsertEnter`,
+  `CursorMovedI`).
 - `lua/plugins/init.lua`: declares every plugin in a single `vim.pack.add({...})` call with
   `load = function() end` (deferred), then `require`s each per-plugin config file below.
 - `lua/plugins/claudecode.lua`: config for `coder/claudecode.nvim`. Not loaded at startup;
