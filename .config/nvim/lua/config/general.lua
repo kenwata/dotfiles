@@ -93,10 +93,14 @@ vim.o.autocomplete = true
 -- Prepend "o" (omnifunc, wired to the LSP client automatically) so language-server
 -- candidates get priority; see :help ins-autocompletion on source ordering.
 vim.opt.complete:prepend("o")
--- Plain prefix matching (no "fuzzy"): fuzzy matching on a short prefix (e.g. "os.pa")
--- ranked unrelated candidates that merely contain the same letters in order (e.g.
--- EX_TEMPFAIL) above the intended os.path. noselect shows the menu without
--- pre-selecting anything, so nothing is inserted until confirmed.
+-- Completion menu shape. "fuzzy" is deliberately absent: fuzzy matching on a short prefix
+-- (e.g. "os.pa") ranked unrelated candidates that merely contain the same letters in order
+-- (e.g. EX_TEMPFAIL) above the intended os.path. The two flags appended below are read when the
+-- menu is opened by hand with <C-Space>, and in buffers where config.autocmd has switched
+-- 'autocomplete' off; while 'autocomplete' is on Neovim honours only fuzzy, longest, popup,
+-- preinsert and preview from this option, and implies noselect on its own (see :help
+-- 'completeopt'). noselect shows the menu without pre-selecting anything, so nothing is
+-- inserted until confirmed.
 vim.opt.completeopt:append("noselect")
 -- The default "menu" hides the popup as soon as a single candidate remains, so narrowing
 -- "std::pr" (5 matches) to "std::pro" (only process) made the menu vanish with nothing

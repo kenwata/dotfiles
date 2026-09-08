@@ -23,3 +23,29 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 -- deprecated in favour of this (see :help vim.lsp.codelens.enable()). Servers without
 -- codeLensProvider simply produce none.
 vim.lsp.codelens.enable(true)
+
+-- Autocompletion is held back while the cursor sits inside an existing word. The menu that
+-- opens there offers to overwrite text that is already correct, and taking a candidate by
+-- mistake breaks working code. Everywhere else it stays on, including the places a name is
+-- genuinely being chosen: a half-typed word, and just after a member separator such as "." or
+-- "::" (the "o" flag in 'complete' lets the language server complete from a non-keyword
+-- character, see :help 'complete'). 'autocomplete' is global-local, so writing the
+-- buffer-local value leaves the global default from config.general untouched.
+local function cursor_is_inside_word()
+  local col = vim.api.nvim_win_get_cursor(0)[2]
+  local following = vim.fn.matchstr(vim.api.nvim_get_current_line(), ".", col)
+
+  return vim.fn.match(following, "\\k") == 0
+end
+
+vim.api.nvim_create_autocmd({ "InsertEnter", "CursorMovedI" }, {
+  desc = "Hold back autocompletion inside an existing word",
+  callback = function()
+    local wanted = not cursor_is_inside_word()
+    -- Walking the candidate list moves the cursor and so fires this too; rewriting the option
+    -- mid-completion is a side effect worth not having.
+    if vim.bo.autocomplete ~= wanted then
+      vim.bo.autocomplete = wanted
+    end
+  end,
+})
