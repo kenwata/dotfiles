@@ -6,8 +6,10 @@ local lazy = require("util.lazy")
 -- the terminal themselves when Claude is not running yet, and --resume / --continue can be
 -- the first action of a session, so no single key can be assumed to come first.
 --
--- setup() re-registers commands and, since auto_start defaults to true, restarts the server
--- on every call; util.lazy guards against re-running it once claudecode is loaded.
+-- setup() re-registers commands, terminal, diff, and autocmds on every call, but M.start()
+-- (lua/claudecode/init.lua) early-returns once M.state.server exists, so it never restarts
+-- the server. util.lazy still guards against re-running setup() once claudecode is loaded,
+-- to avoid the redundant re-registration.
 local function setup(claudecode)
   -- Every option the plugin reads is written out, including the ones kept at their default,
   -- so that each value is a deliberate choice rather than an inherited one. Options whose
