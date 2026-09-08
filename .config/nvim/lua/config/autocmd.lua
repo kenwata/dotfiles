@@ -17,27 +17,9 @@ vim.api.nvim_create_autocmd("TextYankPost", {
   end,
 })
 
--- Code lenses are the one LSP display Neovim never refreshes on its own: the server sends
--- them, but nothing asks for them, so nothing is drawn and grx (run code lens) does nothing.
--- Refresh on attach and whenever the buffer settles, which is the point at which reference
--- counts and test-runner lenses could have changed.
--- Scoped to buffers whose server advertises codeLensProvider, so nothing fires for the rest.
-vim.api.nvim_create_autocmd("LspAttach", {
-  desc = "Keep code lenses refreshed while a server that provides them is attached",
-  callback = function(args)
-    local client = vim.lsp.get_client_by_id(args.data.client_id)
-    if not client or not client.server_capabilities.codeLensProvider then
-      return
-    end
-
-    vim.lsp.codelens.refresh({ bufnr = args.buf })
-
-    vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "InsertLeave" }, {
-      desc = "Refresh code lenses for this buffer",
-      buffer = args.buf,
-      callback = function()
-        vim.lsp.codelens.refresh({ bufnr = args.buf })
-      end,
-    })
-  end,
-})
+-- Code lenses are off until asked for: the server sends them, nothing draws them, and grx
+-- (run code lens) has nothing to act on. Enabling once covers every buffer and keeps the
+-- lenses current on its own -- the older vim.lsp.codelens.refresh() plus a refresh autocmd is
+-- deprecated in favour of this (see :help vim.lsp.codelens.enable()). Servers without
+-- codeLensProvider simply produce none.
+vim.lsp.codelens.enable(true)
