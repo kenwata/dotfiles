@@ -8,7 +8,7 @@ vim.o.relativenumber = false
 vim.o.wrap = true
 vim.o.list = true
 -- listchars holds a table value, which vim.o cannot accept.
-vim.opt.listchars = { space = "·", tab = "▸ ", trail = "·", eol = "¬" }
+vim.opt.listchars = { space = "·", tab = "▸ ", trail = "·", eol = "↲" }
 -- Keep the sign column always present. With "auto" the text shifts two cells sideways the
 -- moment a diagnostic appears and back when it clears.
 vim.o.signcolumn = "yes"
