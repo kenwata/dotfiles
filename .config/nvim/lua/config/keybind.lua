@@ -5,10 +5,9 @@ vim.keymap.set("i", "jj", "<Esc>", { noremap = true, silent = true, desc = "Exit
 -- terminal window). Like the insert-mode jj, a lone j is held back until the next key or
 -- timeoutlen expires.
 vim.keymap.set("t", "jj", [[<C-\><C-n><C-w>p]], { noremap = true, silent = true, desc = "Exit terminal mode to previous window" })
--- Emacs-style, replacing an earlier <C-h>/<C-j>/<C-k>/<C-l> set. Dropping those returns
--- <C-h> to backspace and <C-j> to a line break, and stops the completion menu from moving
--- on them: while the popup is open any of <Down>/<Up> walks the candidates, so the old
--- bindings hijacked the menu as a side effect.
+-- Emacs-style movement. <C-h>/<C-j>/<C-k>/<C-l> are deliberately left unbound: <C-h> is
+-- backspace and <C-j> is a line break, and pointing them at <Left>/<Down> would also drive
+-- the completion menu, since while the popup is open any of <Down>/<Up> walks the candidates.
 -- <C-b> and <C-f> have no default insert-mode binding. <C-n> and <C-p> normally start
 -- keyword completion, and keep selecting candidates here because <Down> and <Up> drive the
 -- menu identically (measured by accepting with <C-y> and comparing the inserted word).

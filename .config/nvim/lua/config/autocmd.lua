@@ -17,7 +17,7 @@ vim.api.nvim_create_autocmd("TextYankPost", {
   end,
 })
 
--- Code lenses are off until asked for: the server sends them, nothing draws them, and grx
+-- Code lenses are not drawn by default: the server sends them, nothing renders them, and grx
 -- (run code lens) has nothing to act on. Enabling once covers every buffer and keeps the
 -- lenses current on its own -- the older vim.lsp.codelens.refresh() plus a refresh autocmd is
 -- deprecated in favour of this (see :help vim.lsp.codelens.enable()). Servers without

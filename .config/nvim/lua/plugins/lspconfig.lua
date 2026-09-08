@@ -23,8 +23,8 @@ vim.cmd.packadd({ args = { "nvim-lspconfig" }, bang = true })
 --
 -- Keep the workspace at the config directory rather than the whole dotfiles repository.
 -- Upstream's marker list ends in ".git" and ~/.config/nvim carries none of the earlier
--- markers, so the search used to walk up to the dotfiles root and index all 6597 files there
--- to reach the 9 Lua ones. Loading that workspace took 6.3s cold and still 4.9s on a third
+-- markers, so the search used to walk up to the dotfiles root -- a tree of some 6,000 files
+-- outside .git -- to reach the 9 Lua ones. Loading that workspace took 6.3s cold and still 4.9s on a third
 -- run, and until it finished there was no semantic highlighting and no diagnostics.
 -- nvim-pack-lock.json exists only at the config root, so it stops the search there; ".git"
 -- stays last so any other Lua project resolves as before.
