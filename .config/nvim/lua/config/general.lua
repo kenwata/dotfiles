@@ -15,7 +15,9 @@ vim.o.signcolumn = "yes"
 -- Highlight the whole cursor line (cursorlineopt stays at its default "both"): marking only
 -- the line number was tried and read as too faint to locate the cursor.
 vim.o.cursorline = true
--- Lines kept above and below the cursor, so the next screenful is visible before reaching it.
+-- Lines kept above and below the cursor, so what comes next is visible before reaching it.
+-- Ten was picked over a smaller margin by watching both on screen; it keeps roughly a third
+-- of a 30-row window as lookahead without dragging the cursor to the middle.
 vim.o.scrolloff = 10
 -- A border makes a hover or diagnostic popup distinguishable from the buffer underneath.
 vim.o.winborder = "rounded"
@@ -25,7 +27,8 @@ vim.o.breakindent = true
 vim.o.linebreak = true
 -- One status line for the whole screen instead of one per window, which gives split layouts
 -- their rows back and leaves room for the full path.
--- Note: lualine overwrites this from options.globalstatus; move the setting there if adopted.
+-- Note for a future lualine: its options.globalstatus defaults to `vim.go.laststatus == 3`,
+-- so this line is what makes lualine keep a global status line rather than fight it.
 vim.o.laststatus = 3
 -- Put the file name in the terminal title so Ghostty tabs are distinguishable.
 vim.o.title = true
@@ -70,7 +73,8 @@ vim.o.undofile = true
 -- responds promptly; jj (insert and terminal mode) still completes at a normal typing pace.
 vim.o.timeoutlen = 500
 -- Milliseconds of idle time before CursorHold fires and the swap file is written. The 4000
--- default predates plugins that react to the cursor resting.
+-- default predates plugins that react to the cursor resting; 300 is short enough to feel
+-- immediate while staying above the pause between keystrokes in normal typing.
 vim.o.updatetime = 300
 
 -- Clipboard
@@ -98,6 +102,7 @@ vim.opt.completeopt:append("noselect")
 -- "std::pr" (5 matches) to "std::pro" (only process) made the menu vanish with nothing
 -- inserted. menuone keeps it open for a lone match.
 vim.opt.completeopt:append("menuone")
--- Cap the popup at ten rows; with autocomplete on, an uncapped menu covers most of the
--- screen whenever a prefix matches widely.
+-- Cap the popup at ten rows: with autocomplete on, the uncapped default (0) lets a widely
+-- matching prefix cover most of the screen. Ten fills about a third of a 30-row window,
+-- enough to judge the candidates without hiding the code being edited.
 vim.o.pumheight = 10

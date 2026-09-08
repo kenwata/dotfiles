@@ -1,10 +1,13 @@
 -- Autocommands live here.
 
 -- Flash the yanked region so it is clear what was copied.
--- DiffText rather than the Search group whose colour it borrows: Search is defined with
--- reverse=true, and reversing paints nothing where listchars draws a space as "·", because
--- the Whitespace group covering that cell carries no background to swap. DiffText holds the
--- same yellow as a real background, so spaces inside the region light up too.
+-- DiffText rather than Search, though both carry the same yellow #fabd2f in this colorscheme:
+-- Search defines it as a foreground with reverse=true, and where listchars draws a space as
+-- "·" that cell is painted by Whitespace, which has a foreground only. Reversing there swaps
+-- in Whitespace's grey instead of the yellow, so spaces stayed unlit -- observed on screen.
+-- DiffText carries the yellow as an actual background, which covers spaces as well.
+-- 300ms rather than the 150 default of vim.hl.on_yank: at 150 the flash was easy to miss.
+-- The value matches the example in :help vim.hl.on_yank().
 local YANK_FLASH_MS = 300
 
 vim.api.nvim_create_autocmd("TextYankPost", {
