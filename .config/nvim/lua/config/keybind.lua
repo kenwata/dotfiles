@@ -5,16 +5,14 @@ vim.keymap.set("i", "jj", "<Esc>", { noremap = true, silent = true, desc = "Exit
 -- terminal window). Like the insert-mode jj, a lone j is held back until the next key or
 -- timeoutlen expires.
 vim.keymap.set("t", "jj", [[<C-\><C-n><C-w>p]], { noremap = true, silent = true, desc = "Exit terminal mode to previous window" })
-vim.keymap.set("i", "<C-h>", "<Left>", { noremap = true, silent = true, desc = "Move cursor left" })
-vim.keymap.set("i", "<C-l>", "<Right>", { noremap = true, silent = true, desc = "Move cursor right" })
-vim.keymap.set("i", "<C-k>", "<Up>", { noremap = true, silent = true, desc = "Move cursor up" })
-vim.keymap.set("i", "<C-j>", "<Down>", { noremap = true, silent = true, desc = "Move cursor down" })
--- Emacs-style equivalents of the four above, kept side by side until one set proves the
--- keeper. <C-b> and <C-f> have no default insert-mode binding. <C-n> and <C-p> normally
--- start keyword completion, but while the popup menu is open <Down> and <Up> walk the
--- candidates exactly as <C-n> and <C-p> do (measured by accepting with <C-y> and comparing
--- the inserted word), so completion is unaffected. What these two give up is opening the
--- menu by hand, which 'autocomplete' already does on every keystroke.
+-- Emacs-style, replacing an earlier <C-h>/<C-j>/<C-k>/<C-l> set. Dropping those returns
+-- <C-h> to backspace and <C-j> to a line break, and stops the completion menu from moving
+-- on them: while the popup is open any of <Down>/<Up> walks the candidates, so the old
+-- bindings hijacked the menu as a side effect.
+-- <C-b> and <C-f> have no default insert-mode binding. <C-n> and <C-p> normally start
+-- keyword completion, and keep selecting candidates here because <Down> and <Up> drive the
+-- menu identically (measured by accepting with <C-y> and comparing the inserted word).
+-- What they give up is opening the menu by hand, which 'autocomplete' makes unnecessary.
 vim.keymap.set("i", "<C-b>", "<Left>", { noremap = true, silent = true, desc = "Move cursor left" })
 vim.keymap.set("i", "<C-f>", "<Right>", { noremap = true, silent = true, desc = "Move cursor right" })
 vim.keymap.set("i", "<C-p>", "<Up>", { noremap = true, silent = true, desc = "Move cursor up" })
