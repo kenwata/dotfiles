@@ -32,3 +32,12 @@ vim.keymap.set("n", "sv", "<C-w>v", { noremap = true, silent = true, desc = "Spl
 -- Window navigation
 vim.keymap.set("n", "sh", "<C-w>h", { noremap = true, silent = true, desc = "Go to the left window" })
 vim.keymap.set("n", "sl", "<C-w>l", { noremap = true, silent = true, desc = "Go to the right window" })
+
+-- LSP display toggles
+-- Inlay hints stay off by default and are switched on for the moment they are wanted. They
+-- render parameter names inline (nvim_create_autocmd(event: "...", opts: {...})), which reads
+-- well when an API takes several positional arguments and gets in the way otherwise, since the
+-- inserted text pushes the real code right and 'wrap' then folds the line.
+vim.keymap.set("n", "<leader>ih", function()
+  vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled())
+end, { noremap = true, silent = true, desc = "Toggle inlay hints" })
