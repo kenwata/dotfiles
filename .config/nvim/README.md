@@ -25,12 +25,14 @@ symlink.
         └── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
 ```
 
-- `init.lua`: sets `vim.g.mapleader`, then `require`s each module in `lua/config/`, then
-  `require("plugins")`.
+- `init.lua`: calls `vim.loader.enable()` first (the bytecode cache only covers modules
+  `require`d after it), sets `vim.g.mapleader`, then `require`s each module in `lua/config/`,
+  then `require("plugins")`.
 - `lua/config/general.lua`: `vim.o`/`vim.opt` settings, grouped by section comment.
 - `lua/config/keybind.lua`: `vim.keymap.set` mappings, each with an English `desc`. Covers
-  cursor movement and deletion (Emacs-style in Insert mode), the completion menu, search,
-  and window management.
+  leaving Insert/Terminal mode (`jj`), Emacs-style cursor movement and deletion in Insert mode,
+  the completion menu, search (recentring on `n`/`N`, `;` for the command line), display-line
+  and window movement, keeping the Visual selection across an indent, and the inlay-hint toggle.
 - `lua/config/autocmd.lua`: `vim.api.nvim_create_autocmd` entries, plus one-shot switches for
   LSP displays Neovim leaves off. Flashes the yanked region on `TextYankPost`; enables code
   lenses for every buffer with `vim.lsp.codelens.enable(true)`; and holds back the built-in
