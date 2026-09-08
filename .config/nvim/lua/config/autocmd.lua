@@ -1,4 +1,4 @@
--- Autocommands live here.
+-- Autocommands, and the one-shot switches that turn on LSP displays Neovim leaves off.
 
 -- Flash the yanked region so it is clear what was copied.
 -- DiffText rather than Search, though both carry the same yellow #fabd2f in this colorscheme:
