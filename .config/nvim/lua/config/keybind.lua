@@ -9,6 +9,16 @@ vim.keymap.set("i", "<C-h>", "<Left>", { noremap = true, silent = true, desc = "
 vim.keymap.set("i", "<C-l>", "<Right>", { noremap = true, silent = true, desc = "Move cursor right" })
 vim.keymap.set("i", "<C-k>", "<Up>", { noremap = true, silent = true, desc = "Move cursor up" })
 vim.keymap.set("i", "<C-j>", "<Down>", { noremap = true, silent = true, desc = "Move cursor down" })
+-- Emacs-style equivalents of the four above, kept side by side until one set proves the
+-- keeper. <C-b> and <C-f> have no default insert-mode binding. <C-n> and <C-p> normally
+-- start keyword completion, but while the popup menu is open <Down> and <Up> walk the
+-- candidates exactly as <C-n> and <C-p> do (measured by accepting with <C-y> and comparing
+-- the inserted word), so completion is unaffected. What these two give up is opening the
+-- menu by hand, which 'autocomplete' already does on every keystroke.
+vim.keymap.set("i", "<C-b>", "<Left>", { noremap = true, silent = true, desc = "Move cursor left" })
+vim.keymap.set("i", "<C-f>", "<Right>", { noremap = true, silent = true, desc = "Move cursor right" })
+vim.keymap.set("i", "<C-p>", "<Up>", { noremap = true, silent = true, desc = "Move cursor up" })
+vim.keymap.set("i", "<C-n>", "<Down>", { noremap = true, silent = true, desc = "Move cursor down" })
 
 -- Search
 vim.keymap.set("n", "<leader><leader><leader>", "<cmd>nohlsearch<CR>", { noremap = true, silent = true, desc = "Clear search highlight" })
