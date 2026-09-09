@@ -19,3 +19,13 @@ require("mini.icons").setup({
   -- decision 2026-09-09).
   style = "glyph",
 })
+
+-- lualine.nvim looks only for nvim-web-devicons, never mini.icons directly
+-- (lualine.nvim's lua/lualine/components/filetype.lua). This registers a fake
+-- nvim-web-devicons module backed by mini.icons so lualine's filetype icon renders through
+-- the same provider as everything else, rather than adding a second icon plugin
+-- (docs/design/lualine-startup-statusline.md "アイコンの供給元"). Placed here, not in
+-- lua/plugins/lualine.lua, because the bridging is mini.icons' own feature -- this keeps
+-- "who supplies icons" readable from a single file. Cannot be undone once called in a
+-- session, so it runs unconditionally at startup rather than being gated on anything.
+require("mini.icons").mock_nvim_web_devicons()
