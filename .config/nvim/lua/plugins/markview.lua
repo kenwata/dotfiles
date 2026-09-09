@@ -3,47 +3,52 @@
 -- no key that means "start using this now" -- opening a markdown buffer is itself the moment
 -- decoration becomes relevant, so the entry point is a FileType autocmd rather than a key.
 --
--- Only preview.icon_provider and preview.filetypes are set below; every other preview.*
--- option (20+) and every filetype-specific config (markdown, markdown_inline, html, yaml,
--- latex, typst, asciidoc, comment) is left at its default.
+-- Only preview.icon_provider, preview.filetypes and markdown_inline.tags are set below;
+-- every other preview.* option (20+) and every other filetype-specific config (markdown,
+-- html, yaml, latex, typst, asciidoc, comment, and the rest of markdown_inline) is left at
+-- its default.
 local function setup(markview)
   markview.setup({
     preview = {
-      -- mini.icons was already loaded at startup by plugins/miniicons.lua, so this pulls
-      -- markview's code-block language icons from the same set mini.pick / mini.files /
-      -- mini.tabline already use, instead of markview's bundled internal set.
-      icon_provider = "mini",
+      -- markview's own default. The "mini" provider was tried (mini.icons, matching
+      -- mini.pick / mini.files / mini.tabline's icon set) but a tagless fenced code block
+      -- (``` with no language after it) has item.language == nil, and
+      -- mini.icons.get("filetype", nil) throws; markview's renderer swallows that error,
+      -- leaving the whole block undecorated. "internal" falls back to its own "nosyntax"
+      -- style on a nil language instead of throwing, so tagless blocks render like any
+      -- other code block (T80, 2026-09-09).
+      icon_provider = "internal",
       -- markview's default is 5 filetypes (markdown, quarto, rmd, typst, asciidoc). Only
       -- markdown files exist in this setup, and the FileType autocmd below only fires for
       -- markdown, so narrowing here keeps the lazy-load trigger and the decorated set in sync.
       filetypes = { "markdown" },
     },
+    markdown_inline = {
+      -- Off because the planning documents edited with this setup write #16 / #16-1 as
+      -- plan and task ids, never as tags. markview conceals a tag's leading "#" and pads
+      -- what is left with a space on each side, so the cell renders one column wider than
+      -- its source text -- and inside a table that pushes every column to its right out of
+      -- line. Measured for T80: every data row of both tables in the project's TODO.md sat
+      -- exactly one cell right of its header row, and turning this off lined all of them
+      -- up. Nothing in those documents is written as a tag on purpose, so no wanted
+      -- decoration is lost.
+      tags = { enable = false },
+    },
   })
 end
 
--- Not routed through util.lazy: that loader calls vim.cmd.packadd() without a bang, which
--- runs plugin/markview.lua (require("markview.autocmds").setup() then
--- require("markview.commands").setup()) immediately -- before setup() below has set
--- icon_provider = "mini". autocmds.setup() calls markview's own lazy_loaded() when
--- vim.v.vim_did_enter is already 1 (i.e. VimEnter has already fired), which synchronously
--- decorates every already-open markdown buffer using markview's built-in icon set. That
--- decoration is not refreshed by a later CursorMoved -- only a full re-attach
--- (:Markview toggle twice) forces it. Measured for T79: opening a markdown buffer via :e
--- after startup left the code-block sign highlighted "MarkviewPalette5Sign" instead of
--- "MiniIconsAzure", even after moving the cursor.
---
--- packadd! (bang) skips plugin/ entirely (:help repeat.txt, :packadd!), so setup() below
--- runs first and the same two calls plugin/markview.lua would have made run after, with
--- icon_provider already "mini".
-local function load_markview()
-  if not package.loaded["markview"] then
-    vim.cmd.packadd({ args = { "markview.nvim" }, bang = true })
-    setup(require("markview"))
-    require("markview.autocmds").setup()
-    require("markview.commands").setup()
-  end
+local lazy = require("util.lazy")
 
-  return require("markview")
+-- Routed through the shared util.lazy loader (bang-less packadd -- runs plugin/markview.lua,
+-- i.e. autocmds.setup() then commands.setup(), before setup() above). T79 needed a bang-ed
+-- packadd + manual setup() ordering instead, because switching icon_provider away from
+-- markview's default ("internal") meant the very first synchronous render (autocmds.setup()
+-- calling markview's lazy_loaded() when vim.v.vim_did_enter is already 1) used whatever
+-- icon_provider was in effect before setup() ran. Now that icon_provider stays "internal" --
+-- the same value before and after setup() -- that first render already matches setup()'s
+-- configuration, so the ordering workaround is unnecessary (verified headless, T80).
+local function load_markview()
+  return lazy.require("markview.nvim", "markview", setup)
 end
 
 vim.api.nvim_create_autocmd("FileType", {
@@ -66,3 +71,66 @@ vim.keymap.set("n", "<Leader>im", function()
   -- every buffer, which is not what "show me this file's raw syntax" calls for.
   vim.cmd("Markview toggle")
 end, { silent = true, desc = "Toggle markdown decoration" })
+
+-- The space dots and eol arrows of 'list' (config/general.lua) earn their place while
+-- editing and turn into noise once markview draws a document. They come off exactly while a
+-- decorated view is on screen: markview enabled, and the cursor not in insert or replace
+-- mode. Every other state restores the global 'list' rather than a per-window value the
+-- window used to hold, because this config decides 'list' in exactly one place.
+--
+-- Insert and replace mode have to be watched on their own. markview leaves conceallevel at
+-- 3 in both and lets 'concealcursor' -- built from preview.modes, which has neither in it --
+-- expose the cursor line alone, so entering them fires none of the User events below.
+--
+-- 'list' is window-local, so a window that once showed a decorated buffer would otherwise
+-- keep the listchars hidden for whatever opens in it next; BufWinEnter puts them back. A
+-- window made by :split inherits 'list' from the window it came from but no window-local
+-- variables, which is why nothing here is remembered per window.
+--
+-- Written through nvim_set_option_value with an explicit local scope: `vim.wo[win].list = x`
+-- writes the global value too (measured -- vim.go.list read false after one such assignment),
+-- which would destroy the very baseline this function restores from.
+local function sync_list(window, buffer)
+  local mode = vim.api.nvim_get_mode().mode
+  local editing = vim.startswith(mode, "i") or vim.startswith(mode, "R")
+  local decorated = vim.b[buffer].markview_decorated == true
+
+  vim.api.nvim_set_option_value("list", not (decorated and not editing) and vim.go.list, {
+    scope = "local",
+    win = window,
+  })
+end
+
+for event, decorated in pairs({
+  MarkviewAttach = true,
+  MarkviewEnable = true,
+  MarkviewDisable = false,
+  MarkviewDetach = false,
+}) do
+  vim.api.nvim_create_autocmd("User", {
+    pattern = event,
+    desc = "Hide listchars while markview decorates the buffer",
+    callback = function(args)
+      vim.b[args.data.buffer].markview_decorated = decorated
+
+      for _, window in ipairs(args.data.windows) do
+        sync_list(window, args.data.buffer)
+      end
+    end,
+  })
+end
+
+vim.api.nvim_create_autocmd("ModeChanged", {
+  pattern = { "*:[iR]*", "[iR]*:*" },
+  desc = "Bring listchars back while editing a decorated buffer",
+  callback = function(args)
+    sync_list(vim.api.nvim_get_current_win(), args.buf)
+  end,
+})
+
+vim.api.nvim_create_autocmd("BufWinEnter", {
+  desc = "Restore listchars when a decorated buffer leaves the window",
+  callback = function(args)
+    sync_list(vim.api.nvim_get_current_win(), args.buf)
+  end,
+})
