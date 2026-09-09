@@ -22,6 +22,7 @@ symlink.
     │   ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>a* key
     │   ├── gruvbox.lua     # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
     │   ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
+    │   ├── markview.lua    # OXY2DEV/markview.nvim config, lazy-loaded on the first markdown FileType
     │   ├── miniclue.lua    # echasnovski/mini.clue config, lazy-loaded on first trigger key
     │   ├── minifiles.lua   # echasnovski/mini.files config, lazy-loaded on first <leader>e press
     │   ├── miniicons.lua   # echasnovski/mini.icons config, loaded at startup (icon provider)
@@ -67,6 +68,33 @@ symlink.
   is the opt-out; the header comment in that file explains why the condition is that broad.
   Every other setting each server receives comes from nvim-lspconfig's own `lsp/*.lua` and is
   deliberately left untouched.
+- `lua/plugins/markview.lua`: config for `OXY2DEV/markview.nvim` (decorates markdown in the
+  buffer being edited -- headings, code blocks, tables, links -- without changing the file).
+  Not loaded at startup; a `FileType markdown` autocmd loads it through `lua/util/lazy.lua`
+  the first time a markdown buffer appears, since opening one is itself the moment decoration
+  starts to matter. `<Leader>im` toggles the decoration for the current buffer, and loads the
+  plugin first so the key also works before any markdown file has been opened. Only three
+  options are set: `preview.filetypes` narrowed to `markdown` alone, `preview.icon_provider`
+  left at markview's own `internal`, and `markdown_inline.tags` disabled. The last two are
+  not defaults chosen by inertia:
+  - `icon_provider` was tried as `"mini"` (matching the icon set `mini.pick` / `mini.files` /
+    `mini.tabline` use) but a fenced code block with no language tag makes markview call
+    `mini.icons.get("filetype", nil)`, which throws; markview swallows the error and leaves
+    that whole block undecorated. `internal` falls back to its own "unknown language" style
+    instead of throwing.
+  - `markdown_inline.tags` off, because ids written as `#16` / `#16-1` in the planning
+    documents this config edits are read as tag syntax. Decorating a tag conceals the `#` and
+    pads what remains with a space on each side, making the cell one column wider than its
+    source text, which knocks every column to its right out of alignment inside a table.
+  Hybrid mode (`preview.hybrid_modes`, which would strip the decoration from the cursor's own
+  line) is left off, and `wrap` stays on in `lua/config/general.lua`. That last one has a
+  cost: markview refuses to draw a table at all -- not even its outer border -- once the
+  table's columns add up to 90% of the window width or more, which is where the wider tables
+  in those planning documents land. The `listchars` dots and eol arrows are hidden while the
+  decoration is on screen and come back in insert and replace mode, through the `MarkviewAttach`
+  / `MarkviewEnable` / `MarkviewDisable` / `MarkviewDetach` events plus a `ModeChanged` and a
+  `BufWinEnter` autocmd. Parsers for `html`, `yaml` and `latex` are not installed, so markdown
+  written in those (inline HTML, front matter, math) stays undecorated.
 - `lua/plugins/miniclue.lua`: config for `echasnovski/mini.clue` (shows the next available
   keys and their descriptions in a floating window after a prefix key is held). Not loaded
   at startup; 19 key/mode combinations (`<Leader>`, `g`, `s`, `z`, `[`/`]`, `<C-w>`, `"`, `'`,
