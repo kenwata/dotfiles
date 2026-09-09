@@ -2,10 +2,10 @@
 -- the status line is part of the very first frame drawn (see .claude/rules/lua.md Plugins
 -- section, plan.md phase 16).
 --
--- This must load after lua/plugins/gruvbox.lua. The "auto" theme option resolves
--- vim.g.colors_name once, at the moment setup() runs, and falls back to a generated theme if
--- :colorscheme has not run yet -- moot here since the theme below never uses "auto", but the
--- require order in lua/plugins/init.lua stays gruvbox-then-lualine on principle.
+-- This must load after lua/plugins/gruvbox.lua: require("gruvbox") below fails until
+-- gruvbox.lua's own packadd has put gruvbox.nvim on runtimepath (verified empirically --
+-- require("gruvbox") errors "module not found" without it, even with the theme below never
+-- reading vim.g.colors_name the way the "auto" theme would have).
 vim.cmd.packadd({ args = { "lualine.nvim" }, bang = true })
 
 local palette = require("gruvbox").palette
