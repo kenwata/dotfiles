@@ -38,6 +38,18 @@ vim.api.nvim_create_autocmd("FileType", {
     -- typescriptreact -> tsx, jsonc -> json); plugin/filetypes.lua registers that mapping,
     -- so it can only be read after the packadd above.
     local lang = vim.treesitter.language.get_lang(vim.bo[args.buf].filetype)
+
+    -- A fresh dotfiles checkout has no parsers under stdpath("data") .. "/site" at all --
+    -- they are never part of this repo or dotfiles. install() is asynchronous by default
+    -- (no :wait() below), so this buffer's own highlighting is skipped for now rather than
+    -- blocking on the download+compile; the next time this filetype opens, the parser is
+    -- there and this branch is not taken.
+    if #vim.api.nvim_get_runtime_file("parser/" .. lang .. ".so", false) == 0 then
+      vim.notify(("nvim-treesitter: installing parser '%s'..."):format(lang), vim.log.levels.INFO)
+      require("nvim-treesitter").install({ lang })
+      return
+    end
+
     vim.treesitter.start(args.buf, lang)
   end,
 })
