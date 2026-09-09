@@ -86,6 +86,13 @@ symlink.
   each run `vim.cmd.packadd()` and `setup()` on first trigger. `<leader>ff` and `<leader>fg`
   set `RIPGREP_CONFIG_PATH` to `ripgreprc` only for the duration of the call, so `rg` also
   searches hidden files/dirs (except `.git`) there, without affecting `rg` anywhere else.
+  The prompt is not Insert mode — mini.pick reads keys itself and consults only its own
+  `mappings` table, so the Emacs-style keys from `lua/config/keybind.lua` never reach it.
+  Four of them are put back there instead: `<C-b>`/`<C-f>` move the caret, `<C-h>`/`<C-d>`
+  delete the character to its left/right. Each action holds exactly one key, so those four
+  take the places of `<Left>`, `<Right>`, `<BS>` and `<Del>`, which no longer work in the
+  prompt. Scrolling moves to the Alt version of the same letter (`<M-f>`/`<M-b>` vertically,
+  `<M-h>`/`<M-l>` horizontally); it still matters with the preview open (`<Tab>`).
 - `lua/plugins/minitabline.lua`: config for `echasnovski/mini.tabline` (draws the open
   buffers as a row of tabs along the top line of the screen). What is listed there are
   buffers, not Vim tab pages, which this config does not use. Loaded at startup with
