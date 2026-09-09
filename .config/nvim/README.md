@@ -24,6 +24,7 @@ symlink.
     │   ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
     │   ├── miniclue.lua    # echasnovski/mini.clue config, lazy-loaded on first trigger key
     │   ├── minifiles.lua   # echasnovski/mini.files config, lazy-loaded on first <leader>e press
+    │   ├── miniicons.lua   # echasnovski/mini.icons config, loaded at startup (icon provider)
     │   ├── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
     │   └── minitabline.lua # echasnovski/mini.tabline config, loaded at startup (tabline)
     └── util/
@@ -80,6 +81,17 @@ symlink.
   at startup, and a `BufEnter` stub opens `mini.files` for the first directory buffer before
   the plugin itself is loaded (its own `BufEnter`, registered by `setup()`, handles every one
   after that). Deletion is permanent (`options.permanent_delete = true`, no trash/recycle bin).
+- `lua/plugins/miniicons.lua`: config for `echasnovski/mini.icons` (icon and highlight-group
+  provider; draws nothing itself). Loaded at startup with `packadd!`, for the same reason as
+  `gruvbox.lua` and `minitabline.lua` below: `mini.tabline` looks for `_G.MiniIcons` on its
+  very first draw (`show_icons = true`, see `minitabline.lua` below), and loading `mini.icons`
+  any later would leave that first frame without a provider and shift the tabline's layout once
+  it arrived (plan.md phase 14). `setup()` is passed only `style = "glyph"` (Nerd Font icons
+  over plain-text ones); it renders correctly only with a Nerd Font installed in the terminal
+  (this machine uses Ghostty with HackGen Console NF, configured outside this repo in
+  `config.ghostty`). `mini.pick` and `mini.files` already looked for `_G.MiniIcons` themselves
+  before this file existed, so both switched from a single generic icon to per-file-type glyphs
+  with no change to either plugin's own config.
 - `lua/plugins/minipick.lua`: config for `echasnovski/mini.pick` (fuzzy finder). Not loaded
   at startup; `<leader>ff` (find files), `<leader>fg` (live grep), `<leader>fb` (switch
   between open files), or the first call to `vim.ui.select` (e.g. picking an LSP code action)
@@ -100,9 +112,9 @@ symlink.
   the tabline is part of the first frame drawn, and there is no "first use" a key could stand
   in for, since the line is simply always visible. `setup()` forces `showtabline = 2`;
   `showtabline = 1` counts tab pages rather than buffers, so it would keep the line hidden
-  permanently here. `show_icons` is `false` because no icon provider is installed yet — with
-  `true`, every redraw would retry `require("nvim-web-devicons")` and never cache the failure;
-  it becomes `true` once `mini.icons` arrives. `format` is left at its default and, because a
+  permanently here. `show_icons` is `true`: `lua/plugins/miniicons.lua` (above) loads
+  `mini.icons` at startup before this file's `require()` runs, so `_G.MiniIcons` already
+  exists by the tabline's first draw. `format` is left at its default and, because a
   Lua table literal cannot distinguish `format = nil` from an omitted key, is not written out.
   Switching buffers is done with the built-in `[b`/`]b`, with `<leader>fb`, or by clicking a
   tab with the mouse; no mapping is added for it. Terminals get no tab, because
