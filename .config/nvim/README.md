@@ -22,6 +22,7 @@ symlink.
     │   ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>a* key
     │   ├── gruvbox.lua     # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
     │   ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
+    │   ├── lualine.lua     # nvim-lualine/lualine.nvim config, loaded at startup (status line)
     │   ├── markview.lua    # OXY2DEV/markview.nvim config, lazy-loaded on the first markdown FileType
     │   ├── miniclue.lua    # echasnovski/mini.clue config, lazy-loaded on first trigger key
     │   ├── minifiles.lua   # echasnovski/mini.files config, lazy-loaded on first <leader>e press
@@ -69,6 +70,28 @@ symlink.
   is the opt-out; the header comment in that file explains why the condition is that broad.
   Every other setting each server receives comes from nvim-lspconfig's own `lsp/*.lua` and is
   deliberately left untouched.
+- `lua/plugins/lualine.lua`: config for `nvim-lualine/lualine.nvim` (status line), pinned to
+  commit `221ce6b2d999187044529f49da6554a92f740a96` in `lua/plugins/init.lua` (no release tag
+  exists for this plugin). Loaded at startup with `packadd!`, for the same reason as
+  `gruvbox.lua` and `minitabline.lua`: the status line is part of the first frame drawn, and
+  there is no "first use" a key could stand in for. Must load after `gruvbox.lua`: its custom
+  theme calls `require("gruvbox").palette`, which errors "module not found" until
+  `gruvbox.lua`'s own `packadd` has put `gruvbox.nvim` on runtimepath. The custom theme reuses
+  `gruvbox_dark`'s own `b`/`c` colors and inactive state verbatim, replacing only each mode's
+  `a` section background, since `mini.tabline`'s current-tab highlight is already a solid
+  bright-green fill and a green mode block would read as the same colored chunk repeated one
+  line below it. The configuration picked on real hardware (see
+  `docs/design/lualine-startup-statusline.md` in the planning repository): the
+  "information-heavy" section layout (`branch`, `diff`, `filename`,
+  `lsp_status`, `diagnostics`, `searchcount`, `selectioncount`, `encoding`, `fileformat`,
+  `filetype`, `progress`, `location`), powerline separators (U+E0B0/U+E0B2, filled triangles),
+  icons enabled, relative path display, and `extensions` enabled for `toggleterm` and
+  `quickfix` (their own buffers read oddly under the sections above -- a raw `term://` name
+  where `filename` expects a file, an empty `diagnostics` count for a list that has none).
+  Every option lualine.nvim accepts is written out, including ones left at their default, same
+  convention as `gruvbox.lua`. Roles are split with `mini.tabline` (`minitabline.lua` below):
+  that plugin owns the tab row, this one owns the status line beneath it, and neither draws
+  what the other is responsible for.
 - `lua/plugins/markview.lua`: config for `OXY2DEV/markview.nvim` (decorates markdown in the
   buffer being edited -- headings, code blocks, tables, links -- without changing the file).
   Not loaded at startup; a `FileType markdown` autocmd loads it through `lua/util/lazy.lua`
@@ -126,7 +149,12 @@ symlink.
   (this machine uses Ghostty with HackGen Console NF, configured outside this repo in
   `config.ghostty`). `mini.pick` and `mini.files` already looked for `_G.MiniIcons` themselves
   before this file existed, so both switched from a single generic icon to per-file-type glyphs
-  with no change to either plugin's own config.
+  with no change to either plugin's own config. `lualine.nvim` (`lualine.lua` above) looks only
+  for `nvim-web-devicons`, never `mini.icons` directly, so this file's `setup()` call is
+  followed by `require("mini.icons").mock_nvim_web_devicons()`, registering a fake
+  `nvim-web-devicons` module backed by `mini.icons`. That call cannot be undone once made in a
+  session, so it runs unconditionally rather than being gated on anything, and it lives here
+  rather than in `lualine.lua` so that "who supplies icons" stays readable from a single file.
 - `lua/plugins/minipick.lua`: config for `echasnovski/mini.pick` (fuzzy finder). Not loaded
   at startup; `<leader>ff` (find files), `<leader>fg` (live grep), `<leader>fb` (switch
   between open files), or the first call to `vim.ui.select` (e.g. picking an LSP code action)
@@ -143,7 +171,7 @@ symlink.
 - `lua/plugins/minitabline.lua`: config for `echasnovski/mini.tabline` (draws the open
   buffers as a row of tabs along the top line of the screen). What is listed there are
   buffers, not Vim tab pages, which this config does not use. Loaded at startup with
-  `packadd!`, for the same reason as `gruvbox.lua` and unlike the four lazy-loaded plugins:
+  `packadd!`, for the same reason as `gruvbox.lua` and unlike the seven lazy-loaded plugins:
   the tabline is part of the first frame drawn, and there is no "first use" a key could stand
   in for, since the line is simply always visible. `setup()` forces `showtabline = 2`;
   `showtabline = 1` counts tab pages rather than buffers, so it would keep the line hidden
@@ -219,11 +247,12 @@ symlink.
   `lua/plugins/init.lua` updates the plugin's own Lua code and query files, but not the
   eight already-compiled parsers; keeping those current after such a bump needs a manual
   `:TSUpdate`.
-- `lua/util/lazy.lua`: shared loader for lazy-loaded plugins (`claudecode.lua`, `miniclue.lua`,
-  `minifiles.lua`, `minipick.lua`). Exposes one function, `M.require(pack_name, module_name,
-  setup)`, that runs `vim.cmd.packadd(pack_name)` and `setup(require(module_name))` exactly
-  once — while `package.loaded[module_name]` is already filled, neither runs again — then
-  returns `require(module_name)`.
+- `lua/util/lazy.lua`: shared loader for lazy-loaded plugins (`claudecode.lua`, `markview.lua`,
+  `miniclue.lua`, `minifiles.lua`, `minipick.lua`, `toggleterm.lua`, `treesitter.lua`). Exposes
+  one function, `M.require(pack_name, module_name, setup)`, that runs
+  `vim.cmd.packadd(pack_name)` and `setup(require(module_name))` exactly once — while
+  `package.loaded[module_name]` is already filled, neither runs again — then returns
+  `require(module_name)`.
 - `nvim-pack-lock.json`: generated by `vim.pack` once a plugin is installed. Records the
   exact revision in use so another machine can reproduce it.
 - `ripgreprc`: `rg` (ripgrep) config (`--hidden` and `--glob=!.git`). Only takes effect
