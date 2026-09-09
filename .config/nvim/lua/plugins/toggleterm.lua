@@ -191,6 +191,11 @@ local function setup(toggleterm)
         end
         term:shutdown()
 
+        -- Called again despite show_terminal() having queued its own restore: that one runs on
+        -- the next tick and is undone here, since Neovim leaves Terminal mode itself once this
+        -- callback returns. Only the delayed one below lands. The wasted call is harmless --
+        -- both do nothing outside a terminal buffer -- and dropping it from show_terminal()
+        -- would break the <M-n> path, which has no such delay to wait for.
         enter_terminal_mode(EXIT_MODE_RESTORE_DELAY_MS)
       end)
     end,
