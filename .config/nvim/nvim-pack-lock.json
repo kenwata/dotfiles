@@ -10,6 +10,11 @@
       "src": "https://github.com/ellisonleao/gruvbox.nvim",
       "version": "2.0.0 - 3.0.0"
     },
+    "lualine.nvim": {
+      "rev": "221ce6b2d999187044529f49da6554a92f740a96",
+      "src": "https://github.com/nvim-lualine/lualine.nvim",
+      "version": "'221ce6b2d999187044529f49da6554a92f740a96'"
+    },
     "markview.nvim": {
       "rev": "3537eb2a9251cad5d7718253768f3772c62233fc",
       "src": "https://github.com/OXY2DEV/markview.nvim",

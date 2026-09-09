@@ -11,6 +11,7 @@ vim.pack.add({
   { src = "https://github.com/akinsho/toggleterm.nvim", version = vim.version.range("2") },
   { src = "https://github.com/OXY2DEV/markview.nvim", version = vim.version.range("28") },
   { src = "https://github.com/ellisonleao/gruvbox.nvim", version = vim.version.range("2") },
+  { src = "https://github.com/nvim-lualine/lualine.nvim", version = "221ce6b2d999187044529f49da6554a92f740a96" },
   { src = "https://github.com/nvim-treesitter/nvim-treesitter", version = "5cb0114e6242625db56dd6440e945ed1ece10bc7" },
 }, {
   -- Without this, vim.pack loads plugin/ files during this same startup sequence even
@@ -31,4 +32,5 @@ require("plugins.minitabline")
 require("plugins.toggleterm")
 require("plugins.markview")
 require("plugins.gruvbox")
+require("plugins.lualine")
 require("plugins.treesitter")
