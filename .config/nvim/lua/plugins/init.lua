@@ -3,6 +3,7 @@
 vim.pack.add({
   { src = "https://github.com/coder/claudecode.nvim", version = vim.version.range("0.3") },
   { src = "https://github.com/neovim/nvim-lspconfig", version = vim.version.range("2") },
+  { src = "https://github.com/echasnovski/mini.icons", version = vim.version.range("0.18") },
   { src = "https://github.com/echasnovski/mini.pick", version = vim.version.range("0.18") },
   { src = "https://github.com/echasnovski/mini.clue", version = vim.version.range("0.18") },
   { src = "https://github.com/echasnovski/mini.files", version = vim.version.range("0.18") },
@@ -19,6 +20,7 @@ vim.pack.add({
 
 require("plugins.claudecode")
 require("plugins.lspconfig")
+require("plugins.miniicons")
 require("plugins.minipick")
 require("plugins.miniclue")
 require("plugins.minifiles")

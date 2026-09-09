@@ -20,6 +20,11 @@
       "src": "https://github.com/echasnovski/mini.files",
       "version": "0.18.0 - 0.19.0"
     },
+    "mini.icons": {
+      "rev": "e56797f90192d81f1fda02e662fc3e8e3d775027",
+      "src": "https://github.com/echasnovski/mini.icons",
+      "version": "0.18.0 - 0.19.0"
+    },
     "mini.pick": {
       "rev": "8c1f75f8ddd8c9f75d07ed2ab5718d2c3cb65a66",
       "src": "https://github.com/echasnovski/mini.pick",
