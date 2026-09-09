@@ -85,7 +85,8 @@ symlink.
   "information-heavy" section layout (`branch`, `diff`, `filename`,
   `lsp_status`, `diagnostics`, `searchcount`, `selectioncount`, `encoding`, `fileformat`,
   `filetype`, `progress`, `location`), powerline separators (U+E0B0/U+E0B2, filled triangles),
-  icons enabled, relative path display, and `extensions` enabled for `toggleterm` and
+  icons enabled (supplied through the `nvim-web-devicons` bridge `miniicons.lua` registers,
+  see below), relative path display, and `extensions` enabled for `toggleterm` and
   `quickfix` (their own buffers read oddly under the sections above -- a raw `term://` name
   where `filename` expects a file, an empty `diagnostics` count for a list that has none).
   Every option lualine.nvim accepts is written out, including ones left at their default, same
