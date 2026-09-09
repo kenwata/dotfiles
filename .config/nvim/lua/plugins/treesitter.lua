@@ -12,7 +12,7 @@ end
 
 -- The four languages phase 4 set up language servers for, plus tsx (typescriptreact has its
 -- own parser, distinct from typescript) and the file formats this config and its tooling
--- edit (json/toml/yaml). javascript is deliberately absent (plan.md out-of-scope).
+-- edit (json/toml/yaml). javascript is deliberately absent (design doc's Out-of-scope section).
 local HIGHLIGHTED_FILETYPES = {
   "rust",
   "python",
