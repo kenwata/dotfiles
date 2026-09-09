@@ -26,7 +26,8 @@ symlink.
     │   ├── minifiles.lua   # echasnovski/mini.files config, lazy-loaded on first <leader>e press
     │   ├── miniicons.lua   # echasnovski/mini.icons config, loaded at startup (icon provider)
     │   ├── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
-    │   └── minitabline.lua # echasnovski/mini.tabline config, loaded at startup (tabline)
+    │   ├── minitabline.lua # echasnovski/mini.tabline config, loaded at startup (tabline)
+    │   └── toggleterm.lua  # akinsho/toggleterm.nvim config, lazy-loaded on first <C-\> press
     └── util/
         └── lazy.lua        # Shared packadd-then-setup-once loader for lazy-loaded plugins
 ```
@@ -127,6 +128,31 @@ symlink.
   identically, and an unsaved tab borrows the status line's pale bar, which sits one row below
   it under `laststatus = 3`. The overrides give the current tab a solid green block, leave
   green text for a visible-but-not-current one, and move the unsaved variants to yellow.
+- `lua/plugins/toggleterm.lua`: config for `akinsho/toggleterm.nvim` (opens and hides a shell
+  terminal with one key). Not loaded at startup; `<C-\>` in Normal mode runs
+  `vim.cmd.packadd()` and `setup()` on first press through `lua/util/lazy.lua`. That mapping
+  reads `v:count` itself so that `2<C-\>` reaches the second terminal on the very first press
+  as well.
+  **Only one terminal is ever on screen.** toggleterm gives each terminal its own split, so
+  opening a second one would leave both visible side by side; every entry point here closes the
+  others first, turning the bottom of the screen into a single 12-row slot whose occupant the
+  mappings swap. `open_mapping` and `terminal_mappings` are therefore left unset -- they would
+  bind `<Cmd>ToggleTerm<CR>`, which opens alongside whatever is already up -- and each key is
+  bound by hand instead. In Normal mode `<C-\>` shows the terminal matching the count typed
+  before it, hides the terminal when one is up, and otherwise reopens the one used last. Inside a
+  terminal, `<C-\>` and `<C-q>` hide it (matching how the Claude Code terminal closes), and
+  `<M-1>` through `<M-9>` switch to that terminal, starting it when the number is unused. Those
+  are buffer-local: Terminal mode passes every unbound key to the shell, so without them there is
+  no way from one terminal into another -- even `<C-w>k` reaches zsh -- and binding them globally
+  would collide with the `<C-q>` that `claudecode.lua` binds for its own terminal. The cost is
+  that zsh loses `<C-q>`, `<C-\>` and its digit arguments inside these terminals.
+  The winbar above the slot lists every terminal as `1 zsh 2 zsh ...`, marks the visible one, and
+  is clickable; it stands in for the tabline, which never lists terminals because
+  `lua/config/autocmd.lua` clears their `'buflisted'`. `persist_mode` is off, against its default:
+  a terminal is always left in Normal mode when `<M-n>` hops away from it, and restoring that on
+  the way back would strand the cursor outside Terminal mode where `<M-n>` no longer fires.
+  Claude Code's terminal is untouched by all of this -- it keeps its own vertical split on the
+  right (`claudecode.lua`).
 - `lua/util/lazy.lua`: shared loader for lazy-loaded plugins (`claudecode.lua`, `miniclue.lua`,
   `minifiles.lua`, `minipick.lua`). Exposes one function, `M.require(pack_name, module_name,
   setup)`, that runs `vim.cmd.packadd(pack_name)` and `setup(require(module_name))` exactly
