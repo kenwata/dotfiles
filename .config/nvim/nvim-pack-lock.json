@@ -10,6 +10,11 @@
       "src": "https://github.com/ellisonleao/gruvbox.nvim",
       "version": "2.0.0 - 3.0.0"
     },
+    "markview.nvim": {
+      "rev": "3537eb2a9251cad5d7718253768f3772c62233fc",
+      "src": "https://github.com/OXY2DEV/markview.nvim",
+      "version": "28.0.0 - 29.0.0"
+    },
     "mini.clue": {
       "rev": "62e9e38c3dc4b7d429f1b6e28d96f96cdff71132",
       "src": "https://github.com/echasnovski/mini.clue",
