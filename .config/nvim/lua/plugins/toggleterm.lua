@@ -4,12 +4,71 @@ local lazy = require("util.lazy")
 -- digits there are; nothing in toggleterm caps the count.
 local LAST_REACHABLE_TERMINAL = 9
 
+-- How long to wait before restoring Terminal mode after a shell has exited. Neovim leaves
+-- Terminal mode on its own as the last step of tearing the job down, and it does so after the
+-- callback below has returned -- so a startinsert issued any earlier is simply undone by it.
+-- Measured at 20ms: the mode has already dropped to Normal by then, and startinsert sticks.
+local EXIT_MODE_RESTORE_DELAY_MS = 20
+
 --- Returns every terminal that currently occupies a window.
 ---@return table[]
 local function open_terminals()
   return vim.tbl_filter(function(term)
     return term:is_open()
   end, require("toggleterm.terminal").get_all(true))
+end
+
+--- Puts the cursor back into Terminal mode once the current round of window juggling settles.
+---
+--- Deferring is what makes it stick: called outright from a mapping's callback, startinsert is
+--- undone as that callback returns. The next tick is late enough for that, but not for a shell
+--- that has just exited -- hence delay_ms, which callers on that path pass.
+---@param delay_ms integer|nil milliseconds to wait; nil waits only for the next tick
+local function enter_terminal_mode(delay_ms)
+  local function restore()
+    if vim.bo.buftype == "terminal" then
+      vim.cmd.startinsert()
+    end
+  end
+
+  if delay_ms == nil then
+    vim.schedule(restore)
+  else
+    vim.defer_fn(restore, delay_ms)
+  end
+end
+
+--- Swaps `term` into the window the visible terminal already occupies, rather than closing that
+--- window and opening a new one -- which empties the terminal area for an instant and flickers.
+--- Returns false when there is nothing to swap into, leaving the caller to open normally.
+---
+--- Reaches into Terminal.window because toggleterm has no API for reusing a window. Keeping that
+--- field in step is what the rest of the plugin reads: is_open() answers by checking whether the
+--- window still holds the terminal's own buffer, so the terminal being replaced reports itself
+--- closed from here on without any bookkeeping of its own. The winbar is re-set because its
+--- expression carries the terminal id it was built for, and would otherwise keep marking the
+--- previous terminal as the current one.
+---@param term table
+---@return boolean
+local function swap_into_visible_window(term)
+  local visible = open_terminals()[1]
+  if visible == nil or visible.id == term.id then
+    return false
+  end
+
+  local window = visible.window
+  if window == nil or not vim.api.nvim_win_is_valid(window) then
+    return false
+  end
+  if term.bufnr == nil or not vim.api.nvim_buf_is_valid(term.bufnr) then
+    return false
+  end
+
+  vim.api.nvim_win_set_buf(window, term.bufnr)
+  term.window = window
+  vim.api.nvim_set_current_win(window)
+  require("toggleterm.ui").set_winbar(term)
+  return true
 end
 
 --- Brings terminal `id` up on its own, starting it when that number is unused.
@@ -19,34 +78,48 @@ end
 --- occupant this swaps -- the winbar above it then reads as the tab bar for that slot.
 ---@param id integer
 local function show_terminal(id)
-  for _, other in ipairs(open_terminals()) do
-    if other.id ~= id then
-      other:close()
-    end
-  end
-
   local term = require("toggleterm.terminal").get_or_create_term(id)
 
-  -- Closed and reopened even when it is already up, because open() is the only path that lands
-  -- in Terminal mode (it honours start_in_insert). focus() merely re-points the cursor, leaving
-  -- Normal mode in place -- and there the Terminal-mode <M-n> mappings no longer fire, so one
-  -- hop in, the next is impossible. startinsert does not survive either, whether called outright
-  -- or through vim.schedule: the mapping's callback undoes it as it returns. Only the window
-  -- closes here; the shell keeps running.
-  if term:is_open() then
-    term:close()
-  end
-  term:open()
-
-  -- open() reaches its own startinsert only when it reuses an existing buffer; on the path that
-  -- spawns a new shell the window is not current yet at that point, and the terminal is left in
-  -- Normal mode. Scheduling it here covers both paths -- and by the time it runs the mapping's
-  -- callback has returned, which is what undoes a startinsert called any earlier.
-  vim.schedule(function()
-    if vim.bo.buftype == "terminal" then
-      vim.cmd.startinsert()
+  if not swap_into_visible_window(term) then
+    for _, other in ipairs(open_terminals()) do
+      if other.id ~= id then
+        other:close()
+      end
     end
-  end)
+
+    -- Reopened rather than focused: focus() only re-points the cursor, and the terminal would be
+    -- left in whatever mode it had. Opening before closing the others would spare the flicker
+    -- this ordering causes, but Terminal:close() hands focus back to the editor as it goes, and
+    -- the startinsert below would then land there -- putting the editor into Insert mode.
+    if term:is_open() then
+      term:close()
+    end
+    term:open()
+  end
+
+  -- Neither route above lands in Terminal mode on its own: a swapped window keeps whatever mode
+  -- it had (Normal mode, when the shell it held has just exited), and open() reaches its own
+  -- startinsert only when it reuses an existing buffer.
+  enter_terminal_mode()
+end
+
+--- Returns the terminal to fall back on when `id` goes away: the next one by number, or the
+--- previous one when `id` was the last. Nil when it was the only terminal left.
+---@param id integer
+---@return table|nil
+local function neighbour_terminal(id)
+  local previous = nil
+  -- get_all() returns them sorted by id, so the first one past `id` is the next tab along.
+  for _, term in ipairs(require("toggleterm.terminal").get_all(true)) do
+    if term.id > id then
+      return term
+    end
+    if term.id < id then
+      previous = term
+    end
+  end
+
+  return previous
 end
 
 --- Hides the terminal slot, keeping the shells running for the next toggle.
@@ -73,8 +146,8 @@ end
 -- which is exactly what makes the stubs below sufficient as the only entry points.
 local function setup(toggleterm)
   -- Only the options this config actually decides are written out. The rest keep their
-  -- defaults: start_in_insert, persist_size, shade_terminals, close_on_exit, auto_scroll,
-  -- hide_numbers, autochdir, clear_env, shell, float_opts and responsiveness.
+  -- defaults: start_in_insert, persist_size, shade_terminals, auto_scroll, hide_numbers,
+  -- autochdir, clear_env, shell, float_opts and responsiveness.
   toggleterm.setup({
     -- open_mapping is deliberately left unset. It would bind <Cmd>ToggleTerm<CR>, which opens a
     -- terminal alongside any already on screen; the mappings at the bottom of this file route
@@ -97,6 +170,30 @@ local function setup(toggleterm)
       enabled = true,
       name_formatter = terminal_winbar_name,
     },
+    -- Off, against its default: it closes the window the moment a shell exits, and reopening it
+    -- for the neighbour is visible as a flicker. Leaving the window standing lets on_exit below
+    -- swap the neighbour into it with nothing to redraw.
+    close_on_exit = false,
+    -- Exiting a shell (`exit`, or Ctrl-D) would otherwise take the whole terminal area with it
+    -- and drop the cursor back in the editor, even with other terminals still running. Showing
+    -- the neighbour keeps the slot -- and the cursor -- where they were, the way closing one tab
+    -- of several does.
+    --
+    -- shutdown() deletes the buffer of the terminal that exited. By then the window holds the
+    -- neighbour's buffer, so shutdown() sees itself as closed and leaves the window alone. With
+    -- no neighbour to show, it is still holding its own buffer, and the same call closes the
+    -- window -- which is what should happen once the last terminal is gone.
+    on_exit = function(term)
+      vim.schedule(function()
+        local neighbour = neighbour_terminal(term.id)
+        if neighbour ~= nil then
+          show_terminal(neighbour.id)
+        end
+        term:shutdown()
+
+        enter_terminal_mode(EXIT_MODE_RESTORE_DELAY_MS)
+      end)
+    end,
     on_create = function(term)
       -- Buffer-local on purpose: lua/plugins/claudecode.lua binds <C-q> globally for the
       -- Claude Code terminal, and a second global binding would let require() order decide
