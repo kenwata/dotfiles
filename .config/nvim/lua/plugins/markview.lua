@@ -1,5 +1,3 @@
-local lazy = require("util.lazy")
-
 -- markview.nvim is loaded on first use, not at startup: decorating markdown has no bearing
 -- on the first frame drawn (plan.md §6). Unlike every other lazy-loaded plugin here, it has
 -- no key that means "start using this now" -- opening a markdown buffer is itself the moment
@@ -23,8 +21,29 @@ local function setup(markview)
   })
 end
 
+-- Not routed through util.lazy: that loader calls vim.cmd.packadd() without a bang, which
+-- runs plugin/markview.lua (require("markview.autocmds").setup() then
+-- require("markview.commands").setup()) immediately -- before setup() below has set
+-- icon_provider = "mini". autocmds.setup() calls markview's own lazy_loaded() when
+-- vim.v.vim_did_enter is already 1 (i.e. VimEnter has already fired), which synchronously
+-- decorates every already-open markdown buffer using markview's built-in icon set. That
+-- decoration is not refreshed by a later CursorMoved -- only a full re-attach
+-- (:Markview toggle twice) forces it. Measured for T79: opening a markdown buffer via :e
+-- after startup left the code-block sign highlighted "MarkviewPalette5Sign" instead of
+-- "MiniIconsAzure", even after moving the cursor.
+--
+-- packadd! (bang) skips plugin/ entirely (:help repeat.txt, :packadd!), so setup() below
+-- runs first and the same two calls plugin/markview.lua would have made run after, with
+-- icon_provider already "mini".
 local function load_markview()
-  return lazy.require("markview.nvim", "markview", setup)
+  if not package.loaded["markview"] then
+    vim.cmd.packadd({ args = { "markview.nvim" }, bang = true })
+    setup(require("markview"))
+    require("markview.autocmds").setup()
+    require("markview.commands").setup()
+  end
+
+  return require("markview")
 end
 
 vim.api.nvim_create_autocmd("FileType", {
