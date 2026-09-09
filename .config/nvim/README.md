@@ -24,7 +24,8 @@ symlink.
     │   ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
     │   ├── miniclue.lua    # echasnovski/mini.clue config, lazy-loaded on first trigger key
     │   ├── minifiles.lua   # echasnovski/mini.files config, lazy-loaded on first <leader>e press
-    │   └── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
+    │   ├── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
+    │   └── minitabline.lua # echasnovski/mini.tabline config, loaded at startup (tabline)
     └── util/
         └── lazy.lua        # Shared packadd-then-setup-once loader for lazy-loaded plugins
 ```
@@ -41,7 +42,9 @@ symlink.
   LSP displays Neovim leaves off. Flashes the yanked region on `TextYankPost`; enables code
   lenses for every buffer with `vim.lsp.codelens.enable(true)`; and holds back the built-in
   `'autocomplete'` menu while the cursor sits inside an existing word (`InsertEnter`,
-  `CursorMovedI`).
+  `CursorMovedI`). A `TermOpen` entry clears `'buflisted'` on every terminal buffer, which
+  keeps terminals out of the buffer list as a whole — `:ls`, `[b`/`]b`, `<leader>fb` and the
+  tabline alike; `:ls!` still lists them.
 - `lua/plugins/init.lua`: declares every plugin in a single `vim.pack.add({...})` call with
   `load = function() end` (deferred), then `require`s each per-plugin config file below.
 - `lua/plugins/claudecode.lua`: config for `coder/claudecode.nvim`. Not loaded at startup;
@@ -83,6 +86,28 @@ symlink.
   each run `vim.cmd.packadd()` and `setup()` on first trigger. `<leader>ff` and `<leader>fg`
   set `RIPGREP_CONFIG_PATH` to `ripgreprc` only for the duration of the call, so `rg` also
   searches hidden files/dirs (except `.git`) there, without affecting `rg` anywhere else.
+- `lua/plugins/minitabline.lua`: config for `echasnovski/mini.tabline` (draws the open
+  buffers as a row of tabs along the top line of the screen). What is listed there are
+  buffers, not Vim tab pages, which this config does not use. Loaded at startup with
+  `packadd!`, for the same reason as `gruvbox.lua` and unlike the four lazy-loaded plugins:
+  the tabline is part of the first frame drawn, and there is no "first use" a key could stand
+  in for, since the line is simply always visible. `setup()` forces `showtabline = 2`;
+  `showtabline = 1` counts tab pages rather than buffers, so it would keep the line hidden
+  permanently here. `show_icons` is `false` because no icon provider is installed yet — with
+  `true`, every redraw would retry `require("nvim-web-devicons")` and never cache the failure;
+  it becomes `true` once `mini.icons` arrives. `format` is left at its default and, because a
+  Lua table literal cannot distinguish `format = nil` from an omitted key, is not written out.
+  Switching buffers is done with the built-in `[b`/`]b`, with `<leader>fb`, or by clicking a
+  tab with the mouse; no mapping is added for it. Terminals get no tab, because
+  `lua/config/autocmd.lua` clears their `'buflisted'`. Same-named files in different
+  directories are disambiguated by prefixing the parent directory (`nvim/init.lua` against
+  `plugins/init.lua`), and when the tabs do not all fit, `«` and `»` mark the cut ends —
+  those two come from `'listchars'` in `lua/config/general.lua`, which is where mini.tabline
+  reads them from. The five `MiniTabline*` highlight overrides live in `lua/plugins/gruvbox.lua`:
+  by default the current buffer and a buffer merely shown in another split are drawn
+  identically, and an unsaved tab borrows the status line's pale bar, which sits one row below
+  it under `laststatus = 3`. The overrides give the current tab a solid green block, leave
+  green text for a visible-but-not-current one, and move the unsaved variants to yellow.
 - `lua/util/lazy.lua`: shared loader for lazy-loaded plugins (`claudecode.lua`, `miniclue.lua`,
   `minifiles.lua`, `minipick.lua`). Exposes one function, `M.require(pack_name, module_name,
   setup)`, that runs `vim.cmd.packadd(pack_name)` and `setup(require(module_name))` exactly
