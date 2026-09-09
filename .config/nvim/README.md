@@ -151,6 +151,14 @@ symlink.
   `lua/config/autocmd.lua` clears their `'buflisted'`. `persist_mode` is off, against its default:
   a terminal is always left in Normal mode when `<M-n>` hops away from it, and restoring that on
   the way back would strand the cursor outside Terminal mode where `<M-n>` no longer fires.
+  Switching terminals reuses the window rather than closing and reopening it, which would empty
+  the slot for an instant and flicker. `close_on_exit` is off for the same reason: ending a shell
+  with `exit` or `<C-d>` would otherwise take the whole slot with it and drop the cursor back in
+  the editor even with other terminals still running, so `on_exit` swaps the neighbouring terminal
+  (the next one by number, or the previous one) into the standing window instead. The window is
+  only given up once the last terminal is gone. Terminal mode is restored 20ms later rather than
+  on the next tick, because Neovim leaves Terminal mode itself as the last step of tearing the job
+  down -- anything earlier is undone by that.
   Claude Code's terminal is untouched by all of this -- it keeps its own vertical split on the
   right (`claudecode.lua`).
 - `lua/util/lazy.lua`: shared loader for lazy-loaded plugins (`claudecode.lua`, `miniclue.lua`,
