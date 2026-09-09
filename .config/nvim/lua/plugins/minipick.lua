@@ -7,7 +7,30 @@ local lazy = require("util.lazy")
 -- call; util.lazy guards against re-running it once mini.pick is loaded.
 local function load_minipick()
   return lazy.require("mini.pick", "mini.pick", function(minipick)
-    minipick.setup()
+    -- Only the mappings below are given; every other mini.pick option stays at its default.
+    -- The prompt is not insert mode -- mini.pick reads keys itself and consults this table
+    -- alone -- so the Emacs-style insert-mode keys from lua/config/keybind.lua never reach it.
+    -- The four below put the ones worth having while typing a query back within reach.
+    --
+    -- Each action holds exactly one key (H.normalize_mappings keys its table by the resolved
+    -- termcode), so naming a key here takes it away from whatever held that action before. The
+    -- arrows, <Del> and <BS> are what pay for the four: <C-h> and <BS> are separate keys to
+    -- Neovim (byte 8 against the <80>kb special), so this genuinely retires <BS> in the prompt.
+    minipick.setup({
+      mappings = {
+        caret_left = "<C-b>",
+        caret_right = "<C-f>",
+        delete_char = "<C-h>",
+        delete_char_right = "<C-d>",
+        -- Ctrl now edits the query, so scrolling takes the Alt version of the same letter
+        -- rather than being dropped: with the preview open (<Tab>) these are how a long file
+        -- is read, and long paths in the candidate list need the horizontal pair.
+        scroll_down = "<M-f>",
+        scroll_up = "<M-b>",
+        scroll_left = "<M-h>",
+        scroll_right = "<M-l>",
+      },
+    })
   end)
 end
 
