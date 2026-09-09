@@ -28,7 +28,8 @@ symlink.
     │   ├── miniicons.lua   # echasnovski/mini.icons config, loaded at startup (icon provider)
     │   ├── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
     │   ├── minitabline.lua # echasnovski/mini.tabline config, loaded at startup (tabline)
-    │   └── toggleterm.lua  # akinsho/toggleterm.nvim config, lazy-loaded on first <C-\> press
+    │   ├── toggleterm.lua  # akinsho/toggleterm.nvim config, lazy-loaded on first <C-\> press
+    │   └── treesitter.lua  # nvim-treesitter/nvim-treesitter config, lazy-loaded on two FileType autocmds
     └── util/
         └── lazy.lua        # Shared packadd-then-setup-once loader for lazy-loaded plugins
 ```
@@ -93,8 +94,13 @@ symlink.
   in those planning documents land. The `listchars` dots and eol arrows are hidden while the
   decoration is on screen and come back in insert and replace mode, through the `MarkviewAttach`
   / `MarkviewEnable` / `MarkviewDisable` / `MarkviewDetach` events plus a `ModeChanged` and a
-  `BufWinEnter` autocmd. Parsers for `html`, `yaml` and `latex` are not installed, so markdown
-  written in those (inline HTML, front matter, math) stays undecorated.
+  `BufWinEnter` autocmd. Parsers for `html` and `latex` are not installed, so markdown written
+  in those (inline HTML, math) stays undecorated. `yaml` and `toml` are installed (see
+  `lua/plugins/treesitter.lua` below); Neovim's own `$VIMRUNTIME/queries/markdown/injections.scm`
+  routes YAML-delimited front matter (`---`) through `yaml` and TOML-delimited front matter
+  (`+++`) through `toml`, but markview only ships a renderer for the former
+  (`lua/markview/renderers/yaml.lua`) -- TOML front matter still renders as plain `toml` syntax
+  highlighting, with none of markview's own field decoration.
 - `lua/plugins/miniclue.lua`: config for `echasnovski/mini.clue` (shows the next available
   keys and their descriptions in a floating window after a prefix key is held). Not loaded
   at startup; 19 key/mode combinations (`<Leader>`, `g`, `s`, `z`, `[`/`]`, `<C-w>`, `"`, `'`,
@@ -189,6 +195,30 @@ symlink.
   down -- anything earlier is undone by that.
   Claude Code's terminal is untouched by all of this -- it keeps its own vertical split on the
   right (`claudecode.lua`).
+- `lua/plugins/treesitter.lua`: config for `nvim-treesitter/nvim-treesitter`. Pinned to the
+  `main` branch, at commit `5cb0114e6242625db56dd6440e945ed1ece10bc7` in `lua/plugins/init.lua`
+  (the branch is a parser install/update/remove tool and a filetype-to-parser-name mapping,
+  not a syntax highlighter itself -- highlighting is Neovim core's own
+  `vim.treesitter.start()`, called here once a parser is confirmed installed). Not loaded at
+  startup; two `FileType` autocmds trigger it. The first covers ten filetypes (`rust`,
+  `python`, `typescript`, `typescriptreact`, `sh`, `bash`, `json`, `jsonc`, `toml`, `yaml`),
+  calls `vim.treesitter.start()`, and sets `foldmethod`/`foldexpr` to
+  `v:lua.vim.treesitter.foldexpr()` for structural code folding (`foldlevelstart` in
+  `lua/config/general.lua` keeps a freshly opened buffer unfolded). The second covers
+  `markdown` alone and only needs the filetype-to-parser mapping for fenced code blocks
+  (```sh, ```ts) -- markdown's own highlighting already comes from Neovim's
+  `$VIMRUNTIME/ftplugin/markdown.lua`. Eight parsers are installed: `rust`, `python`,
+  `typescript`, `tsx`, `bash`, `json`, `toml`, `yaml` (three filetypes map to a different
+  parser name -- `sh` -> `bash`, `typescriptreact` -> `tsx`, `jsonc` -> `json` -- resolved
+  through `vim.treesitter.language.get_lang()`). A buffer whose parser is missing runs an
+  async `install()` instead of blocking and stays unhighlighted until that filetype is next
+  opened. Installing or updating a parser shells out to the `tree-sitter` CLI, which comes
+  from `mise` (declared in `~/workspace/repos/dotfiles/.config/mise/config.toml`, distinct
+  from the language servers in the table below) and is only on `PATH` once `mise activate`
+  has run for the shell that launched Neovim. Bumping the pinned commit hash in
+  `lua/plugins/init.lua` updates the plugin's own Lua code and query files, but not the
+  eight already-compiled parsers; keeping those current after such a bump needs a manual
+  `:TSUpdate`.
 - `lua/util/lazy.lua`: shared loader for lazy-loaded plugins (`claudecode.lua`, `miniclue.lua`,
   `minifiles.lua`, `minipick.lua`). Exposes one function, `M.require(pack_name, module_name,
   setup)`, that runs `vim.cmd.packadd(pack_name)` and `setup(require(module_name))` exactly
