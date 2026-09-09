@@ -20,10 +20,10 @@ vim.cmd.packadd({ args = { "mini.tabline" }, bang = true })
 -- lua/plugins/claudecode.lua omits terminal_cmd).
 require("mini.tabline").setup({
   -- Icons need a provider: mini.tabline looks for _G.MiniIcons, then nvim-web-devicons, and
-  -- draws nothing when neither is present. Both are absent today, so true and false look
-  -- identical -- except that true retries pcall(require, "nvim-web-devicons") on every redraw
-  -- and never caches the failure. Flip this to true when mini.icons arrives (plan.md phase 14).
-  show_icons = false,
+  -- draws nothing when neither is present. lua/plugins/miniicons.lua loads mini.icons at
+  -- startup, before this file's require() runs (plan.md phase 14), so _G.MiniIcons already
+  -- exists by the time mini.tabline draws its first frame.
+  show_icons = true,
   -- Which side the tab page section sits on. Kept at the default; with no tab pages in use the
   -- section never appears.
   tabpage_section = "left",
