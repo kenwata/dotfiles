@@ -42,6 +42,13 @@ vim.o.title = true
 vim.o.splitright = true
 vim.o.splitbelow = true
 
+-- Folding
+-- Every fold starts open: 99 is higher than any realistic nesting depth, so no fold ever
+-- starts above this level and stays closed. foldmethod and foldexpr are window-local and
+-- set per filetype instead (lua/plugins/treesitter.lua), so this is the only fold-related
+-- option that belongs here.
+vim.o.foldlevelstart = 99
+
 -- Indent
 vim.o.expandtab = true
 -- Four columns per indent level, applied to tab display, >> shifts, and <Tab> in insert mode

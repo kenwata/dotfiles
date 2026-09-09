@@ -51,6 +51,12 @@ vim.api.nvim_create_autocmd("FileType", {
     end
 
     vim.treesitter.start(args.buf, lang)
+
+    -- Window-local, so vim.wo[0][0] (this window, this buffer) rather than the vim.o form
+    -- used elsewhere in this config. foldlevelstart (lua/config/general.lua) is what keeps
+    -- a freshly opened buffer fully unfolded; nothing here touches foldlevel itself.
+    vim.wo[0][0].foldmethod = "expr"
+    vim.wo[0][0].foldexpr = "v:lua.vim.treesitter.foldexpr()"
   end,
 })
 
