@@ -13,6 +13,10 @@ vim.cmd.packadd({ args = { "gruvbox.nvim" }, bang = true })
 
 vim.o.background = "dark"
 
+-- Colours for the overrides further down are taken from gruvbox's own exported palette rather
+-- than written as hex literals, so they keep following the colorscheme's definition of "green".
+local palette = require("gruvbox").palette
+
 -- Every option gruvbox.nvim accepts is listed, including the ones left at their default, so
 -- that the file records a choice rather than an omission.
 require("gruvbox").setup({
@@ -40,6 +44,20 @@ require("gruvbox").setup({
   -- so the picker borrows it and keeps following the colorscheme if it ever changes.
   overrides = {
     MiniPickMatchCurrent = { link = "PmenuSel" },
+    -- mini.tabline links both MiniTablineCurrent and MiniTablineVisible to TabLineSel, so the
+    -- buffer being edited and a buffer merely shown in another split are drawn identically.
+    -- Splitting them: the current tab reverses into a solid green block, and "visible" keeps
+    -- what the current tab used to look like -- green text on the ordinary tab background.
+    -- The block also gives the current tab a visible edge against its neighbours.
+    MiniTablineCurrent = { fg = palette.dark0, bg = palette.bright_green, bold = true },
+    MiniTablineVisible = { fg = palette.bright_green, bg = palette.dark1 },
+    -- The modified variants link to StatusLine / StatusLineNC by default, which in this
+    -- colorscheme are pale bars (#ebdbb2 and #a89984). With laststatus = 3 the status line sits
+    -- one row below the tabline, so an unsaved tab read as an echo of it. Yellow moves the hue
+    -- away from the status line while still reading as "needs attention".
+    MiniTablineModifiedCurrent = { fg = palette.dark0, bg = palette.bright_yellow, bold = true },
+    MiniTablineModifiedVisible = { fg = palette.bright_yellow, bg = palette.dark1 },
+    MiniTablineModifiedHidden = { fg = palette.neutral_yellow, bg = palette.dark1 },
   },
   dim_inactive = false,
   transparent_mode = false,
