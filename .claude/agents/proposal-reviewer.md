@@ -28,7 +28,12 @@ made by default. The absence is the finding; name it concretely.
 items are done" is checkable: read the plan or completion conditions, then read the files. "This
 issue was deferred to the user" is checkable: confirm the deferral is recorded where the next
 session will see it, and that the point was not already settled in a decisions log or design
-document.
+document. When the caller hands you the updated hand-off artifacts (`HANDOFF.md`, `TODO.md`,
+`docs/decisions.md`) alongside the diff, the artifacts themselves are in scope: can a fresh
+session start the next step from them alone, does information visible in the diff fail to
+reach them, and does a claim retracted in the decisions log still survive in a document it
+points to. This is not a diff-against-standard check — that stays with `diff-reviewer` — it is
+whether the artifacts carry the work forward.
 
 **Mark confidence on every finding — 確定 (verified) or 要確認 (needs checking).** You are missing
 the measurement methods and user exchanges the main context had during the work; a gap that looks
