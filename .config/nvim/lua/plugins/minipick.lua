@@ -1,10 +1,10 @@
-local lazy = require("util.lazy")
+local lazy = require("common.lazy")
 
 -- mini.pick is loaded on first use, not at startup. The three mappings and vim.ui.select below
 -- are the entry points that can trigger it before the plugin is on disk.
 --
 -- setup() re-creates highlight groups and user commands and reassigns vim.ui.select on every
--- call; util.lazy guards against re-running it once mini.pick is loaded.
+-- call; common.lazy guards against re-running it once mini.pick is loaded.
 local function load_minipick()
   return lazy.require("mini.pick", "mini.pick", function(minipick)
     -- Only the mappings below are given; every other mini.pick option stays at its default.

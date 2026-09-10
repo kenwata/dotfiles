@@ -13,26 +13,26 @@ symlink.
 ├── nvim-pack-lock.json     # vim.pack lockfile (installed plugin revisions); never edit by hand
 ├── ripgreprc               # rg config, applied only while <leader>ff/<leader>fg run (not the shell's rg)
 └── lua/
+    ├── common/
+    │   └── lazy.lua       # Shared packadd-then-setup-once loader for lazy-loaded plugins
     ├── config/
     │   ├── general.lua     # Editor options (UI, window, indent, search, editing, timing, clipboard, etc.)
     │   ├── keybind.lua      # Key mappings
     │   └── autocmd.lua      # Autocommands
-    ├── plugins/
-    │   ├── init.lua        # vim.pack.add() (single call, deferred load), then requires below
-    │   ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>a* key
-    │   ├── gruvbox.lua     # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
-    │   ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
-    │   ├── lualine.lua     # nvim-lualine/lualine.nvim config, loaded at startup (status line)
-    │   ├── markview.lua    # OXY2DEV/markview.nvim config, lazy-loaded on the first markdown FileType
-    │   ├── miniclue.lua    # echasnovski/mini.clue config, lazy-loaded on first trigger key
-    │   ├── minifiles.lua   # echasnovski/mini.files config, lazy-loaded on first <leader>e press
-    │   ├── miniicons.lua   # echasnovski/mini.icons config, loaded at startup (icon provider)
-    │   ├── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
-    │   ├── minitabline.lua # echasnovski/mini.tabline config, loaded at startup (tabline)
-    │   ├── toggleterm.lua  # akinsho/toggleterm.nvim config, lazy-loaded on first <C-\> press
-    │   └── treesitter.lua  # nvim-treesitter/nvim-treesitter config, lazy-loaded on two FileType autocmds
-    └── util/
-        └── lazy.lua        # Shared packadd-then-setup-once loader for lazy-loaded plugins
+    └── plugins/
+        ├── init.lua        # vim.pack.add() (single call, deferred load), then requires below
+        ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>a* key
+        ├── gruvbox.lua     # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
+        ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
+        ├── lualine.lua     # nvim-lualine/lualine.nvim config, loaded at startup (status line)
+        ├── markview.lua    # OXY2DEV/markview.nvim config, lazy-loaded on the first markdown FileType
+        ├── miniclue.lua    # echasnovski/mini.clue config, lazy-loaded on first trigger key
+        ├── minifiles.lua   # echasnovski/mini.files config, lazy-loaded on first <leader>e press
+        ├── miniicons.lua   # echasnovski/mini.icons config, loaded at startup (icon provider)
+        ├── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
+        ├── minitabline.lua # echasnovski/mini.tabline config, loaded at startup (tabline)
+        ├── toggleterm.lua  # akinsho/toggleterm.nvim config, lazy-loaded on first <C-\> press
+        └── treesitter.lua  # nvim-treesitter/nvim-treesitter config, lazy-loaded on two FileType autocmds
 ```
 
 - `init.lua`: calls `vim.loader.enable()` first (the bytecode cache only covers modules
@@ -100,7 +100,7 @@ symlink.
   what the other is responsible for.
 - `lua/plugins/markview.lua`: config for `OXY2DEV/markview.nvim` (decorates markdown in the
   buffer being edited -- headings, code blocks, tables, links -- without changing the file).
-  Not loaded at startup; a `FileType markdown` autocmd loads it through `lua/util/lazy.lua`
+  Not loaded at startup; a `FileType markdown` autocmd loads it through `lua/common/lazy.lua`
   the first time a markdown buffer appears, since opening one is itself the moment decoration
   starts to matter. `<Leader>im` toggles the decoration for the current buffer, and loads the
   plugin first so the key also works before any markdown file has been opened. Only three
@@ -138,12 +138,12 @@ symlink.
   keys and their descriptions in a floating window after a prefix key is held). Not loaded
   at startup; 19 key/mode combinations (`<Leader>`, `g`, `s`, `z`, `[`/`]`, `<C-w>`, `"`, `'`,
   `` ` ``, `<C-x>`) each carry a global `<nowait>` stub that deletes every stub, loads
-  `mini.clue` through `lua/util/lazy.lua`, then replays the key so mini.clue's own
+  `mini.clue` through `lua/common/lazy.lua`, then replays the key so mini.clue's own
   (buffer-local) trigger takes over from the second press onward. The clue window appears
   after a 300ms delay.
 - `lua/plugins/minifiles.lua`: config for `echasnovski/mini.files` (file explorer: browse,
   create, rename, move, and delete files by editing a buffer). Not loaded at startup;
-  `<Leader>e` toggles it open/closed through `lua/util/lazy.lua`, opening at the current
+  `<Leader>e` toggles it open/closed through `lua/common/lazy.lua`, opening at the current
   working directory. Also replaces netrw as the explorer that appears when a directory is
   opened (`nvim <dir>` or `:e <dir>`): `vim.g.loaded_netrw`/`loaded_netrwPlugin` disable netrw
   at startup, and a `BufEnter` stub opens `mini.files` for the first directory buffer before
@@ -210,7 +210,7 @@ symlink.
   green text for a visible-but-not-current one, and move the unsaved variants to yellow.
 - `lua/plugins/toggleterm.lua`: config for `akinsho/toggleterm.nvim` (opens and hides a shell
   terminal with one key). Not loaded at startup; `<C-\>` in Normal mode runs
-  `vim.cmd.packadd()` and `setup()` on first press through `lua/util/lazy.lua`. That mapping
+  `vim.cmd.packadd()` and `setup()` on first press through `lua/common/lazy.lua`. That mapping
   reads `v:count` itself so that `2<C-\>` reaches the second terminal on the very first press
   as well.
   **Only one terminal is ever on screen.** toggleterm gives each terminal its own split, so
@@ -265,7 +265,7 @@ symlink.
   `lua/plugins/init.lua` updates the plugin's own Lua code and query files, but not the
   eight already-compiled parsers; keeping those current after such a bump needs a manual
   `:TSUpdate`.
-- `lua/util/lazy.lua`: shared loader for lazy-loaded plugins (`claudecode.lua`, `markview.lua`,
+- `lua/common/lazy.lua`: shared loader for lazy-loaded plugins (`claudecode.lua`, `markview.lua`,
   `miniclue.lua`, `minifiles.lua`, `minipick.lua`, `toggleterm.lua`, `treesitter.lua`). Exposes
   one function, `M.require(pack_name, module_name, setup)`, that runs
   `vim.cmd.packadd(pack_name)` and `setup(require(module_name))` exactly once — while

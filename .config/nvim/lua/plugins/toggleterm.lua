@@ -1,4 +1,4 @@
-local lazy = require("util.lazy")
+local lazy = require("common.lazy")
 
 -- Highest terminal number reachable with <M-n> from inside a terminal. Nine is simply how many
 -- digits there are; nothing in toggleterm caps the count.

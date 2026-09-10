@@ -1,4 +1,4 @@
-local lazy = require("util.lazy")
+local lazy = require("common.lazy")
 
 -- claudecode.nvim is loaded on first use, not at startup. Every <leader>a* key below is an
 -- entry point that can be pressed before the plugin is on disk: each one loads the plugin
@@ -8,7 +8,7 @@ local lazy = require("util.lazy")
 --
 -- setup() re-registers commands, terminal, diff, and autocmds on every call, but M.start()
 -- (lua/claudecode/init.lua) early-returns once M.state.server exists, so it never restarts
--- the server. util.lazy still guards against re-running setup() once claudecode is loaded,
+-- the server. common.lazy still guards against re-running setup() once claudecode is loaded,
 -- to avoid the redundant re-registration.
 local function setup(claudecode)
   -- Every option the plugin reads is written out, including the ones kept at their default,

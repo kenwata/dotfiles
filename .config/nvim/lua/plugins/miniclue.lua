@@ -1,4 +1,4 @@
-local lazy = require("util.lazy")
+local lazy = require("common.lazy")
 
 -- mini.clue is loaded on first use, not at startup: it has no bearing on the first frame
 -- drawn and its setup() creates keymaps and autocommands (a runtime effect, not just
@@ -12,12 +12,12 @@ local lazy = require("util.lazy")
 ---@type string
 local mapleader = vim.g.mapleader
 
----@class util.miniclue.Trigger
+---@class miniclue.Trigger
 ---@field lhs string Key passed to vim.keymap.set; may use <Leader>.
 ---@field replay string Actual key sequence fed back via nvim_feedkeys after loading.
 ---@field modes string[] Modes to stub this key in.
 
----@type util.miniclue.Trigger[]
+---@type miniclue.Trigger[]
 local TRIGGERS = {
   { lhs = "<Leader>", replay = mapleader, modes = { "n", "x" } },
   { lhs = "g", replay = "g", modes = { "n", "x" } },

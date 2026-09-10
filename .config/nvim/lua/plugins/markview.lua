@@ -37,9 +37,9 @@ local function setup(markview)
   })
 end
 
-local lazy = require("util.lazy")
+local lazy = require("common.lazy")
 
--- Routed through the shared util.lazy loader (bang-less packadd -- runs plugin/markview.lua,
+-- Routed through the shared common.lazy loader (bang-less packadd -- runs plugin/markview.lua,
 -- i.e. autocmds.setup() then commands.setup(), before setup() above). T79 needed a bang-ed
 -- packadd + manual setup() ordering instead, because switching icon_provider away from
 -- markview's default ("internal") meant the very first synchronous render (autocmds.setup()

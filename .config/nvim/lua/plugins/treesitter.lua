@@ -1,7 +1,7 @@
 -- nvim-treesitter (main branch) provides parser install/update/remove and the
 -- filetype-to-parser-name mapping (plugin/filetypes.lua). Syntax highlighting itself is
 -- Neovim core's vim.treesitter.start(), called below once the plugin is loaded.
-local lazy = require("util.lazy")
+local lazy = require("common.lazy")
 
 -- setup()'s only role is changing install_dir, which already defaults to the directory
 -- Neovim puts on runtimepath (stdpath("data") .. "/site"); calling it would just duplicate

@@ -73,7 +73,7 @@ Project-specific rules for the config under `~/.config/nvim` (the real files liv
 
 - Never place a `.lua` file directly under `lua/`. It would share the module namespace with
   plugins (`lua/general.lua` becomes `require("general")`). Put every file under
-  `lua/config/`, `lua/plugins/`, or `lua/util/`.
+  `lua/config/`, `lua/plugins/`, or `lua/common/`.
 - One responsibility per file. `init.lua` loads modules and nothing else.
 - Group related options inside a file with a section comment (`-- UI`, `-- Indent`).
 
@@ -108,4 +108,4 @@ Project-specific rules for the config under `~/.config/nvim` (the real files liv
 
 - Rule of three: do not extract a shared helper until the same shape appears a third time.
   The first two lazy-loaded plugins spell out their loader inline; the third one earns
-  `lua/util/lazy.lua`.
+  `lua/common/lazy.lua`.

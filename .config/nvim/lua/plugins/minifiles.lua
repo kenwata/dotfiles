@@ -1,4 +1,4 @@
-local lazy = require("util.lazy")
+local lazy = require("common.lazy")
 
 -- mini.files is loaded on first use, not at startup: opening the explorer has no bearing on
 -- the first frame drawn.
@@ -69,7 +69,7 @@ end, { silent = true, desc = "Toggle the file explorer" })
 -- only accepts one key per action, so a second key has to be a plain buffer-local mapping
 -- instead of a mappings.close entry. The event fires once per explorer buffer, and mini.files
 -- is lazy-loaded, so by the time this callback runs the plugin is already on disk -- load_minifiles()
--- just returns the cached module (util.lazy skips re-running setup()).
+-- just returns the cached module (common.lazy skips re-running setup()).
 vim.api.nvim_create_autocmd("User", {
   pattern = "MiniFilesBufferCreate",
   desc = "Close the file explorer with <C-q> as well as the default q",
