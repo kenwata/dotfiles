@@ -80,9 +80,9 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    `/follow-up` がセッション終了時に実ツリーとの乖離を機械検査、機構側の安全網として
    `hooks/check-new-directory.sh`(PreToolUse)が新規ディレクトリ作成時に確認を促す
    (Write 経由のみ検知。`mkdir` 等はプロンプト側の配線が一次的な強制手段であり、これは既知の限界)
-11. **委任の境界は役割で分け、機構で縛る** — CLAUDE.md の Delegation 節が挙げる 4 役割を
-    `agents/` の 4 定義に分解した。役割ごとに必要な権限が違うためで、実際
-    Write/Edit を禁じて無害なのは 3 役割、`parallel-implementer` だけは禁じると成立しない。
+11. **委任の境界は役割で分け、機構で縛る** — CLAUDE.md の Delegation 節が挙げる 5 役割を
+    `agents/` の 5 定義に分解した。役割ごとに必要な権限が違うためで、実際
+    Write/Edit を禁じて無害なのは 4 役割、`parallel-implementer` だけは禁じると成立しない。
     単一の汎用エージェントのままでは「実装もでき検査もできる」最大公約数の権限しか与えられない。
     加えて **PreToolUse hook(`hooks/deny-subagent-git-write.sh`)が、サブエージェントからの
     git 履歴・リモート変更操作(commit / push / reset / rebase / gh の書き込み系ほか)を拒否する**。
@@ -105,6 +105,21 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     (未編集の逐語引用・既存箇所への波及を防ぐ)、ファイル全体への適用は `/markdown-cleanup`
     コマンドが単独コミットとして担う。適用範囲はプロジェクト側の `.claude/rules/markdown.md` の
     `paths:` frontmatter で判定するため、規約を配布していないプロジェクトでは no-op
+14. **advisor は無効化し、レビュー役は `agents/` の subagent に統一** — advisor を含む API 応答の
+    usage は本体 2 回分を合算した約 2 倍で記録され、Claude Code はその値でコンテキスト残量と
+    自動 compact を判定する(2026-09-10 実測: 1 プロジェクトの auto compact 4 件が全件、
+    実コンテキスト 49〜58% の時点での advisor 呼び出し直後。うち 3 件は `/follow-up` の外)。
+    モデル自身はコンテキスト使用率を観測できないため「使用率が高い時は呼ばない」という条件付き
+    回避は成立せず、自動 compact を切る設定も機能しないため、`settings.json` から
+    `advisorModel` を外してツール自体を無くした。`/advisor <model>` は user settings に
+    再保存されるので打たない。代わりに `proposal-reviewer`(提案・完了判断の反証)を追加し、
+    `/follow-up` 手順 7・`/elaborate`・`/breakdown` の生成前レビューをそこへ向けた。
+    副次効果として、Bedrock プロファイルの advisor 読み替え節が不要になり、advisor が会話全文を
+    毎回 uncached で読んでいた分(実測で本体の uncached 入力を上回る量)が消える
+15. **コマンド本文に出典ポインタを置かない** — `commands/*.md` の本文はモデルへの実行指示であり、
+    「意図・経緯は〜にある」は保守者向けの情報で実行には不要。私的プロジェクトのパスは他環境で
+    解決できず、公開リポジトリに個人環境の情報を載せない方針にも反する。経緯は git 履歴
+    (削除コミットの本文に要旨を移した)と本 README に置く
 
 ## ディレクトリ構成
 
@@ -125,7 +140,8 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   ├── codebase-explorer.md     # 広域探索 — 読み取り専用
 │   ├── log-test-analyst.md      # ログ・テスト出力の解析 — 読み取り専用
 │   ├── parallel-implementer.md  # 独立した実装スライス — 唯一 Write/Edit を持つ
-│   └── diff-reviewer.md         # 差分の外部レビュー(/follow-up 手順 4)— 読み取り専用
+│   ├── diff-reviewer.md         # 差分の外部レビュー(/follow-up 手順 4)— 読み取り専用
+│   └── proposal-reviewer.md     # 提案・完了判断の反証レビュー(/follow-up 手順 7、/elaborate・/breakdown の生成前。設計方針 14)— 読み取り専用
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── elaborate.md             # /elaborate — 計画(plan.md の 1 フェーズ / plan mode)を対話で詳細化し設計書へ
@@ -156,8 +172,9 @@ personal スコープに置くと無関係なプロジェクトでも候補に�
 dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあり(`install.sh` が
 `~/.claude-bedrock` へ symlink)、実体を持つのは `settings.json` と `CLAUDE.md` のみで、
 `commands/`・`statusline.sh`・`hooks/`・`agents/` は `../.claude/` への symlink で共有する。
-`CLAUDE.md` は `@../.claude/CLAUDE.md` を import し、Advisor tool が使えない
-Bedrock 環境向けの読み替え差分節(Advisor → fresh-context subagent)だけを持つ。
+`CLAUDE.md` は `@../.claude/CLAUDE.md` を import し、差分節には Bedrock 固有の 2 点
+(定義を使わず起動する subagent の `model: "fable"` 明示、hook の配線)だけを持つ
+(advisor は主プロファイルでも無効化したため読み替えは不要になった。設計方針 14)。
 **hook スクリプトの実体は symlink で共有されるが、その配線は `settings.json` にあり
 bedrock は独自の実体を持つため、hook を足したときは両方の `settings.json` に登録する**
 (片方だけだと、そのプロファイルでは hook が存在するのに発火しない)。

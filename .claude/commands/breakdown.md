@@ -1,13 +1,13 @@
 ---
 description: 設計書 docs/design/<slug>.md をタスクへ分解し、TODO.md(タスクID付き)へ着地させる。設計書だけを入力とし、会話に依存しない。設計書は /elaborate が作る
-allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, advisor, Bash(mkdir:*), Bash(cp:*), Bash(ls:*), Bash(date:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git log:*)
+allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Agent, Bash(mkdir:*), Bash(cp:*), Bash(ls:*), Bash(date:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git log:*)
 ---
 
 設計書を、`~/.claude/templates/BLUEPRINT.md` §6 の五層設計に接続する実行状態 `TODO.md` へ「分解」してください。本コマンドの責任は設計書からタスクを起こすことだけであり、設計書の作成・更新は `/elaborate` の責任。要点:
 
 1. **入力**: `docs/design/<slug>.md`(引数。省略時は `HANDOFF.md` の「次セッションの最初の一手」に書かれた設計書、それも無ければ `docs/design/` の一覧から AskUserQuestion で選ぶ)。**一次情報は設計書だけ**。同一セッションに会話が残っていても補助に留める。**設計書に不足があれば推測で補わない(捏造禁止)** — 完了条件・対象パス・制約を導出できない節があれば `/elaborate` へ差し戻す(設計書の本文は本コマンドでは編集しない。設計レベルの前提を会話や質問で補ってタスクにだけ書く、はしない)。AskUserQuestion はタスク分割の粒度・順序など分解そのものの選択に限って使う。
 2. **前提確認**: `HANDOFF.md`・`docs/decisions.md`・指定された設計書の存在を確認。設計書が無ければ `/elaborate` を、`HANDOFF.md` が無ければ `/initialize` を先に実行するよう案内して中断する。
-3. **生成**(冪等)— **書き始める前に advisor を呼ぶ**(タスク分割の粒度・完了条件の検証可能性をレビューにかける。誤った分解のまま永続文書が生成されると、以後のセッションがそれを正として動く):
+3. **生成**(冪等)— **書き始める前に `proposal-reviewer` エージェントに、分解案(タスク分割の粒度・完了条件の検証可能性)を自己完結のプロンプトで渡して反証させる**(誤った分解のまま永続文書が生成されると、以後のセッションがそれを正として動く):
    - `TODO.md`: 無ければ `~/.claude/templates/skeletons/todo.md` から生成。既存なら冒頭の規約コメントと §0 セッションプロトコルを保持したまま追記する。**新形式へ勝手に変換しない** — 既存ファイルは自身の冒頭コメントが定める形式に正確に従う(旧形式のプロジェクトは旧形式のまま追記)。**形式の判定は機械的に行う**: `grep -q '追記位置' TODO.md` が真なら新形式、偽なら旧形式。推測しない。
 
      **新形式の追記手順**: ①`T<n>` の採番 — `TODO.md` と `.claude/archive/TODO.md` を Grep して **最大番号 +1 から連番**(再利用・振り直し禁止)。②`#<n>`(計画番号)の採番 — 同様に既存の最大計画番号 +1。新規計画なら計画テーブルの追記位置マーカー直前に1行追加し、`## #<n> <slug>` セクションを既存セクションの後ろに新設する。③既存計画への追記なら `#<n>-<m>` はその計画内の最大 +1。④各タスク行に難易度(低/中/高。判定基準は skeleton 冒頭コメントが正)を付与する。**追加タスクの難易度が計画テーブルの該当行の値を超える場合は計画行も更新する**(計画行の難易度は配下最大)。**タスク行の列構成はそのファイル自身の表ヘッダに従う** — `実`(実行系/モデル)列があれば新規行は `—` で初期化する(記入はタスク実行時。書式は skeleton 冒頭コメントが正)。⑤完了条件は表のセルに書かず、対応する完了条件ブロックの追記位置マーカー直前に追加する。

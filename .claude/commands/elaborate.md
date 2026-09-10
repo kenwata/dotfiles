@@ -1,6 +1,6 @@
 ---
 description: 計画(壁打ちで作った plan.md の 1 フェーズ、または plan mode の承認済みプラン)を対話で詳細化し、docs/design/<slug>.md へ着地させる。設計書だけを作り、TODO 化は /breakdown に渡す
-allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, advisor, Bash(mkdir:*), Bash(cp:*), Bash(ls:*), Bash(date:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git log:*)
+allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Agent, Bash(mkdir:*), Bash(cp:*), Bash(ls:*), Bash(date:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git add:*), Bash(git commit:*), Bash(git log:*)
 ---
 
 計画を、`~/.claude/templates/BLUEPRINT.md` §6 の五層設計に接続する設計書 `docs/design/<slug>.md` へ「詳細化」してください。本コマンドの責任は設計書までであり、`TODO.md` は作らない(タスク化は `/breakdown docs/design/<slug>.md` の責任)。要点:
@@ -11,7 +11,7 @@ allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, advisor, Bash(mkd
    - どちらも無い場合はその旨を明示し、`plan.md` のパス提示または計画内容の再確認をユーザーに求める。slug は計画内容から短いケバブケースで決める(plan.md 経路ではフェーズ名から)。
 2. **前提確認**: `HANDOFF.md`・`docs/decisions.md` の存在を確認。無ければ `/initialize` を先に実行するよう案内して中断する。
 3. **未決定事項の洗い出しと確定**: 設計書の各節(目的 / スコープ・非スコープ / 方針・構成 / 代替案と不採用理由)を埋めるのに必要で、入力にも会話にも無い事項を列挙し、AskUserQuestion でまとめて確認する(1 回最大 4 問。足りなければ回数を分ける)。**捏造禁止の意味**: 「黙って決めるな」であり、質問で埋めることは捏造ではない。質問せず推測で埋めることが捏造である。確認の結果が **全体構想に関わる決定**(フェーズ構成・スコープ・方針の変更)なら `plan.md` を更新し `docs/decisions.md` に 1 行追記する。フェーズ内の詳細はここで決め、書き先は設計書とする。
-4. **生成**(冪等)— **書き始める前に advisor を呼ぶ**(計画の解釈・slug・スコープ境界をレビューにかける。誤った解釈のまま永続文書が生成されると、以後のセッションがそれを正として動く):
+4. **生成**(冪等)— **書き始める前に `proposal-reviewer` エージェントに、計画の解釈・slug・スコープ境界を自己完結のプロンプトで渡して反証させる**(誤った解釈のまま永続文書が生成されると、以後のセッションがそれを正として動く):
    - `mkdir -p docs/design` → `~/.claude/templates/skeletons/design.md` の placeholder を埋めて `docs/design/<slug>.md` を Write(既存 slug なら上書きせず diff 提示・承認後に更新)。冒頭の「全体構想」行は `skeletons/design.md` 冒頭コメントが定める固定書式 `plan.md §<節番号> / <フェーズ見出しの逐語>` で書く(節番号だけで止めない — 1 節に複数フェーズが並ぶ形が実在し、指すフェーズが特定できなくなる)。plan mode 経路で `plan.md` が無ければ「なし」。「検討した代替案と不採用理由」を必ず埋める — 会話で検討したのに書き残さないことが最大の情報損失。「タスク分解」節は `/breakdown` が埋めるので placeholder のまま残す。
    - **設計書索引の更新**: `docs/design/index.md` が無ければ `~/.claude/templates/skeletons/design-index.md` をコピーし、placeholder 行を今回の 1 行で置き換えて作成する。有れば末尾の追記位置マーカー直前に 1 行追記する。列は 作成日(`date +%Y-%m-%d`。索引と設計書を同一コミットで着地させるため git の追加日と一致する)/ フェーズ(設計書の「全体構想」行と同じ逐語。`plan.md` が無ければ `—`)/ 設計書(`[<slug>](<slug>.md)`)/ 表題(設計書の `# 設計: <表題>` をそのまま)/ T(`—`。採番は `/breakdown` の責任)。既存 slug の更新では行を増やさず、表題が変わった時だけ表題列を直す。**索引が無く既存の設計書が既に複数ある場合**(索引導入前から動いているプロジェクト)は、新規 1 行だけを載せた索引を作り、既存分を遡って載せるかは報告でユーザーに確認する — 過去分の一括生成は既存の運用と衝突しうるため自動では行わない。
    - 計画が新規ディレクトリを必要とする場合: `docs/architecture.md` のディレクトリツリーと置き場の決定表を更新する(置き場は設計判断なのでここで決める。既存の決定表で置き場が決まるなら更新不要)。

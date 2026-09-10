@@ -1,5 +1,4 @@
 {
-  "advisorModel": "fable",
   "agentPushNotifEnabled": true,
   "autoMode": {
     "environment": [

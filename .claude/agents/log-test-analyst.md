@@ -43,10 +43,6 @@ stdin not reaching the process) than a real finding. Re-run it differently befor
 - Committing, pushing, or changing git history. This is blocked at the tool layer.
 - Re-running an expensive suite repeatedly to explore. Run it once, mine that output, and only
   re-run with a narrowed selector when you have a specific question.
-- Calling `advisor`. Unlike the edit tools, it is **not** blocked at the tool layer — it is
-  reachable from here, so this is a rule you have to keep yourself. A delegated task is a leaf:
-  fanning out to another reviewer duplicates cost and blurs who owns the judgement. Report to
-  your caller and let them decide whether a review is warranted.
 
 ## Output shape
 
