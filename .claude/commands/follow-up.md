@@ -16,5 +16,3 @@ allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Agent, advisor, B
 6. **既存の終了手順を実行**(**四層モードのみ**。`HANDOFF.md` が無い場合はスキップし、その旨を報告する): 規定は `~/.claude/templates/BLUEPRINT.md` §6 が正(**ここに転記しない**。2箇所に置くとドリフトする)。
 7. **報告の前に advisor**(**どのモードでも必須**): 完了判断そのものを外部レビューにかける。ここを飛ばすと、漏れチェックの結果自体が無検査で通る(2026-08-20 に実際に起きた失敗がこれである)。
 8. **報告**: 検出件数・是正した内容・ユーザー判断へ回すものを簡潔に示す。
-
-本コマンドの設計の根拠(実測26件の漏れの類型・入力定義の理由・不採用にした代替案)は `PhysicalAI-research/国内企業調査/docs/design/session-followup-check.md` にある。

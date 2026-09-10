@@ -21,5 +21,3 @@ allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, advisor, Bash(mkd
 7. **報告**: 生成/更新ファイルの一覧・確定した未決定事項・次の一手(`/breakdown docs/design/<slug>.md`)を簡潔に示す。
 
 実行時機の原則: 対象は **計画粒度**(新しいフェーズ・施策。既存のどの `T<n>` の完了条件にも収まらない)だけ。既存 `T<n>` を実行する手段としての plan mode(タスク粒度)には走らせない — 判定基準の正は `skeletons/todo.md` §0。plan mode 経路は **承認直後の同一セッション** が標準(行間が生きているのは承認直後だけ)。plan.md 経路にこの制約は無い(`plan.md` は repo 内の安定文書)。続けて同一セッションで `/breakdown` を実行するのが標準だが、別セッションでも成立する(設計書が自己完結していることを手順 5 が保証する)。
-
-本コマンドの意図・経緯は dotfiles の履歴(`2026-08-31 feat(templates): plan.md 起点の導線を整備し /elaborate を新設`)にある。2026-07-16 の四層設計では plan mode 起点しか文書化されておらず、壁打ちで作った `plan.md` を詳細化する工程が欠けていた。

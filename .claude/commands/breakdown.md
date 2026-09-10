@@ -22,5 +22,3 @@ allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, advisor, Bash(mkd
 6. **報告**: 生成/更新ファイルの一覧・採番範囲(`T<n>〜T<m>`)・最初の一手を簡潔に示す。
 
 実行時機の原則: 対象は **計画粒度** のみ — 新しい計画行(`TODO.md` の計画テーブル `#<n>`)が必要な時だけ走らせる。判定基準: 「このプランの成果は、既存のどの `T<n>` の完了条件で検証されるか」— 答えが有ればタスク粒度であり本コマンドの対象外(そのプランは `T<n>` の実行手段に過ぎない。`/breakdown` を提案も実行もしない)。判定基準の正は `skeletons/todo.md` §0。`/elaborate` と同一セッションで続けて実行するのが標準だが、設計書は自己完結しているので別セッションでも成立する。
-
-本コマンドの意図・経緯・変更理由は dotfiles の履歴(`2026-07-16 templates: HANDOFF/TODO/decisionsの四層設計と/breakdownを追加`、`2026-08-31 feat(templates): plan.md 起点の導線を整備し /elaborate を新設`)と、四層設計が最初に実運用された `~/workspace/Projects/Learning/PhysicalAI` に残っている。2026-08-31 の純化は、旧原則「plan mode 承認直後に必ず着地」が plan mode の粒度を区別せず、25 日間で 40 回の /breakdown(タスクの実行計画がさらにタスクを産む)を招いたため。
