@@ -15,6 +15,10 @@ local function setup(minifiles)
     },
     windows = {
       preview = true,
+      -- Widened from the default 25 (T98, 2026-09-10). Chosen on the real Ghostty terminal
+      -- from candidates 25/40/60/80 after confirming the preview column stays legible and
+      -- the three columns together still fit the window width.
+      width_preview = 80,
     },
   })
 end
