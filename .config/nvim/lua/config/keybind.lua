@@ -34,17 +34,20 @@ vim.keymap.set("i", "<M-f>", "<S-Right>", { silent = true, desc = "Move cursor o
 -- Emacs-style deletion, sent as repeated <Del>/<BS> rather than written straight into the
 -- buffer: an API edit made from inside Insert mode leaves the undo history unusable (pressing u
 -- afterwards restored nothing, measured), while these keys travel the same path as ordinary
--- typing. Each run starts with <C-g>u so the deletion is its own undo step, which is what
--- Neovim's own <C-u>/<C-w> defaults do and what replacing <C-u> would otherwise throw away.
--- What these take over: <C-d> unindents by one shiftwidth and <C-k> starts a digraph. <C-h>
--- (character before the cursor) and <C-w> (word before the cursor) already behave the Emacs way
--- and are left alone.
-local function delete_keys(key, count)
+-- typing. In Insert mode each run starts with <C-g>u so the deletion is its own undo step, which
+-- is what Neovim's own <C-u>/<C-w> defaults do and what replacing <C-u> would otherwise throw
+-- away; the command-line versions further below pass mark_undo = false, since <C-g>u is an
+-- Insert-mode command that would be inserted as literal text on the command line instead of
+-- doing anything.
+-- What these take over in Insert mode: <C-d> unindents by one shiftwidth and <C-k> starts a
+-- digraph. <C-h> (character before the cursor) and <C-w> (word before the cursor) already behave
+-- the Emacs way and are left alone.
+local function delete_keys(key, count, mark_undo)
   if count <= 0 then
     return ""
   end
 
-  return "<C-g>u" .. string.rep(key, count)
+  return (mark_undo and "<C-g>u" or "") .. string.rep(key, count)
 end
 
 -- col(".") and getline(".") rather than the nvim_win_* API: inside an expr mapping the API
@@ -53,13 +56,13 @@ end
 local function delete_to_end_of_line()
   local after_cursor = vim.fn.getline("."):sub(vim.fn.col("."))
 
-  return delete_keys("<Del>", vim.fn.strchars(after_cursor))
+  return delete_keys("<Del>", vim.fn.strchars(after_cursor), true)
 end
 
 local function delete_to_start_of_line()
   local before_cursor = vim.fn.getline("."):sub(1, vim.fn.col(".") - 1)
 
-  return delete_keys("<BS>", vim.fn.strchars(before_cursor))
+  return delete_keys("<BS>", vim.fn.strchars(before_cursor), true)
 end
 
 -- Everything up to and including the next run of keyword characters, so that punctuation
@@ -74,13 +77,60 @@ local function delete_next_word()
     return ""
   end
 
-  return delete_keys("<Del>", vim.fn.strchars(after_cursor:sub(1, stop)))
+  return delete_keys("<Del>", vim.fn.strchars(after_cursor:sub(1, stop)), true)
 end
 
 vim.keymap.set("i", "<C-d>", "<Del>", { silent = true, desc = "Delete character under cursor" })
 vim.keymap.set("i", "<C-k>", delete_to_end_of_line, { expr = true, silent = true, desc = "Delete to end of line" })
 vim.keymap.set("i", "<C-u>", delete_to_start_of_line, { expr = true, silent = true, desc = "Delete to start of line" })
 vim.keymap.set("i", "<M-d>", delete_next_word, { expr = true, silent = true, desc = "Delete next word" })
+
+-- Command-line mode movement and deletion (":" and "/"/"?" search input, plus input() prompts --
+-- all of these are Neovim's "c" mode. mini.pick's own prompt is not command-line mode, so it is
+-- unaffected). Only the 7 keys below are added; <C-e> (end of line), <C-u> (delete to start of
+-- line), <C-w> (delete previous word) and <C-d> (list matching completions) already behave the
+-- Emacs way as Neovim's own command-line defaults and are left alone.
+--
+-- <C-b>/<C-f> are sent as <Space><BS><Left>/<Right> rather than a bare arrow: while the wildmenu
+-- popup is open, a bare <Left>/<Right> steps through the candidate list instead of moving the
+-- cursor (the workaround :help 'wildmenu' itself names). Typing a space and immediately erasing
+-- it closes the popup, so the arrow that follows moves the cursor instead.
+vim.keymap.set("c", "<C-b>", "<Space><BS><Left>", { silent = true, desc = "Move cursor left" })
+vim.keymap.set("c", "<C-f>", "<Space><BS><Right>", { silent = true, desc = "Move cursor right" })
+vim.keymap.set("c", "<C-a>", "<Home>", { silent = true, desc = "Move cursor to start of line" })
+vim.keymap.set("c", "<M-b>", "<S-Left>", { silent = true, desc = "Move cursor one word back" })
+vim.keymap.set("c", "<M-f>", "<S-Right>", { silent = true, desc = "Move cursor one word forward" })
+
+-- getcmdline()/getcmdpos() rather than the buffer-line helpers above: the command line is not a
+-- buffer, so getline()/col() do not see it. getcmdpos() is a 1-indexed byte position, matching
+-- what string.sub() expects. mark_undo = false: <C-g>u is an Insert-mode command and would be
+-- inserted as literal text here instead of marking an undo boundary -- command-line edits have
+-- no buffer undo step to mark in the first place.
+local function cmdline_delete_to_end_of_line()
+  local after_cursor = vim.fn.getcmdline():sub(vim.fn.getcmdpos())
+
+  return delete_keys("<Del>", vim.fn.strchars(after_cursor), false)
+end
+
+local function cmdline_delete_next_word()
+  local after_cursor = vim.fn.getcmdline():sub(vim.fn.getcmdpos())
+  local stop = vim.fn.matchend(after_cursor, NEXT_WORD_PATTERN)
+  if stop < 0 then
+    return ""
+  end
+
+  return delete_keys("<Del>", vim.fn.strchars(after_cursor:sub(1, stop)), false)
+end
+
+vim.keymap.set("c", "<C-k>", cmdline_delete_to_end_of_line, { expr = true, silent = true, desc = "Delete to end of line" })
+vim.keymap.set("c", "<M-d>", cmdline_delete_next_word, { expr = true, silent = true, desc = "Delete next word" })
+
+-- What this section costs: c_CTRL-A (insert all wildmenu matches), c_CTRL-K (start a digraph)
+-- and c_CTRL-F (open the command-line window) are gone. The 'cedit' option (which key opens the
+-- command-line window) still reads ^F, but mapping resolution runs before 'cedit' is consulted,
+-- so that value is unreachable with <C-f> remapped (measured with the pseudo-terminal harness,
+-- 2026-09-10: no cnoremap opens the window; adding cnoremap <C-f> <Right> blocks it). Normal-mode
+-- q: and q/ still open the command-line/search-history window and are unaffected.
 
 -- Completion menu
 -- The menu opens on its own except where the cursor sits inside an existing word (see
