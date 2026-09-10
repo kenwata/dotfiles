@@ -40,9 +40,14 @@ symlink.
   then `require("plugins")`.
 - `lua/config/general.lua`: `vim.o`/`vim.opt` settings, grouped by section comment.
 - `lua/config/keybind.lua`: `vim.keymap.set` mappings, each with an English `desc`. Covers
-  leaving Insert/Terminal mode (`jj`), Emacs-style cursor movement and deletion in Insert mode,
-  the completion menu, search (recentring on `n`/`N`, `;` for the command line), display-line
-  and window movement, keeping the Visual selection across an indent, and the inlay-hint toggle.
+  leaving Insert/Terminal mode (`jj`), Emacs-style cursor movement and deletion in Insert mode
+  and in command-line mode (`:`/`/`/`?` input and `input()` prompts -- mini.pick's own prompt is
+  not command-line mode and is unaffected), the completion menu, search (recentring on `n`/`N`,
+  `;` for the command line), display-line and window movement, keeping the Visual selection
+  across an indent, and the inlay-hint toggle. The command-line mappings cost three built-in
+  keys: `c_CTRL-A` (insert every wildmenu match), `c_CTRL-K` (start a digraph), and `c_CTRL-F`
+  (open the command-line window -- unreachable even though `'cedit'` still reads `^F`, because
+  mapping resolution runs first); Normal-mode `q:`/`q/` still open that window.
 - `lua/config/autocmd.lua`: `vim.api.nvim_create_autocmd` entries, plus one-shot switches for
   LSP displays Neovim leaves off. Flashes the yanked region on `TextYankPost`; enables code
   lenses for every buffer with `vim.lsp.codelens.enable(true)`; and holds back the built-in
@@ -118,7 +123,11 @@ symlink.
   in those planning documents land. The `listchars` dots and eol arrows are hidden while the
   decoration is on screen and come back in insert and replace mode, through the `MarkviewAttach`
   / `MarkviewEnable` / `MarkviewDisable` / `MarkviewDetach` events plus a `ModeChanged` and a
-  `BufWinEnter` autocmd. Parsers for `html` and `latex` are not installed, so markdown written
+  `BufWinEnter` autocmd. The `BufWinEnter` restore only touches a normal file buffer
+  (`buftype == ""`); a terminal, quickfix, or `nofile` buffer already has something else
+  deciding `'list'` (Neovim itself for a terminal), and writing the global value on top of that
+  used to make listchars reappear the second time a closed terminal was reopened. Parsers for
+  `html` and `latex` are not installed, so markdown written
   in those (inline HTML, math) stays undecorated. `yaml` and `toml` are installed (see
   `lua/plugins/treesitter.lua` below); Neovim's own `$VIMRUNTIME/queries/markdown/injections.scm`
   routes YAML-delimited front matter (`---`) through `yaml` and TOML-delimited front matter
@@ -140,6 +149,10 @@ symlink.
   at startup, and a `BufEnter` stub opens `mini.files` for the first directory buffer before
   the plugin itself is loaded (its own `BufEnter`, registered by `setup()`, handles every one
   after that). Deletion is permanent (`options.permanent_delete = true`, no trash/recycle bin).
+  `<C-q>` closes the explorer as well as the built-in `q`, bound buffer-locally on
+  `User MiniFilesBufferCreate` since `mappings` only accepts one key per action.
+  `windows.width_preview` is widened from the default 25 to 80 columns, picked on the real
+  Ghostty terminal; `width_focus`/`width_nofocus` are left at their defaults.
 - `lua/plugins/miniicons.lua`: config for `echasnovski/mini.icons` (icon and highlight-group
   provider; draws nothing itself). Loaded at startup with `packadd!`, for the same reason as
   `gruvbox.lua` and `minitabline.lua` below: `mini.tabline` looks for `_G.MiniIcons` on its
@@ -169,6 +182,10 @@ symlink.
   take the places of `<Left>`, `<Right>`, `<BS>` and `<Del>`, which no longer work in the
   prompt. Scrolling moves to the Alt version of the same letter (`<M-f>`/`<M-b>` vertically,
   `<M-h>`/`<M-l>` horizontally); it still matters with the preview open (`<Tab>`).
+  `<C-q>` closes the picker as well as the built-in `<Esc>`, added as a custom `stop_alt`
+  action that sends the raw `<C-c>` byte back through `nvim_feedkeys` rather than returning
+  `true` directly, so that `vim.ui.select` sees a cancelled selection (`on_choice(nil)`) the
+  same way `<Esc>` does.
 - `lua/plugins/minitabline.lua`: config for `echasnovski/mini.tabline` (draws the open
   buffers as a row of tabs along the top line of the screen). What is listed there are
   buffers, not Vim tab pages, which this config does not use. Loaded at startup with
