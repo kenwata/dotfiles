@@ -95,11 +95,18 @@ vim.keymap.set("i", "<M-d>", delete_next_word, { expr = true, silent = true, des
 -- popup is open, a bare <Left>/<Right> steps through the candidate list instead of moving the
 -- cursor (the workaround :help 'wildmenu' itself names). Typing a space and immediately erasing
 -- it closes the popup, so the arrow that follows moves the cursor instead.
-vim.keymap.set("c", "<C-b>", "<Space><BS><Left>", { silent = true, desc = "Move cursor left" })
-vim.keymap.set("c", "<C-f>", "<Space><BS><Right>", { silent = true, desc = "Move cursor right" })
-vim.keymap.set("c", "<C-a>", "<Home>", { silent = true, desc = "Move cursor to start of line" })
-vim.keymap.set("c", "<M-b>", "<S-Left>", { silent = true, desc = "Move cursor one word back" })
-vim.keymap.set("c", "<M-f>", "<S-Right>", { silent = true, desc = "Move cursor one word forward" })
+--
+-- No silent = true on any command-line mapping, unlike the Insert-mode ones above: while a
+-- <silent> mapping runs, the command line is not redrawn (cmd_silent short-circuits both
+-- redrawcmd() and cursorcmd()), so the cursor moves internally -- getcmdpos() changes -- but the
+-- screen keeps showing it where it was until the next keystroke repaints the line. Measured
+-- 2026-09-10 with the pty harness rendered through pyte: the same <C-a> mapping leaves the
+-- screen cursor at column 4 with silent and puts it at column 1 without.
+vim.keymap.set("c", "<C-b>", "<Space><BS><Left>", { desc = "Move cursor left" })
+vim.keymap.set("c", "<C-f>", "<Space><BS><Right>", { desc = "Move cursor right" })
+vim.keymap.set("c", "<C-a>", "<Home>", { desc = "Move cursor to start of line" })
+vim.keymap.set("c", "<M-b>", "<S-Left>", { desc = "Move cursor one word back" })
+vim.keymap.set("c", "<M-f>", "<S-Right>", { desc = "Move cursor one word forward" })
 
 -- getcmdline()/getcmdpos() rather than the buffer-line helpers above: the command line is not a
 -- buffer, so getline()/col() do not see it. getcmdpos() is a 1-indexed byte position, matching
@@ -122,8 +129,8 @@ local function cmdline_delete_next_word()
   return delete_keys("<Del>", vim.fn.strchars(after_cursor:sub(1, stop)), false)
 end
 
-vim.keymap.set("c", "<C-k>", cmdline_delete_to_end_of_line, { expr = true, silent = true, desc = "Delete to end of line" })
-vim.keymap.set("c", "<M-d>", cmdline_delete_next_word, { expr = true, silent = true, desc = "Delete next word" })
+vim.keymap.set("c", "<C-k>", cmdline_delete_to_end_of_line, { expr = true, desc = "Delete to end of line" })
+vim.keymap.set("c", "<M-d>", cmdline_delete_next_word, { expr = true, desc = "Delete next word" })
 
 -- What this section costs: c_CTRL-A (insert all wildmenu matches), c_CTRL-K (start a digraph)
 -- and c_CTRL-F (open the command-line window) are gone. The 'cedit' option (which key opens the
