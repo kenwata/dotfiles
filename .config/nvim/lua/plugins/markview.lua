@@ -90,7 +90,18 @@ end, { silent = true, desc = "Toggle markdown decoration" })
 -- Written through nvim_set_option_value with an explicit local scope: `vim.wo[win].list = x`
 -- writes the global value too (measured -- vim.go.list read false after one such assignment),
 -- which would destroy the very baseline this function restores from.
+--
+-- Only a normal file buffer (buftype == "") is in scope. markview only ever decorates that
+-- kind of buffer, and every other kind already has an owner deciding 'list' on its own: a
+-- terminal is decided by Neovim itself (TermOpen sets it false), and quickfix / nofile
+-- buffers are decided by whichever plugin opened them. Writing the global value on top of
+-- those fights the owner that already set it -- reopening a closed terminal re-entered this
+-- window and got overwritten back to true (T97, 2026-09-10).
 local function sync_list(window, buffer)
+  if vim.bo[buffer].buftype ~= "" then
+    return
+  end
+
   local mode = vim.api.nvim_get_mode().mode
   local editing = vim.startswith(mode, "i") or vim.startswith(mode, "R")
   local decorated = vim.b[buffer].markview_decorated == true
