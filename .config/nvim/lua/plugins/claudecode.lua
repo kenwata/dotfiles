@@ -51,7 +51,6 @@ local function setup(claudecode)
       -- provider_opts and snacks_win_opts are only read by the external / snacks providers.
       provider_opts = {},
       auto_close = true,
-      env = {},
       snacks_win_opts = {},
       -- Claude runs in Neovim's cwd, not the git root, so the two stay in step.
       git_repo_cwd = false,
