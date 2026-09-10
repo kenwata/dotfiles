@@ -371,6 +371,11 @@ step6_runtimes() {
   info "  Installing python@3.12 and node@lts via mise..."
   "$mise_cmd" use -g python@3.12 || warn "  python@3.12 install skipped"
   "$mise_cmd" use -g node@lts    || warn "  node@lts install skipped"
+
+  # Neovim が使う言語サーバー群・tree-sitter(~/.config/mise/config.toml の [tools] に宣言済み)
+  info "  Installing language servers and tree-sitter via mise install..."
+  "$mise_cmd" install || warn "  mise install skipped"
+
   "$mise_cmd" reshim 2>/dev/null || true
 
   # uv
