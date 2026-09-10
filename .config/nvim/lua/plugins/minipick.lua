@@ -29,6 +29,18 @@ local function load_minipick()
         scroll_up = "<M-b>",
         scroll_left = "<M-h>",
         scroll_right = "<M-l>",
+        -- <C-q> as a second way to close the picker, alongside the built-in stop = '<Esc>'.
+        -- Not `func = function() return true end`: the loop only treats the keypress as an
+        -- abort when the action name is literally 'stop' (mini/pick.lua H.picker_advance), so a
+        -- custom action name returning true still stops the loop but leaves MiniPick.start
+        -- returning the currently selected item instead of nil. That is invisible to callers
+        -- that ignore the return value (builtin.files() etc.) but breaks vim.ui.select: it only
+        -- calls on_choice(nil) when the item is nil, so <C-q> would silently drop the callback
+        -- instead of cancelling it (measured against <Esc> with a pty harness, 2026-09-10).
+        -- Sending the raw <C-c> byte makes the next getcharstr() return nil, which is the same
+        -- abort path MiniPick.stop() uses while waiting on getcharstr -- so item ends up nil,
+        -- matching <Esc>. `return true` must be omitted or the loop breaks before feedkeys is read.
+        stop_alt = { char = "<C-q>", func = function() vim.api.nvim_feedkeys("\3", "t", true) end },
       },
     })
   end)

@@ -60,3 +60,18 @@ vim.keymap.set("n", "<Leader>e", function()
     minifiles.open()
   end
 end, { silent = true, desc = "Toggle the file explorer" })
+
+-- <C-q> as a second way to close the explorer, alongside the built-in close = 'q'. mini.files
+-- only accepts one key per action, so a second key has to be a plain buffer-local mapping
+-- instead of a mappings.close entry. The event fires once per explorer buffer, and mini.files
+-- is lazy-loaded, so by the time this callback runs the plugin is already on disk -- load_minifiles()
+-- just returns the cached module (util.lazy skips re-running setup()).
+vim.api.nvim_create_autocmd("User", {
+  pattern = "MiniFilesBufferCreate",
+  desc = "Close the file explorer with <C-q> as well as the default q",
+  callback = function(args)
+    vim.keymap.set("n", "<C-q>", function()
+      load_minifiles().close()
+    end, { buffer = args.data.buf_id, silent = true, desc = "Close the file explorer" })
+  end,
+})
