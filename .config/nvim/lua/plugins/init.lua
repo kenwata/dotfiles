@@ -13,6 +13,8 @@ vim.pack.add({
   { src = "https://github.com/ellisonleao/gruvbox.nvim", version = vim.version.range("2") },
   { src = "https://github.com/nvim-lualine/lualine.nvim", version = "221ce6b2d999187044529f49da6554a92f740a96" },
   { src = "https://github.com/nvim-treesitter/nvim-treesitter", version = "5cb0114e6242625db56dd6440e945ed1ece10bc7" },
+  { src = "https://github.com/kylechui/nvim-surround", version = vim.version.range("4") },
+  { src = "https://github.com/nvim-treesitter/nvim-treesitter-textobjects", version = "5c7b0263797dfd1bd6202f2b219f3b53a80b2187" },
 }, {
   -- Without this, vim.pack loads plugin/ files during this same startup sequence even
   -- though `load` defaults to false here (see :packadd! in :help repeat.txt). Loading is
