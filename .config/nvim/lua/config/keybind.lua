@@ -100,8 +100,8 @@ vim.keymap.set("i", "<M-d>", delete_next_word, { expr = true, silent = true, des
 -- <silent> mapping runs, the command line is not redrawn (cmd_silent short-circuits both
 -- redrawcmd() and cursorcmd()), so the cursor moves internally -- getcmdpos() changes -- but the
 -- screen keeps showing it where it was until the next keystroke repaints the line. Measured
--- 2026-09-10 with the pty harness rendered through pyte: the same <C-a> mapping leaves the
--- screen cursor at column 4 with silent and puts it at column 1 without.
+-- 2026-09-10 with the pty harness rendered through pyte, on ":abc" + <C-a>: the same mapping
+-- leaves the screen cursor at column 4 with silent and puts it at column 1 without.
 vim.keymap.set("c", "<C-b>", "<Space><BS><Left>", { desc = "Move cursor left" })
 vim.keymap.set("c", "<C-f>", "<Space><BS><Right>", { desc = "Move cursor right" })
 vim.keymap.set("c", "<C-a>", "<Home>", { desc = "Move cursor to start of line" })
