@@ -228,7 +228,9 @@ symlink.
   that zsh loses `<C-q>`, `<C-\>` and its digit arguments inside these terminals.
   The winbar above the slot lists every terminal as `1 zsh 2 zsh ...`, marks the visible one, and
   is clickable; it stands in for the tabline, which never lists terminals because
-  `lua/config/autocmd.lua` clears their `'buflisted'`. `persist_mode` is off, against its default:
+  `lua/config/autocmd.lua` clears their `'buflisted'`. toggleterm's own `:TermSelect` also works
+  and picks a terminal from a list -- through `mini.pick`, since `minipick.lua` replaces
+  `vim.ui.select`. It is left unbound: `<M-1>`..`<M-9>` and the winbar already cover the switch. `persist_mode` is off, against its default:
   a terminal is always left in Normal mode when `<M-n>` hops away from it, and restoring that on
   the way back would strand the cursor outside Terminal mode where `<M-n>` no longer fires.
   Switching terminals reuses the window rather than closing and reopening it, which would empty
