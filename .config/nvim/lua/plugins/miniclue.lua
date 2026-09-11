@@ -82,6 +82,10 @@ local function setup(miniclue)
     },
     window = {
       delay = 300,
+      -- Default width is a fixed 30 columns (mini-clue.txt:565-566), which truncates the
+      -- longest square_brackets descriptions ([E/[F etc.) to the same prefix and makes them
+      -- indistinguishable. "auto" sizes the window to the widest clue line instead.
+      config = { width = "auto" },
     },
   })
 end
