@@ -58,6 +58,13 @@ require("gruvbox").setup({
     MiniTablineModifiedCurrent = { fg = palette.dark0, bg = palette.bright_yellow, bold = true },
     MiniTablineModifiedVisible = { fg = palette.bright_yellow, bg = palette.dark1 },
     MiniTablineModifiedHidden = { fg = palette.neutral_yellow, bg = palette.dark1 },
+    -- nvim-surround marks the text about to be surrounded with NvimSurroundHighlight, which it
+    -- links to Visual by default. Visual's bg3 sits at a 1.8:1 contrast against CursorLine's bg1
+    -- (measured 2026-09-11), so a single highlighted word was barely distinguishable from the
+    -- cursor line. Search is this colorscheme's own "this range, right now" treatment (yellow
+    -- block, 6.8:1). Defining it here works because the plugin uses `highlight default link`,
+    -- which yields to a group that already exists when the plugin is loaded.
+    NvimSurroundHighlight = { link = "Search" },
   },
   dim_inactive = false,
   transparent_mode = false,
