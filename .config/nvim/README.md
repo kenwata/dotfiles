@@ -31,6 +31,8 @@ symlink.
         ├── miniicons.lua   # echasnovski/mini.icons config, loaded at startup (icon provider)
         ├── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
         ├── minitabline.lua # echasnovski/mini.tabline config, loaded at startup (tabline)
+        ├── surround.lua    # kylechui/nvim-surround config, lazy-loaded on first surround key
+        ├── textobjects.lua # nvim-treesitter/nvim-treesitter-textobjects config, lazy-loaded on first select/move/swap key
         ├── toggleterm.lua  # akinsho/toggleterm.nvim config, lazy-loaded on first <C-\> press
         └── treesitter.lua  # nvim-treesitter/nvim-treesitter config, lazy-loaded on two FileType autocmds
 ```
