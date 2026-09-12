@@ -32,6 +32,7 @@ prepend to `PATH`, and others probe `PATH` to decide whether to configure anythi
 | `30-node.zsh` | Tool | Sets `PNPM_HOME` and prepends it |
 | `40-aws.zsh` | Tool | AWS CLI completion, profile, helper functions |
 | `50-peco.zsh` | Tool | `cdr` setup and the `Ctrl-R` / `Ctrl-]` widgets |
+| `60-herdr.zsh` | Tool | `herdr` zsh completion |
 | `99-mise.zsh` | Finalize | Activates mise — must stay last |
 
 ## Why the bootstrap band is first
