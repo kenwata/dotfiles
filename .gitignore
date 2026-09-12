@@ -102,3 +102,7 @@
 *.swp
 *.swo
 *~
+
+# herdr — config.toml 以外は実行時生成物なので追跡しない
+.config/herdr/*
+!.config/herdr/config.toml

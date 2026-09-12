@@ -1,0 +1,8 @@
+onboarding = false
+
+[theme]
+name = "nord"
+auto_switch = false
+
+[ui]
+agent_panel_sort = "priority"
