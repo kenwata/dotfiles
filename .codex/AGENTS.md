@@ -77,8 +77,8 @@ The main context owns the outcome, plan, and final decisions. This section is a 
 - Use `execute-task` to close one existing `T<n>` through completion-condition verification, project-state updates, and its task-scoped commit. Do not turn routine task execution into another `elaborate` or `breakdown` cycle.
 - At session end, perform only lightweight handoff work: check uncommitted changes and update `HANDOFF.md`, decisions, and TODO rotation when their state actually changed. Do not run a whole-project review merely because the session is ending.
 - Run `follow-up` at a milestone: before starting another task after five distinct completed T IDs since the latest `Follow-Up-Checkpoint: true`, at dependency-group completion, before integration or live validation, or after a design change or when design drift is suspected. It reconciles the checkpoint range and creates the next checkpoint commit.
-- When a `TODO.md` task table carries the execution column (`実`), its format is defined by the 実行系/モデル section of `~/.claude/templates/skeletons/todo.md`. The Codex value is `Codex/<configured model>`, for example `Codex/gpt-5.6-sol`. Fill it in when marking the task `[x]`.
-- The model guidance in that skeleton's 難易度 section names Claude Code models (sonnet, opus, fable) and does not apply here. In Codex, treat difficulty as a weight estimate only and do not switch models by difficulty.
+- When a `TODO.md` task table carries the execution column (`実`), its format is defined by the 実行系/モデル section of `~/.claude/templates/skeletons/todo.md`. The Codex value is `Codex/<configured model>`, for example `Codex/gpt-5.6-luna`. Fill it in when marking the task `[x]`.
+- Do not use `TODO.md` to preselect models. Use `~/.claude/templates/model-routing.md` as the operational source for standard execution, escalation, follow-up, and return-to-planning profiles; do not pin a planned model into an individual T.
 - Use the `initialize`, `elaborate`, `breakdown`, `execute-task`, `follow-up`, and `markdown-cleanup` skills for their corresponding workflows.
 - Use the `agmsg` skill for cross-agent messaging. Never read or edit its SQLite/config state directly.
 

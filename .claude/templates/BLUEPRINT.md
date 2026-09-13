@@ -20,6 +20,7 @@
 | ディレクトリ配置規約 | `rules/coding-principles.md` §13 | `skeletons/architecture.md` 冒頭コメント(ポインタのみ・転記しない) |
 | plan mode 粒度の判定基準(計画粒度 / タスク粒度) | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用 |
 | タスク実行・軽量終了・総点検の三層 | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用・`commands/execute-task.md`・`commands/follow-up.md` |
+| 設計済みタスクのモデル役割・停止境界 | `model-routing.md` | 本書 §6・`commands/execute-task.md`・`commands/follow-up.md`・Codex同名skill |
 | 設計書索引の書式・列定義 | `skeletons/design-index.md` 冒頭コメント | 本書 §6(位置づけと更新配線のみ)・`README.md`(列名の列挙のみ) |
 | 設計書の「全体構想」行の書式 | `skeletons/design.md` 冒頭コメント | `commands/elaborate.md` 手順4(生成側)・`commands/follow-up.md` 機械チェック⑨(検査側。書式を検査するため逐語で持つ) |
 
@@ -222,6 +223,8 @@ diff で無損失を機械的に検証する。archive は自動ロードされ�
 実行中の plan mode(既存 T<n> を実行する手段の計画 = タスク粒度)は /elaborate・/breakdown の対象外
 ````
 
+モデルの役割対応とエスカレーション境界は `model-routing.md` を正とする。モデル間の対応は性能等価ではなく、このワークフロー上の役割対応である。個々のTへ予定モデルを固定せず、実測に基づく対応変更は同文書へ集約する。
+
 - **着地が必要な理由**: `plan.md` は repo 内の安定文書だが、骨子から詳細まで粒度がまちまちで
   フェーズ内の未決定事項を含む。plan mode のプランファイルは `~/.claude/plans/` にあり
   **repo 外・揮発性** で、しかも会話の検討過程を要約した骨子に過ぎない。どちらも耐久形は
@@ -299,7 +302,7 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 (通常は /breakdown が行う)。規約の実体は skeleton 冒頭のコメントに同梱されて
 自己完結しており、本節は設計理由のみを持つ(循環参照の回避)。
 
-**将来の拡張継ぎ手**: TODO.md の表(計画 / #<n>-<m> / T<n> / タスク / 難易度 /
+**将来の拡張継ぎ手**: TODO.md の表(計画 / #<n>-<m> / T<n> / タスク /
 実行系-モデル / 状態)の列構成はそのまま関係スキーマになる。クエリ性・不変条件の
 機械保証が必要になった時点で `.claude/tasks.yaml` を正とし、`TODO.md` を `yq` 生成の
 ビューへ移す。SQLite は `git diff` でタスク定義の変更履歴が追えなくなるため、

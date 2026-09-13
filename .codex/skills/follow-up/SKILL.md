@@ -5,7 +5,9 @@ description: Reconcile all tasks and changes since the latest follow-up checkpoi
 
 # Reconcile plan and outcome
 
-Read `~/.claude/commands/follow-up.md` and the sections of `~/.claude/templates/BLUEPRINT.md` it references. Preserve its three operating modes, first-parent commit-trailer checkpoint, bootstrap behavior, cross-task standard discovery, mechanical checks, state-document updates, and distinction between automatic correction and new user decisions.
+Read `~/.claude/commands/follow-up.md`, `~/.claude/templates/model-routing.md`, and the sections of `~/.claude/templates/BLUEPRINT.md` the command references. Preserve its three operating modes, first-parent commit-trailer checkpoint, bootstrap behavior, cross-task standard discovery, mechanical checks, state-document updates, and distinction between automatic correction and new user decisions.
+
+Use the Codex `follow-up` baseline or a stronger profile from `model-routing.md`. This is a workflow role, not a general capability equivalence claim. The skill cannot change the host model itself: if the active profile is known to be below the baseline, report that the review has not started and recommend rerunning under the required profile rather than performing a weakened checkpoint review.
 
 Codex substitutions:
 

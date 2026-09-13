@@ -12,6 +12,7 @@
   明示する** — Agent tool は `model` 省略時に親セッションのモデルを継承するため、通常実行を
   fable より下位に置いているこの環境では、指定を省くとレビュー役が実行役より弱くなる。
   `agents/` の 5 定義はいずれも frontmatter に `model: fable` を持つので明示は要らない。
-  方針の出所は `templates/skeletons/todo.md` の難易度節
+  実行モデルの役割分担は `../.claude/templates/model-routing.md`、レビュー役の固定モデルは
+  各 agent 定義の frontmatter を正とする
 - git の履歴・リモート変更を拒否する PreToolUse hook はこの環境でも有効である
   (`hooks/` は `../.claude/hooks/` の symlink、配線は当プロファイルの `settings.json`)

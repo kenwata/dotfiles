@@ -42,7 +42,7 @@ HOME="$fake_home" bash "$repo_root/.codex/install.sh" \
 [[ "$(readlink "$fake_codex/hooks.json")" == "$repo_root/.codex/user-hooks.json" ]]
 [[ -f "$backup/config.toml" ]]
 grep -q 'old-model' "$backup/config.toml"
-[[ "$(yq -p=toml -o=json -r '.model' "$fake_codex/config.toml")" == "gpt-5.6-sol" ]]
+[[ "$(yq -p=toml -o=json -r '.model' "$fake_codex/config.toml")" == "gpt-5.6-luna" ]]
 [[ "$(yq -p=toml -o=json -r '.notify[0]' "$fake_codex/config.toml")" == "runtime-notifier" ]]
 [[ "$(yq -p=toml -o=json -r '.hooks.state."runtime-hook".trusted_hash' "$fake_codex/config.toml")" == "sha256:runtime" ]]
 [[ "$(yq -p=toml -o=json -r '.plugins."runtime-plugin".enabled' "$fake_codex/config.toml")" == "true" ]]
@@ -76,7 +76,7 @@ mkdir -p "$fresh_codex"
 HOME="$fresh_home" bash "$repo_root/.codex/install.sh" \
   "$repo_root/.codex" "$fresh_codex" "$fixture_root/fresh-backup"
 [[ -s "$fresh_codex/config.toml" ]]
-[[ "$(yq -p=toml -o=json -r '.model' "$fresh_codex/config.toml")" == "gpt-5.6-sol" ]]
+[[ "$(yq -p=toml -o=json -r '.model' "$fresh_codex/config.toml")" == "gpt-5.6-luna" ]]
 [[ "$(yq -p=toml -o=json -r '.sandbox_workspace_write.writable_roots[0]' "$fresh_codex/config.toml")" == "$fresh_home/.agents/skills/agmsg/run" ]]
 [[ -f "$fresh_codex/agents/proposal-reviewer.toml" ]]
 [[ ! -L "$fresh_codex/agents/proposal-reviewer.toml" ]]
