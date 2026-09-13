@@ -4,5 +4,35 @@ onboarding = false
 name = "nord"
 auto_switch = false
 
+[keys]
+prefix = "ctrl+space"
+
 [ui]
 agent_panel_sort = "priority"
+
+[ui.sidebar.agents.rows_by_agent]
+claude = [
+  ["state_icon", "workspace", "tab"],
+  [
+    { token = "terminal_title_stripped", fg = "#ECEFF4", bold = false, dim = false }
+  ],
+  [
+    "state_text",
+    { token = "agent", fg = "#ECEFF4", bold = false, dim = false }
+  ],
+]
+
+codex = [
+  ["state_icon", "workspace", "tab"],
+  [
+    { token = "terminal_title_stripped", fg = "#ECEFF4", bold = false, dim = false }
+  ],
+  [
+    "state_text",
+    { token = "agent", fg = "#ECEFF4", bold = false, dim = false }
+  ],
+]
+
+[ui.toast]
+delivery = "system"
+delay_seconds = 1

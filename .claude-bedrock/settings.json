@@ -1,6 +1,8 @@
 {
   "effortLevel": "medium",
   "enabledPlugins": {
+    "lua-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
     "qmd@qmd": true
   },
   "env": {
@@ -65,11 +67,21 @@
           }
         ],
         "matcher": "startup|clear"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/herdr-agent-state.sh session",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
       }
     ]
   },
   "language": "japanese",
-  "model": "opusplan",
+  "model": "fable",
   "outputStyle": "Natural Japanese",
   "permissions": {
     "allow": [

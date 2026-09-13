@@ -30,6 +30,8 @@
   "effortLevel": "high",
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true,
+    "lua-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
     "qmd@qmd": true
   },
   "env": {
@@ -158,6 +160,16 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/herdr-agent-state.sh session",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
       }
     ],
     "Stop": [
@@ -229,7 +241,7 @@
   },
   "inputNeededNotifEnabled": true,
   "language": "japanese",
-  "model": "opus[1m]",
+  "model": "sonnet",
   "modelSettings": {
     "claude-fable-5-1": {
       "effortLevel": "medium"
