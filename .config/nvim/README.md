@@ -21,6 +21,7 @@ symlink.
     │   └── autocmd.lua      # Autocommands
     └── plugins/
         ├── init.lua        # vim.pack.add() (single call, deferred load), then requires below
+        ├── autopairs.lua   # windwp/nvim-autopairs config, lazy-loaded on first InsertEnter
         ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>a* key
         ├── gruvbox.lua     # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
         ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
@@ -59,6 +60,24 @@ symlink.
   tabline alike; `:ls!` still lists them.
 - `lua/plugins/init.lua`: declares every plugin in a single `vim.pack.add({...})` call with
   `load = function() end` (deferred), then `require`s each per-plugin config file below.
+- `lua/plugins/autopairs.lua`: config for `windwp/nvim-autopairs` (auto-closes brackets and
+  quotes as they are typed, and offers a fast-wrap operation for closing an existing word).
+  Not loaded at startup; an `InsertEnter` autocmd (`once = true`) loads it through
+  `lua/common/lazy.lua` the first time Insert mode is entered, since none of its entry keys
+  (`(`, `[`, `{`, `"`, `'`, `` ` ``, `<CR>`, `<BS>`, `<C-h>`, `<M-e>`) means anything outside
+  Insert mode. Three options are set: `map_c_h = true` (deleting both characters of a pair
+  with `<C-h>`, on top of the plain single-character deletion it already did), `fast_wrap`
+  (mapped to `<M-e>`; its marker colors were chosen on the real Ghostty terminal --
+  `highlight = "IncSearch"`, `highlight_grey = "NonText"`, `use_virt_lines = true`), and
+  `disable_filetype` (the plugin's own defaults plus `minifiles`, since `mini.files` rewrites
+  the buffer's text as filenames for renaming and a single `(` there would otherwise become
+  `()`). `map_cr` (default true) and `map_c_w` (default false) are left at their defaults; the
+  file comments explain why each is not disabled/enabled. Lua's `end` keyword is meant to be
+  completed by `nvim-autopairs.rules.endwise-lua`, added via `add_rules()`, but this does not
+  currently work: at the point Enter is pressed the statement is not yet closed, so Neovim's
+  bundled tree-sitter-lua parser reports the surrounding node as `ERROR` rather than e.g.
+  `if_statement`, and nvim-autopairs' own tree-sitter check for the CR branch never matches
+  (verified headless; not specific to the pinned commit).
 - `lua/plugins/claudecode.lua`: config for `coder/claudecode.nvim`. Not loaded at startup;
   every `<leader>a*` key (toggle, focus, resume, continue, model, add buffer, send selection,
   accept/deny diff) runs `vim.cmd.packadd()` and `setup()` on first press, so no single key has
@@ -191,7 +210,7 @@ symlink.
 - `lua/plugins/minitabline.lua`: config for `echasnovski/mini.tabline` (draws the open
   buffers as a row of tabs along the top line of the screen). What is listed there are
   buffers, not Vim tab pages, which this config does not use. Loaded at startup with
-  `packadd!`, for the same reason as `gruvbox.lua` and unlike the seven lazy-loaded plugins:
+  `packadd!`, for the same reason as `gruvbox.lua` and unlike the ten lazy-loaded plugins:
   the tabline is part of the first frame drawn, and there is no "first use" a key could stand
   in for, since the line is simply always visible. `setup()` forces `showtabline = 2`;
   `showtabline = 1` counts tab pages rather than buffers, so it would keep the line hidden
@@ -269,8 +288,9 @@ symlink.
   `lua/plugins/init.lua` updates the plugin's own Lua code and query files, but not the
   eight already-compiled parsers; keeping those current after such a bump needs a manual
   `:TSUpdate`.
-- `lua/common/lazy.lua`: shared loader for lazy-loaded plugins (`claudecode.lua`, `markview.lua`,
-  `miniclue.lua`, `minifiles.lua`, `minipick.lua`, `toggleterm.lua`, `treesitter.lua`). Exposes
+- `lua/common/lazy.lua`: shared loader for lazy-loaded plugins (`autopairs.lua`, `claudecode.lua`,
+  `markview.lua`, `miniclue.lua`, `minifiles.lua`, `minipick.lua`, `surround.lua`,
+  `textobjects.lua`, `toggleterm.lua`, `treesitter.lua`). Exposes
   one function, `M.require(pack_name, module_name, setup)`, that runs
   `vim.cmd.packadd(pack_name)` and `setup(require(module_name))` exactly once — while
   `package.loaded[module_name]` is already filled, neither runs again — then returns
