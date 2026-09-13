@@ -1,7 +1,8 @@
 ---
 name: log-test-analyst
 description: Analysis of verbose output — test suite runs, build logs, CI output, stack traces, profiler dumps. Use when the output is too long to read in the main context, or when a failure needs to be characterised and reduced to a minimal reproduction. Not for short output you can read directly.
-model: fable
+model: sonnet
+effort: high
 disallowedTools: Write, Edit, NotebookEdit, Agent, Artifact
 color: yellow
 ---

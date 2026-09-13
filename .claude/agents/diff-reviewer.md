@@ -1,7 +1,8 @@
 ---
 name: diff-reviewer
 description: Fresh-context review of an actual diff against a stated standard — did the work that was planned actually get done, and was anything done that was not planned. Use for pre-completion checks (the /follow-up step-4 inspection) and whenever a self-check would inherit the main context's own blind spots. Not for reviews where the conversation's own context is the point.
-model: fable
+model: opus
+effort: high
 disallowedTools: Write, Edit, NotebookEdit, Agent, Artifact
 color: purple
 ---

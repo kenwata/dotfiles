@@ -1,7 +1,8 @@
 ---
 name: parallel-implementer
 description: One slice of implementation work that is independent of the other slices running alongside it. Use when the main context has already decomposed a task into parts that touch disjoint files and can proceed without coordinating. Not for context-coupled implementation, trivial edits, or work whose design is still open.
-model: fable
+model: sonnet
+effort: high
 disallowedTools: Agent, Artifact
 color: green
 ---

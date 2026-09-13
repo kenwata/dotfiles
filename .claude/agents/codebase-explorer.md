@@ -1,7 +1,8 @@
 ---
 name: codebase-explorer
 description: Broad exploration of a codebase — locate where something lives, map an unfamiliar area, or find every site that follows a pattern. Use when the scope is uncertain, when several areas may be involved, or when you need to know what already exists before designing. Not for single-fact lookups in a file you already know.
-model: fable
+model: sonnet
+effort: medium
 disallowedTools: Write, Edit, NotebookEdit, Agent, Artifact
 color: blue
 ---

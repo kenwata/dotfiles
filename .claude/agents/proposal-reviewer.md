@@ -2,6 +2,7 @@
 name: proposal-reviewer
 description: Adversarial review of a self-contained proposal — a plan, a design interpretation, a task breakdown, or a completion judgment — before it becomes a persistent artifact or a final report. Use where a second opinion should challenge the main context's reasoning (approach commitment, repeated failures, the pre-report completion check in /follow-up step 7). Not for checking a diff against a standard (that is diff-reviewer).
 model: fable
+effort: medium
 disallowedTools: Write, Edit, NotebookEdit, Agent, Artifact
 color: red
 ---

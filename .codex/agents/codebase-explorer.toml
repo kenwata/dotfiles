@@ -1,6 +1,6 @@
 name = "codebase_explorer"
 description = "Broad read-only exploration of a codebase: locate ownership, map unfamiliar areas, or find every site following a pattern."
-model = "gpt-5.6-terra"
+model = "gpt-5.6-luna"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 developer_instructions = """
