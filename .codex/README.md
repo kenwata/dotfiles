@@ -8,7 +8,7 @@ This directory is the version-controlled source for personal Codex configuration
 | --- | --- | --- |
 | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` | Principles and delegation contract are translated |
 | `settings.json` | `user-config.toml` | Model effort, project trust, fallback guidance, agents, hooks, and TUI fields are mapped; runtime-only keys are preserved during merge |
-| `agents/*.md` | `agents/*.toml` | Four roles are ported and copied into `~/.codex/agents`; `advisor` is added as a fresh-context replacement for Claude Advisor |
+| `agents/*.md` | `agents/*.toml` | Five roles are ported and copied into `~/.codex/agents`, including the read-only `proposal_reviewer` for proposal and completion-judgment review |
 | `commands/*.md` | `skills/*/SKILL.md` | The Claude command remains the detailed canonical procedure; the Codex skill supplies product-specific translations |
 | `hooks/*.sh` | `hooks/*` and `user-hooks.json` | Shared logic is wrapped where payloads match; the user hook manifest is renamed so this dotfiles repo does not load it again as project-local hooks |
 | command status line | `tui.status_line` | Codex supports ordered built-in fields, not an arbitrary status-line command |

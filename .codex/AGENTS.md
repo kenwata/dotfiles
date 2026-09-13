@@ -53,13 +53,13 @@ The main context owns the outcome, plan, and final decisions. This section is a 
 
 | Target | Use for | Keep in main / skip |
 | --- | --- | --- |
-| `advisor` | Before committing to a non-trivial approach, after repeated failures, and before declaring non-trivial work complete | A next step dictated by fresh tool output; trivial mechanical edits |
+| `proposal_reviewer` | Before committing to a non-trivial approach, after repeated failures, and before declaring non-trivial work complete | A next step dictated by fresh tool output; trivial mechanical edits |
 | `codebase_explorer` | Broad exploration, unfamiliar code maps, or exhaustive pattern searches | A fact lookup in a known file |
 | `log_test_analyst` | Verbose test/build/CI output and failure characterization | Short output readable in the main context |
 | `parallel_implementer` | Independent implementation slices touching disjoint files | Context-coupled work, trivial edits, or an unsettled design |
 | `diff_reviewer` | Fresh-context comparison of a real diff against a stated standard | Reviews where conversation context is itself the evidence |
 
-- Form your own assessment before invoking `advisor`; use it to challenge the assessment, not replace it.
+- Form your own assessment before invoking `proposal_reviewer`; use it to challenge the assessment, not replace it.
 - Prefer the custom roles above over an uncontracted general-purpose subagent.
 - When spawning a named custom role, use a fresh or bounded context (`fork_turns = "none"` or a positive turn count), then provide a self-contained task prompt. A full-history fork inherits the parent agent type and cannot select a custom role.
 - Delegated work is a leaf. A subagent reports to the main context and does not delegate again.

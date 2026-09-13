@@ -97,13 +97,17 @@ install_user_config() {
 
   if [[ -s "$current" ]]; then
     if ! yq eval-all -p=toml -o=toml \
-      'select(fileIndex == 0) * select(fileIndex == 1)' \
+      '(select(fileIndex == 0) * select(fileIndex == 1)) | del(.agents.advisor)' \
       "$current" "$rendered" > "$merged"; then
       rm -f "$current" "$rendered" "$merged"
       return 1
     fi
   else
-    cp "$rendered" "$merged"
+    if ! yq eval -p=toml -o=toml 'del(.agents.advisor)' \
+      "$rendered" > "$merged"; then
+      rm -f "$current" "$rendered" "$merged"
+      return 1
+    fi
   fi
 
   if [[ ! -L "$destination" && -f "$destination" ]] && cmp -s "$destination" "$merged"; then
@@ -124,6 +128,16 @@ install_user_config() {
   info "merged: $template -> $destination (runtime-only keys preserved)"
 }
 
+retire_deprecated_agent() {
+  local filename="$1" destination backup_path
+  destination="$codex_home/agents/$filename"
+  [[ -e "$destination" || -L "$destination" ]] || return 0
+
+  backup_path="$(next_backup_path "agents/$filename")"
+  mv "$destination" "$backup_path"
+  info "retired deprecated agent: $destination -> $backup_path"
+}
+
 mkdir -p "$codex_home" "$codex_home/agents" "$codex_home/hooks" "$codex_home/skills"
 
 for name in AGENTS.md; do
@@ -133,6 +147,7 @@ done
 backup_and_link "$source_dir/user-hooks.json" "$codex_home/hooks.json"
 
 install_user_config
+retire_deprecated_agent "advisor.toml"
 
 for source_path in "$source_dir"/agents/*.toml; do
   [[ -e "$source_path" ]] || continue

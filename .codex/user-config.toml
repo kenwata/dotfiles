@@ -19,9 +19,9 @@ max_concurrent_threads_per_session = 4
 default_subagent_model = "gpt-5.6-terra"
 default_subagent_reasoning_effort = "high"
 
-[agents.advisor]
-description = "Fresh-context challenger for approach commitment, repeated failures, and pre-completion review."
-config_file = "./agents/advisor.toml"
+[agents.proposal_reviewer]
+description = "Read-only adversarial reviewer for plans, design interpretations, task breakdowns, and completion judgments."
+config_file = "./agents/proposal-reviewer.toml"
 
 [agents.codebase_explorer]
 description = "Read-only explorer for broad codebase mapping and exhaustive pattern searches."

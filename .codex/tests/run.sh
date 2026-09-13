@@ -13,13 +13,17 @@ printf 'secret-placeholder\n' > "$fake_codex/auth.json"
 printf 'system-marker\n' > "$fake_codex/skills/.system/marker"
 printf 'session-marker\n' > "$fake_codex/sessions/marker"
 mkdir -p "$fake_codex/agents"
-ln -s "$repo_root/.codex/agents/advisor.toml" "$fake_codex/agents/advisor.toml"
+printf 'legacy-advisor\n' > "$fake_codex/agents/advisor.toml"
+ln -s "$repo_root/.codex/agents/proposal-reviewer.toml" "$fake_codex/agents/proposal-reviewer.toml"
 printf 'legacy-codebase-explorer\n' > "$fake_codex/agents/codebase-explorer.toml"
 mkdir -p "$backup/agents"
-printf 'existing-advisor-backup\n' > "$backup/agents/advisor.toml"
+printf 'existing-proposal-reviewer-backup\n' > "$backup/agents/proposal-reviewer.toml"
 printf '%s\n' \
   'model = "old-model"' \
   'notify = ["runtime-notifier"]' \
+  '' \
+  '[agents.advisor]' \
+  'config_file = "./agents/advisor.toml"' \
   '' \
   '[hooks.state."runtime-hook"]' \
   'trusted_hash = "sha256:runtime"' \
@@ -42,18 +46,22 @@ grep -q 'old-model' "$backup/config.toml"
 [[ "$(yq -p=toml -o=json -r '.notify[0]' "$fake_codex/config.toml")" == "runtime-notifier" ]]
 [[ "$(yq -p=toml -o=json -r '.hooks.state."runtime-hook".trusted_hash' "$fake_codex/config.toml")" == "sha256:runtime" ]]
 [[ "$(yq -p=toml -o=json -r '.plugins."runtime-plugin".enabled' "$fake_codex/config.toml")" == "true" ]]
+[[ "$(yq -p=toml -o=json -r '.agents.advisor // "absent"' "$fake_codex/config.toml")" == "absent" ]]
+[[ "$(yq -p=toml -o=json -r '.agents.proposal_reviewer.config_file' "$fake_codex/config.toml")" == "./agents/proposal-reviewer.toml" ]]
 [[ "$(yq -p=toml -o=json -r '.sandbox_workspace_write.writable_roots[0]' "$fake_codex/config.toml")" == "$fake_home/.agents/skills/agmsg/run" ]]
 grep -qx 'secret-placeholder' "$fake_codex/auth.json"
 grep -qx 'system-marker' "$fake_codex/skills/.system/marker"
 grep -qx 'session-marker' "$fake_codex/sessions/marker"
 [[ -L "$fake_codex/skills/follow-up" ]]
 [[ -L "$fake_codex/skills/elaborate" ]]
-grep -qx 'existing-advisor-backup' "$backup/agents/advisor.toml"
-migrated_advisor_backup="$(find "$backup/agents" -maxdepth 1 -type l -name 'advisor.toml.*')"
-[[ -n "$migrated_advisor_backup" ]]
-[[ -L "$migrated_advisor_backup" ]]
-[[ "$(readlink "$migrated_advisor_backup")" == "$repo_root/.codex/agents/advisor.toml" ]]
-[[ "$(find "$backup/agents" -maxdepth 1 -type l -name 'advisor.toml.*' | wc -l | tr -d ' ')" -eq 1 ]]
+grep -qx 'existing-proposal-reviewer-backup' "$backup/agents/proposal-reviewer.toml"
+migrated_proposal_reviewer_backup="$(find "$backup/agents" -maxdepth 1 -type l -name 'proposal-reviewer.toml.*')"
+[[ -n "$migrated_proposal_reviewer_backup" ]]
+[[ -L "$migrated_proposal_reviewer_backup" ]]
+[[ "$(readlink "$migrated_proposal_reviewer_backup")" == "$repo_root/.codex/agents/proposal-reviewer.toml" ]]
+[[ "$(find "$backup/agents" -maxdepth 1 -type l -name 'proposal-reviewer.toml.*' | wc -l | tr -d ' ')" -eq 1 ]]
+grep -qx 'legacy-advisor' "$backup/agents/advisor.toml"
+[[ ! -e "$fake_codex/agents/advisor.toml" && ! -L "$fake_codex/agents/advisor.toml" ]]
 grep -qx 'legacy-codebase-explorer' "$backup/agents/codebase-explorer.toml"
 for source_path in "$repo_root"/.codex/agents/*.toml; do
   installed_path="$fake_codex/agents/$(basename "$source_path")"
@@ -70,9 +78,9 @@ HOME="$fresh_home" bash "$repo_root/.codex/install.sh" \
 [[ -s "$fresh_codex/config.toml" ]]
 [[ "$(yq -p=toml -o=json -r '.model' "$fresh_codex/config.toml")" == "gpt-5.6-sol" ]]
 [[ "$(yq -p=toml -o=json -r '.sandbox_workspace_write.writable_roots[0]' "$fresh_codex/config.toml")" == "$fresh_home/.agents/skills/agmsg/run" ]]
-[[ -f "$fresh_codex/agents/advisor.toml" ]]
-[[ ! -L "$fresh_codex/agents/advisor.toml" ]]
-cmp -s "$repo_root/.codex/agents/advisor.toml" "$fresh_codex/agents/advisor.toml"
+[[ -f "$fresh_codex/agents/proposal-reviewer.toml" ]]
+[[ ! -L "$fresh_codex/agents/proposal-reviewer.toml" ]]
+cmp -s "$repo_root/.codex/agents/proposal-reviewer.toml" "$fresh_codex/agents/proposal-reviewer.toml"
 
 printf '%s\n' \
   '#!/usr/bin/env bash' \
