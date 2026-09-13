@@ -9,9 +9,22 @@ local function setup(npairs)
     -- when the cursor sits right between them, on top of the plain single-character deletion
     -- it already did.
     map_c_h = true,
-    -- fastwrap.lua already defaults `map` to <M-e>; written out because choosing that key is
-    -- this config's decision, not an unexamined default.
-    fast_wrap = { map = "<M-e>" },
+    fast_wrap = {
+      -- fastwrap.lua already defaults `map` to <M-e>; written out because choosing that key
+      -- is this config's decision, not an unexamined default.
+      map = "<M-e>",
+      -- Chosen on the real Ghostty terminal (T110, 2026-09-13) from three named patterns
+      -- ("既定"/default, "強調"/emphasis, "重ね"/overlay). "強調" won: the marker itself in
+      -- IncSearch stands out more than the plugin's default Search, and the rest of the line
+      -- in NonText reads as clearly secondary against it -- against the defaults (Search /
+      -- Comment), which read closer to each other.
+      highlight = "IncSearch",
+      highlight_grey = "NonText",
+      -- Also part of the "強調" pattern, even though it matches fastwrap.lua's own default:
+      -- the marker renders on a virtual line below the cursor line rather than overlaid onto
+      -- it.
+      use_virt_lines = true,
+    },
     -- The plugin's own defaults (TelescopePrompt, spectre_panel, snacks_picker_input) plus
     -- minifiles: mini.files rewrites the buffer's text as filenames for renaming, so typing a
     -- single "(" there would otherwise become "()".
