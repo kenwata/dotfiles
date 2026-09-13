@@ -29,7 +29,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    | -- | ---- | ------------------ |
    | auto memory | 個人的な学び・環境固有の事実 | 組み込み。何も作らない |
    | `plan.md`(ルート直下) | 全体構想・フェーズ構造(最上位の why/what) | ゼロ。壁打ちで作り、全体に関わる決定時のみ更新。`/elaborate` が読む |
-   | `HANDOFF.md`(ルート直下) | 今の状態・仕掛かり中・次の一手 | 40 行以内。毎セッション終了時に **全体上書き**(追記しない) |
+   | `HANDOFF.md`(ルート直下) | 今の状態・仕掛かり中・次の一手 | 40 行以内。状態が変わった時だけ **全体上書き**(追記しない) |
    | git log | 何を依頼され・どう対応したか(逐語) | ゼロ。**1 タスク完了 = 1 コミット**(変更ゼロのタスクは `--allow-empty`)、検索で必要箇所のみ引く |
    | `docs/decisions.md` | 仕様解釈・逸脱・ユーザー決定(1 行/件) | ゼロ。append-only |
    | `.claude/archive/` | TODO 等の予算超過分の逐語退避 | ゼロ。初回ローテーション時に生成 |
@@ -59,12 +59,13 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    超えたら、要約(情報欠落)ではなく `.claude/archive/` へ一字一句そのまま退避し、
    移動後に diff で無損失を検証する(`rules/growing-docs.md`)。HANDOFF.md は全体上書きが
    前提のためローテーション対象外
-7. **更新トリガーは配線する** — 「セッション終了時に更新する」と規約に書くだけでは形骸化
+7. **更新トリガーは配線する** — 「状態が変わった時に更新する」と規約に書くだけでは形骸化
    する。実際、旧 `.claude/handoff.md` は規約はあったが実行を強制する手順が無く、更新
    されなくなった。実体は `skeletons/todo.md` の §0 セッションプロトコルに埋め込んである。
    さらにプロンプト側の配線が破られた時(セッション異常終了等)の安全網として、
    SessionStart hook(`hooks/check-handoff-stale.sh`)が次セッション起動時に HANDOFF.md の
-   未コミット変更・最新コミットからの遅れを機構側で検知して警告する
+   未コミット変更を機構側で検知して警告する。状態が変わらないセッションでは更新しないため、
+   最新コミットからの距離は陳腐化の根拠にしない
 8. **修正指摘は再発判定してルール化** — その場しのぎの修正で終えず、スコープに応じて
    ファイル内規約 / `.claude/rules/` / templates への還元 / auto memory へ振り分ける
    (BLUEPRINT §10)
@@ -77,7 +78,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    (常時ロード枠)。プロジェクトごとの適用結果は `docs/architecture.md`(初期化時に生成。
    新規プロジェクトは検出言語の標準レイアウトから、既存プロジェクトは実ツリーから起こす)に記録し、
    実態と同期させ続ける。配線は 3 段構え: `/elaborate` が新規ディレクトリを設計時に反映、
-   `/follow-up` がセッション終了時に実ツリーとの乖離を機械検査、機構側の安全網として
+   `/follow-up` が節目の総点検時に実ツリーとの乖離を機械検査、機構側の安全網として
    `hooks/check-new-directory.sh`(PreToolUse)が新規ディレクトリ作成時に確認を促す
    (Write 経由のみ検知。`mkdir` 等はプロンプト側の配線が一次的な強制手段であり、これは既知の限界)
 11. **委任の境界は役割で分け、機構で縛る** — CLAUDE.md の Delegation 節が挙げる 5 役割を
@@ -135,7 +136,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── settings.json                # 中核設定 — model / effortLevel / autoMode / qmd プラグイン(github: tobi/qmd)有効化
 ├── statusline.sh                # ステータスライン用スクリプト
 ├── hooks/
-│   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md 陳腐化の起動時検知(設計方針 7)
+│   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md の未コミット変更を検知(設計方針 7)
 │   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
 │   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認文の可読性ゲート(呼び出しごとに1回 deny→書き直し)
 │   ├── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
@@ -151,7 +152,8 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── elaborate.md             # /elaborate — 計画(plan.md の 1 フェーズ / plan mode)を対話で詳細化し設計書へ
 │   ├── breakdown.md             # /breakdown — 設計書を TODO へ分解(設計書だけを入力)
-│   ├── follow-up.md             # /follow-up — 終了時に計画と成果の差分を検査・是正
+│   ├── execute-task.md           # /execute-task T<n> — 既存タスクを実装・検証・コミットまで閉じる
+│   ├── follow-up.md             # /follow-up — checkpoint間の複数タスクを横断して総点検
 │   ├── agmsg.md                 # /agmsg — マルチエージェントメッセージング
 │   └── markdown-cleanup.md      # /markdown-cleanup — markdown-format CLI をファイル全体モードで適用し単独コミット
 └── templates/                   # /initialize・/elaborate・/breakdown が読むテンプレート群
@@ -248,7 +250,8 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
    docs/design/<slug>.md を生成 + docs/design/index.md に 1 行追記。
    新規ディレクトリが要るなら docs/architecture.md もここで更新
 5. /breakdown docs/design/<slug>.md → TODO.md の計画 #n + タスク T<n>…(索引の T 列も埋める)。HANDOFF の次の一手 = T<n>
-6. 実行(1 タスク = 1 コミット)→ /follow-up(終了時の検査と是正)→ 次フェーズは 4 へ戻る
+6. /execute-task T<n> → 1 タスク = 1 コミット。セッション終了時は状態変化がある場合だけ軽量な引き継ぎ
+7. 節目で /follow-up → checkpoint以後の複数タスクを横断して総点検し、次フェーズは 4 へ戻る
 ````
 
 plan mode は 4 の入口としてだけ `/elaborate` に合流する。**6 の実行中に `T<n>` を実行するための
@@ -258,11 +261,15 @@ plan mode を通っても、`/elaborate`・`/breakdown` は走らせない**(成
 - **開始時**: `HANDOFF.md` と `TODO.md` の 2 つを読む。着手点は HANDOFF.md の「次の一手」
 - **タスク完了ごと**: ①TODO.md の該当タスクを `[x]` に更新 ②コミット(要約に `T<n>` を含める。
   変更を生まないタスクは `git commit --allow-empty` で記録を残す)
-- **複数ターンのタスク**: `/goal <検証可能な完了条件>, or stop after 20 turns` で
-  完了まで自動駆動する(状態確認は `/goal`、解除は `/goal clear`)
-- **終了時**: `/follow-up` を実行する — 計画と成果の差分を検査・是正した上で、
-  ①チェックボックス更新 ②`HANDOFF.md` の **全体上書き** ③該当あれば
-  `docs/decisions.md` ④コミット、まで行う(手順の実体は BLUEPRINT §6)
+- **長時間の実行**: 途中終了を避けたい場合などに `/goal <検証可能な完了条件>, or stop after 20 turns`
+  を補助的に使う(状態確認は `/goal`、解除は `/goal clear`)
+- **終了時**: 未コミット変更を確認する。中断状態・次の一手・要確認などが変わった場合だけ
+  `HANDOFF.md` を全体上書きし、該当する判断記録とTODOローテーションを着地させる。
+  設計書全体の再照合や独立レビューは行わない
+- **節目**: 最新 `Follow-Up-Checkpoint: true` 以後に完了した異なるT番号が5件に達した時、
+  依存グループ完了時、統合前、ライブ検証前、設計変更または不整合を検出した時は、
+  次のTへ進む前に `/follow-up` を実行する。checkpointがまだ無い既存プロジェクトの初回だけ、
+  明示した基準コミットを引数で渡す
 - **過去を辿る時**: `git log`(引数なし)の全件読み込みはしない。
   `git log --oneline -- <path>` → `git log --grep=<語>`(タスクIDは境界付き
   `-E --grep='T7([^0-9]|$)'` 形式)→ `git show <sha>` の順に絞る

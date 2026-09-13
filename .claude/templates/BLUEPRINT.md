@@ -19,6 +19,7 @@
 | 規約配置の一般原則 | `rules/growing-docs.md`「Placement of durable rules」 | 本書 §10(再発ミス時のルーティングに限定) |
 | ディレクトリ配置規約 | `rules/coding-principles.md` §13 | `skeletons/architecture.md` 冒頭コメント(ポインタのみ・転記しない) |
 | plan mode 粒度の判定基準(計画粒度 / タスク粒度) | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用 |
+| タスク実行・軽量終了・総点検の三層 | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用・`commands/execute-task.md`・`commands/follow-up.md` |
 | 設計書索引の書式・列定義 | `skeletons/design-index.md` 冒頭コメント | 本書 §6(位置づけと更新配線のみ)・`README.md`(列名の列挙のみ) |
 | 設計書の「全体構想」行の書式 | `skeletons/design.md` 冒頭コメント | `commands/elaborate.md` 手順4(生成側)・`commands/follow-up.md` 機械チェック⑨(検査側。書式を検査するため逐語で持つ) |
 
@@ -40,7 +41,7 @@
 
 - プロジェクト `CLAUDE.md`: **50 行以内**。ポインタ型に徹し、規約の中身を書かない
 - `HANDOFF.md`(ルート直下): **40 行以内**。パス参照のみ、コードは貼らない。
-  **毎セッション終了時に全体上書き**(追記・ローテーションはしない。`rules/growing-docs.md` が規定)
+  終了時に状態変化があれば全体上書きする(追記・ローテーションはしない。`rules/growing-docs.md` が規定)
 - ルールは原則 `paths:` 付き(path-scoped)で置く。`paths:` なしで常時ロードするのは
   coding-principles / testing の 2 件までとする。**プロジェクト運用中に後から追加する
   手順書・スキーマ規約(ドメイン固有ルール)も必ず `paths:` 付きで置く**(この2件枠を侵食させない)。
@@ -149,9 +150,9 @@
 | -- | ---- | ---- |
 | auto memory(組み込み) | 個人的な学び・環境固有の事実・好み | Claude Code が自動管理。何も作らない |
 | `plan.md`(ルート直下) | 全体構想・フェーズ構造・スコープ(最上位の why/what。状態を書かない) | git 管理。ユーザーが通常モードの壁打ちで作る。全体構想に関わる決定時に更新し `docs/decisions.md` に 1 行。`~/.claude/plans/` の plan mode プランファイル(repo 外・揮発性)とは別物 |
-| `HANDOFF.md`(ルート直下) | タスク状態・仕掛かり中・次の一手・要確認 | git 管理。**毎セッション終了時に全体上書き**(追記しない) |
+| `HANDOFF.md`(ルート直下) | タスク状態・仕掛かり中・次の一手・要確認 | git 管理。終了時に4項目の状態変化があれば全体上書き(追記しない) |
 | git log | タスク単位の作業ログ(何を依頼され・どう対応したか) | **1 タスク完了 = 1 コミット**。自動ロードなし、検索で必要箇所のみ引く |
-| `docs/decisions.md` | 仕様解釈・設計からの逸脱・ユーザー決定(1行/件) | git 管理。セッション終了時、該当があれば追記(ローテーション対象外) |
+| `docs/decisions.md` | 仕様解釈・設計からの逸脱・ユーザー決定(1行/件) | git 管理。タスク実行または終了処理で該当があれば追記(ローテーション対象外) |
 | `.claude/archive/` | TODO・changelog 等、予算超過分の逐語退避(要約禁止) | git 管理。自動ロードなし・初回ローテーション時に生成 |
 
 ### 作業ログ層(git log)の規約
@@ -212,7 +213,8 @@ diff で無損失を機械的に検証する。archive は自動ロードされ�
 ````
 壁打ち(通常モード)→ plan.md(全体構想)→ /initialize(下地)
   → /elaborate(設計書へ。入力は plan.md の 1 フェーズ、または plan mode の承認済みプラン+会話)
-  → /breakdown(TODO へ。入力は設計書だけ)→ 実行(1タスク=1コミット)→ /follow-up(終了時の検査と是正)
+  → /breakdown(TODO へ。入力は設計書だけ)→ /execute-task(1タスク=1コミット)
+  → 節目で /follow-up(checkpoint間の横断総点検)
   → 次フェーズ: /elaborate へ戻る
         ├─ docs/design/<slug>.md  … 安定文書(フェーズ内の why/what。状態を書かない。plan.md のフェーズへのポインタを持つ)
         ├─ docs/design/index.md   … 派生ビュー(設計書の索引。列定義は skeletons/design-index.md が正。/elaborate が追記・/breakdown が T 列)
@@ -262,7 +264,7 @@ diff で無損失を機械的に検証する。archive は自動ロードされ�
   `skeletons/design-index.md` から、TODO.md は /breakdown が `skeletons/todo.md` から生成する
 - **`docs/architecture.md` の配線**: `/initialize` が生成(新規プロジェクトは検出言語の標準
   レイアウトから初期形を、既存プロジェクトは実ツリーから起こす)。`/elaborate` は計画が新規
-  ディレクトリを要する時、実装着手前にツリーと決定表を更新する。`/follow-up` はセッション終了時に
+  ディレクトリを要する時、実装着手前にツリーと決定表を更新する。`/follow-up` は節目の総点検時に
   実ツリーとの乖離を機械検査する(§11 と同じ検証を差分検査として流用)。加えて機構側の安全網として
   `hooks/check-new-directory.sh`(PreToolUse)が新規ディレクトリ作成時に `docs/architecture.md` の
   確認を促す(Write 経由の作成のみ検知。`mkdir` 等はプロンプト側の配線が一次的な強制手段)。
@@ -282,13 +284,17 @@ TODO.md 冒頭の §0 セッションプロトコル)に明文で配線する。
 配線漏れという根本原因は解消されず、後日「本来は分離構成が望ましかった」として再分割
 する手戻りが発生している。**ファイル数を減らすことは解決策ではない。** 正しい対処は、
 TODO.md 冒頭に §0 セッションプロトコルを置き、「開始時に読む2ファイル(TODO.md・
-HANDOFF.md)」「終了時は /follow-up を実行する(計画と成果の差分検査 → 是正 → 下の
-更新手順)」を明文化することである。更新手順の実体は本節が持つ: ① TODO.md の
-チェックボックス更新 ② HANDOFF.md の全体上書き ③ 該当あれば docs/decisions.md への
-追記 ④ TODO.md から、セッション開始時の HEAD 時点で既に `[x]` だったタスクを
-`.claude/archive/TODO.md` へ移す(手順の実体は `skeletons/todo.md` の規約コメントが正。
-当該セッションで `[x]` にしたタスクは移さない) ⑤ 上書きした HANDOFF.md と decisions.md の
-コミット — 未コミットのまま終えると次セッションの最初のタスクコミットに混入する。
+HANDOFF.md)」「T完了時は `/execute-task` が完了条件照合とタスク単位の着地を担う」
+「セッション終了時は中断状態だけを軽量に引き継ぐ」「節目では `/follow-up` が前回checkpoint
+以後を横断して総点検する」を明文化することである。更新手順の実体は本節が持つ:
+① TODO.md の該当タスクと実行系を更新してT単位でコミット ② 状態が変わった場合だけ
+HANDOFF.md を全体上書き ③ 該当すれば docs/decisions.md へ追記 ④ TODO.md から、
+セッション開始時の HEAD 時点で既に `[x]` だったタスクを `.claude/archive/TODO.md` へ移す
+(手順の実体は `skeletons/todo.md` の規約コメントが正。当該セッションで `[x]` にしたタスクは
+移さない)。軽量終了処理では設計全体の照合や独立レビューを行わない。`/follow-up` は、最新の
+`Follow-Up-Checkpoint: true` 以後に完了した異なるT番号が5件に達した時、依存グループ完了時、
+統合前、ライブ検証前、設計変更または不整合を検出した時に実行し、完了時に同トレーラーを持つ
+checkpointコミットを残す。
 TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo.md` から生成する
 (通常は /breakdown が行う)。規約の実体は skeleton 冒頭のコメントに同梱されて
 自己完結しており、本節は設計理由のみを持つ(循環参照の回避)。
@@ -326,7 +332,7 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 
 ## 8. /goal 運用指針
 
-- 複数ターンかかるタスクは `/goal <完了条件>, or stop after 20 turns` で完了まで駆動する
+- `/goal` は、長時間の実行で途中終了を避けたい場合などに補助的に使う
 - 完了条件は Claude の出力で検証可能な形で書く(例: 「test/auth の全テストがパスし
   lint が警告ゼロ」)。外部チェックに依存する条件は書かない
 - 状態確認は `/goal`(引数なし)、解除は `/goal clear`

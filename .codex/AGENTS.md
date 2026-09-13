@@ -74,9 +74,12 @@ The main context owns the outcome, plan, and final decisions. This section is a 
 - When a project has `.codex/rules/*.md`, load only the rule files relevant to the files being changed. Codex has no Claude-compatible `paths:` auto-loader, so path applicability must be checked explicitly.
 - At session start, read `HANDOFF.md` and `TODO.md` when present. Use the next action in `HANDOFF.md` as the default starting point. Read the repository-root `plan.md` (the user's overall design) only when the next action is the `elaborate` skill.
 - After a plan-mode-style planning turn, decide whether its outcome is verified by an existing `T<n>` completion condition. If so, it is task-level planning: implement directly and do not run `elaborate` or `breakdown`. If not, it is plan-level: run `elaborate` then `breakdown` before implementing. The rule in `TODO.md` §0 is canonical.
+- Use `execute-task` to close one existing `T<n>` through completion-condition verification, project-state updates, and its task-scoped commit. Do not turn routine task execution into another `elaborate` or `breakdown` cycle.
+- At session end, perform only lightweight handoff work: check uncommitted changes and update `HANDOFF.md`, decisions, and TODO rotation when their state actually changed. Do not run a whole-project review merely because the session is ending.
+- Run `follow-up` at a milestone: before starting another task after five distinct completed T IDs since the latest `Follow-Up-Checkpoint: true`, at dependency-group completion, before integration or live validation, or after a design change or when design drift is suspected. It reconciles the checkpoint range and creates the next checkpoint commit.
 - When a `TODO.md` task table carries the execution column (`実`), its format is defined by the 実行系/モデル section of `~/.claude/templates/skeletons/todo.md`. The Codex value is `Codex/<configured model>`, for example `Codex/gpt-5.6-sol`. Fill it in when marking the task `[x]`.
 - The model guidance in that skeleton's 難易度 section names Claude Code models (sonnet, opus, fable) and does not apply here. In Codex, treat difficulty as a weight estimate only and do not switch models by difficulty.
-- Use the `initialize`, `elaborate`, `breakdown`, `follow-up`, and `markdown-cleanup` skills for their corresponding workflows.
+- Use the `initialize`, `elaborate`, `breakdown`, `execute-task`, `follow-up`, and `markdown-cleanup` skills for their corresponding workflows.
 - Use the `agmsg` skill for cross-agent messaging. Never read or edit its SQLite/config state directly.
 
 ## Trust boundary
