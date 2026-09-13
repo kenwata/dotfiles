@@ -13,14 +13,13 @@ local function setup(npairs)
       -- fastwrap.lua already defaults `map` to <M-e>; written out because choosing that key
       -- is this config's decision, not an unexamined default.
       map = "<M-e>",
-      -- Chosen on the real Ghostty terminal (T110, 2026-09-13) from three named patterns
-      -- ("既定"/default, "強調"/emphasis, "重ね"/overlay). "強調" won: the marker itself in
-      -- IncSearch stands out more than the plugin's default Search, and the rest of the line
-      -- in NonText reads as clearly secondary against it -- against the defaults (Search /
-      -- Comment), which read closer to each other.
+      -- Picked by the user on the real Ghostty terminal (T110, 2026-09-13) out of three
+      -- patterns laid out in the planning repository's
+      -- docs/design/nvim-autopairs-lazy-pairing.md: default (Search / Comment), emphasis
+      -- (IncSearch / NonText) and overlay (default colors, no virtual line). Emphasis won.
       highlight = "IncSearch",
       highlight_grey = "NonText",
-      -- Also part of the "強調" pattern, even though it matches fastwrap.lua's own default:
+      -- Also part of the emphasis pattern, even though it matches fastwrap.lua's own default:
       -- the marker renders on a virtual line below the cursor line rather than overlaid onto
       -- it.
       use_virt_lines = true,

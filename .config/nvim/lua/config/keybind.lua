@@ -44,7 +44,8 @@ vim.keymap.set("i", "<M-f>", "<S-Right>", { silent = true, desc = "Move cursor o
 -- <C-h> (character before the cursor) used to be untouched the same way, but nvim-autopairs
 -- (lua/plugins/autopairs.lua, map_c_h) now maps it buffer-locally once loaded, taking priority
 -- over any built-in default: it still deletes one character, except when the cursor sits right
--- between an autopairs-inserted pair, where it removes both.
+-- between an opening and closing character nvim-autopairs has a pair rule for -- typed by hand
+-- or by the plugin alike -- where it removes both.
 local function delete_keys(key, count, mark_undo)
   if count <= 0 then
     return ""

@@ -72,12 +72,14 @@ symlink.
   `disable_filetype` (the plugin's own defaults plus `minifiles`, since `mini.files` rewrites
   the buffer's text as filenames for renaming and a single `(` there would otherwise become
   `()`). `map_cr` (default true) and `map_c_w` (default false) are left at their defaults; the
-  file comments explain why each is not disabled/enabled. Lua's `end` keyword is meant to be
-  completed by `nvim-autopairs.rules.endwise-lua`, added via `add_rules()`, but this does not
-  currently work: at the point Enter is pressed the statement is not yet closed, so Neovim's
-  bundled tree-sitter-lua parser reports the surrounding node as `ERROR` rather than e.g.
-  `if_statement`, and nvim-autopairs' own tree-sitter check for the CR branch never matches
-  (verified headless; not specific to the pinned commit).
+  file comments explain why each is not disabled/enabled. `add_rules()` also registers
+  `nvim-autopairs.rules.endwise-lua`, which inserts the matching `end` when Enter is pressed at
+  the end of a line ending in `then`, `do`, or `function name(...)`. It decides this from the
+  syntax tree under the cursor, so it depends on the surrounding code: inside an enclosing
+  block (e.g. typing `if x then` within a function body) the `end` is inserted, but in an
+  otherwise empty buffer, or at top level with other statements following, Neovim's bundled
+  Lua parser reads the unclosed statement as `ERROR` and no `end` is added (observed with the
+  pinned commit).
 - `lua/plugins/claudecode.lua`: config for `coder/claudecode.nvim`. Not loaded at startup;
   every `<leader>a*` key (toggle, focus, resume, continue, model, add buffer, send selection,
   accept/deny diff) runs `vim.cmd.packadd()` and `setup()` on first press, so no single key has
