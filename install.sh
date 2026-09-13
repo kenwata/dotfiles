@@ -254,11 +254,12 @@ step4_symlinks() {
   mkdir -p "$DOTFILES/.claude/projects"
 
   # ~/.config 配下
-  backup_and_link "$DOTFILES/.config/mise"  "$HOME/.config/mise"
-  backup_and_link "$DOTFILES/.config/nvim"  "$HOME/.config/nvim"
-  backup_and_link "$DOTFILES/.config/peco"  "$HOME/.config/peco"
-  backup_and_link "$DOTFILES/.config/zsh"   "$HOME/.config/zsh"
-  backup_and_link "$DOTFILES/.config/herdr" "$HOME/.config/herdr"
+  backup_and_link "$DOTFILES/.config/mise"      "$HOME/.config/mise"
+  backup_and_link "$DOTFILES/.config/nvim"      "$HOME/.config/nvim"
+  backup_and_link "$DOTFILES/.config/peco"      "$HOME/.config/peco"
+  backup_and_link "$DOTFILES/.config/zsh"       "$HOME/.config/zsh"
+  backup_and_link "$DOTFILES/.config/herdr"     "$HOME/.config/herdr"
+  backup_and_link "$DOTFILES/.config/aerospace" "$HOME/.config/aerospace"
 
   # git submodule 初期化（tpm など）
   info "  Initializing git submodules..."
