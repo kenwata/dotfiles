@@ -45,6 +45,11 @@
       "src": "https://github.com/echasnovski/mini.tabline",
       "version": "0.18.0 - 0.19.0"
     },
+    "nvim-autopairs": {
+      "rev": "430522f95fe4fb7c511ec64f8c1a90cc6a66c05c",
+      "src": "https://github.com/windwp/nvim-autopairs",
+      "version": "'430522f95fe4fb7c511ec64f8c1a90cc6a66c05c'"
+    },
     "nvim-lspconfig": {
       "rev": "b89138d9af0a96e6048e202a15765fc6b6416bd4",
       "src": "https://github.com/neovim/nvim-lspconfig",

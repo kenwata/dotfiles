@@ -15,6 +15,7 @@ vim.pack.add({
   { src = "https://github.com/nvim-treesitter/nvim-treesitter", version = "5cb0114e6242625db56dd6440e945ed1ece10bc7" },
   { src = "https://github.com/kylechui/nvim-surround", version = vim.version.range("4") },
   { src = "https://github.com/nvim-treesitter/nvim-treesitter-textobjects", version = "5c7b0263797dfd1bd6202f2b219f3b53a80b2187" },
+  { src = "https://github.com/windwp/nvim-autopairs", version = "430522f95fe4fb7c511ec64f8c1a90cc6a66c05c" },
 }, {
   -- Without this, vim.pack loads plugin/ files during this same startup sequence even
   -- though `load` defaults to false here (see :packadd! in :help repeat.txt). Loading is
