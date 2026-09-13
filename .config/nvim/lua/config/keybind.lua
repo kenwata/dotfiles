@@ -40,8 +40,11 @@ vim.keymap.set("i", "<M-f>", "<S-Right>", { silent = true, desc = "Move cursor o
 -- Insert-mode command that would be inserted as literal text on the command line instead of
 -- doing anything.
 -- What these take over in Insert mode: <C-d> unindents by one shiftwidth and <C-k> starts a
--- digraph. <C-h> (character before the cursor) and <C-w> (word before the cursor) already behave
--- the Emacs way and are left alone.
+-- digraph. <C-w> (word before the cursor) already behaves the Emacs way and is left alone.
+-- <C-h> (character before the cursor) used to be untouched the same way, but nvim-autopairs
+-- (lua/plugins/autopairs.lua, map_c_h) now maps it buffer-locally once loaded, taking priority
+-- over any built-in default: it still deletes one character, except when the cursor sits right
+-- between an autopairs-inserted pair, where it removes both.
 local function delete_keys(key, count, mark_undo)
   if count <= 0 then
     return ""
