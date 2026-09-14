@@ -8,6 +8,8 @@ auto_switch = false
 prefix = "ctrl+space"
 navigate_workspace_down = "n"
 navigate_workspace_up = "p"
+switch_workspace = "ctrl+shift+1..9"
+focus_agent = "ctrl+1..9"
 
 [ui]
 agent_panel_sort = "priority"
@@ -24,8 +26,8 @@ claude = [
   ],
 ]
 codex = [
-  ["state_icon", "workspace", "tab"],
   [
+    "state_icon",
     { token = "terminal_title_stripped", fg = "#ECEFF4", bold = false, dim = false }
   ],
   [
