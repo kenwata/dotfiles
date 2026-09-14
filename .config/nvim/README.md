@@ -132,7 +132,9 @@ symlink.
   symbols (`signs`/`signs_staged`) and `numhl` were compared against alternatives on the real
   terminal and kept at v2.1.0's own defaults (see `docs/design/git-plugins-lazy-integration.md`
   in the planning repository, section「見た目」); `opts` spells each one out explicitly rather
-  than leaving it unset.
+  than leaving it unset. Staged signs use the same colors as unstaged ones: `gruvbox.lua` overrides
+  the 5 `GitSignsStaged*` groups, which gitsigns would otherwise derive as a dimmed copy of the
+  unstaged colors, so the sign column does not show whether a hunk is staged.
 - `lua/plugins/gruvbox.lua`: config for `ellisonleao/gruvbox.nvim` (colorscheme). Unlike
   `claudecode.lua` and `minipick.lua`, this one is loaded at startup (`lazy = false`), because a
   colorscheme affects the first frame drawn and deferring it would leave the default colors on

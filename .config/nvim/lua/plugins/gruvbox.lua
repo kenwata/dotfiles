@@ -73,15 +73,15 @@ return {
         -- uses `highlight default link`, which yields to a group that already exists when the
         -- plugin is loaded.
         NvimSurroundHighlight = { link = "Search" },
-        -- gruvbox links the 3 unstaged gitsigns groups (Add/Change/Delete) to its own sign
-        -- colors, but leaves every staged-hunk group undefined. gitsigns then falls back to its
-        -- own built-in defaults for them (`highlight default link`, which only takes effect
-        -- because gitsigns loads after gruvbox), which read as a muted, off-palette
-        -- olive/green/rust rather than this colorscheme's green/aqua/red (found while checking
-        -- T123's real-terminal render: a staged add hunk showed as a dull yellow-green instead
-        -- of the same green as an unstaged add). Topdelete and Changedelete are not `link`
-        -- entries on the staged side (unlike their unstaged counterparts, which do default-link
-        -- to Delete/Change), so each of the 5 needs its own override here rather than 3.
+        -- gruvbox defines only the 3 unstaged gitsigns groups (Add/Change/Delete). gitsigns
+        -- derives each staged-hunk group from its unstaged counterpart by halving the foreground
+        -- toward black on a dark background (lua/gitsigns/highlight.lua: fg_factor = 0.5 for
+        -- staged), so by default a staged sign is a dimmed copy of the unstaged color. These
+        -- overrides give staged signs the same gruvbox color as unstaged ones instead, so the
+        -- sign column does not show whether a hunk is staged: chosen after comparing this, the
+        -- dimmed default, and gruvbox's neutral_* colors on the real terminal. The staged side
+        -- derives Topdelete and Changedelete separately rather than linking them to Delete/Change
+        -- (unlike the unstaged side), so each of the 5 needs its own override here rather than 3.
         GitSignsStagedAdd = { link = "GruvboxGreenSign" },
         GitSignsStagedChange = { link = "GruvboxAquaSign" },
         GitSignsStagedDelete = { link = "GruvboxRedSign" },
