@@ -19,22 +19,25 @@ symlink.
     │   ├── autocmd.lua      # Autocommands
     │   └── lazy.lua         # Bootstraps lazy.nvim, then hands lua/plugins/ to it
     └── plugins/
-        ├── autopairs.lua   # windwp/nvim-autopairs config, lazy-loaded on first InsertEnter
-        ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>a* key
-        ├── gruvbox.lua     # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
-        ├── lazy.lua        # lazy.nvim's own spec entry (pins its version)
-        ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
-        ├── lualine.lua     # nvim-lualine/lualine.nvim config, loaded at startup (status line)
-        ├── markview.lua    # OXY2DEV/markview.nvim config, lazy-loaded on the first markdown FileType
-        ├── miniclue.lua    # echasnovski/mini.clue config, lazy-loaded on first trigger key
-        ├── minifiles.lua   # echasnovski/mini.files config, lazy-loaded on first <leader>e press
-        ├── miniicons.lua   # echasnovski/mini.icons config, loaded at startup (icon provider)
-        ├── minipick.lua    # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
-        ├── minitabline.lua # echasnovski/mini.tabline config, loaded at startup (tabline)
-        ├── surround.lua    # kylechui/nvim-surround config, lazy-loaded on first surround key
-        ├── textobjects.lua # nvim-treesitter/nvim-treesitter-textobjects config, lazy-loaded on first select/move/swap key
-        ├── toggleterm.lua  # akinsho/toggleterm.nvim config, lazy-loaded on first <C-\> press
-        └── treesitter.lua  # nvim-treesitter/nvim-treesitter config, lazy-loaded on two FileType autocmds
+        ├── autopairs.lua    # windwp/nvim-autopairs config, lazy-loaded on first InsertEnter
+        ├── claudecode.lua   # coder/claudecode.nvim config, lazy-loaded on first <leader>a* key
+        ├── diffview.lua     # dlyongemallo/diffview-plus.nvim config, lazy-loaded on first :Diffview* command or <leader>gd/gh key
+        ├── gitmessenger.lua # rhysd/git-messenger.vim config, lazy-loaded on first :GitMessenger command or <leader>gm key
+        ├── gitsigns.lua     # lewis6991/gitsigns.nvim config, lazy-loaded on first buffer read
+        ├── gruvbox.lua      # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
+        ├── lazy.lua         # lazy.nvim's own spec entry (pins its version)
+        ├── lspconfig.lua    # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
+        ├── lualine.lua      # nvim-lualine/lualine.nvim config, loaded at startup (status line)
+        ├── markview.lua     # OXY2DEV/markview.nvim config, lazy-loaded on the first markdown FileType
+        ├── miniclue.lua     # echasnovski/mini.clue config, lazy-loaded on first trigger key
+        ├── minifiles.lua    # echasnovski/mini.files config, lazy-loaded on first <leader>e press
+        ├── miniicons.lua    # echasnovski/mini.icons config, loaded at startup (icon provider)
+        ├── minipick.lua     # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
+        ├── minitabline.lua  # echasnovski/mini.tabline config, loaded at startup (tabline)
+        ├── surround.lua     # kylechui/nvim-surround config, lazy-loaded on first surround key
+        ├── textobjects.lua  # nvim-treesitter/nvim-treesitter-textobjects config, lazy-loaded on first select/move/swap key
+        ├── toggleterm.lua   # akinsho/toggleterm.nvim config, lazy-loaded on first <C-\> press
+        └── treesitter.lua   # nvim-treesitter/nvim-treesitter config, lazy-loaded on two FileType autocmds
 ```
 
 - `init.lua`: calls `vim.loader.enable()` first (the bytecode cache only covers modules
@@ -100,6 +103,36 @@ symlink.
   function on that first press. `init()` binds `<C-q>` in terminal mode globally to close the
   Claude Code terminal; this one is not an entry point, so it only checks `package.loaded`
   rather than triggering a load of its own.
+- `lua/plugins/diffview.lua`: config for `dlyongemallo/diffview-plus.nvim` (an actively
+  maintained fork of `sindrets/diffview.nvim`, picked because the original has had no commits
+  since 2024-06-13; shows the full diff of every changed file and a file's commit history),
+  pinned to `version = "0.37"`. Not loaded at startup; the spec's `cmd` table lists the 11
+  `:Diffview*` commands `plugin/diffview.lua` defines, and `keys` adds `<leader>gd`
+  (`:DiffviewToggle`, opens the all-files diff view or closes it if already open) and
+  `<leader>gh` (`:DiffviewFileHistory %`, the current file's history), each with an English
+  `desc`. Keys inside the diff view itself are left at the plugin's own defaults.
+- `lua/plugins/gitmessenger.lua`: config for `rhysd/git-messenger.vim` (pops up the commit
+  message for the line under the cursor), pinned to commit
+  `fd124457378a295a5d1036af4954b35d6b807385` (no release tag exists for this plugin). Not
+  loaded at startup; the spec's `cmd` table lists `GitMessenger`/`GitMessengerClose`, and `keys`
+  adds `<leader>gm` with an English `desc`. `init()` sets
+  `vim.g.git_messenger_no_default_mappings = true` before the plugin's own `plugin/` script can
+  read it, since its built-in `<leader>gm` mapping carries no `desc`.
+- `lua/plugins/gitsigns.lua`: config for `lewis6991/gitsigns.nvim` (per-line change signs in the
+  sign column, plus hunk-level stage/reset/preview/navigate operations), pinned to
+  `version = "2"`. Not loaded at startup; `event = { "BufReadPost", "BufNewFile" }` loads it the
+  first time a buffer is read or created -- `signcolumn = "yes"` already reserves the column, so
+  a sign appearing a moment later does not shift anything on screen. `opts.on_attach` creates
+  buffer-local keys with an English `desc` each: `]c`/`[c` navigate hunks (falling back to
+  Neovim's builtin `]c`/`[c` inside a diff-mode window), `<leader>gs`/`<leader>gr` stage/reset in
+  both Normal and Visual mode, `<leader>gp` previews a hunk, `<leader>gb` shows file blame, and
+  `ih` selects a hunk as a text object. `on_attach` also re-derives `mini.clue`'s buffer-local
+  triggers when it is already loaded (`miniclue.lua` below), since gitsigns attaches
+  asynchronously, after `mini.clue`'s own `BufWinEnter`/`LspAttach` hooks have already run. Sign
+  symbols (`signs`/`signs_staged`) and `numhl` were compared against alternatives on the real
+  terminal and kept at v2.1.0's own defaults (see `docs/design/git-plugins-lazy-integration.md`
+  in the planning repository, section「見た目」); `opts` spells each one out explicitly rather
+  than leaving it unset.
 - `lua/plugins/gruvbox.lua`: config for `ellisonleao/gruvbox.nvim` (colorscheme). Unlike
   `claudecode.lua` and `minipick.lua`, this one is loaded at startup (`lazy = false`), because a
   colorscheme affects the first frame drawn and deferring it would leave the default colors on
