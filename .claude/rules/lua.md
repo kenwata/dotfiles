@@ -74,8 +74,9 @@ Project-specific rules for the config under `~/.config/nvim` (the real files liv
 ### File layout
 
 - Never place a `.lua` file directly under `lua/`. It would share the module namespace with
-  plugins (`lua/general.lua` becomes `require("general")`). Put every file under
-  `lua/config/`, `lua/plugins/`, or `lua/common/`.
+  plugins (`lua/general.lua` becomes `require("general")`). Put every file under `lua/config/`
+  (plain Neovim settings plus the plugin manager's own bootstrap, `lua/config/lazy.lua`) or
+  `lua/plugins/` (one file per plugin spec).
 - One responsibility per file. `init.lua` loads modules and nothing else.
 - Group related options inside a file with a section comment (`-- UI`, `-- Indent`).
 
