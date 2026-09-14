@@ -73,6 +73,20 @@ return {
         -- uses `highlight default link`, which yields to a group that already exists when the
         -- plugin is loaded.
         NvimSurroundHighlight = { link = "Search" },
+        -- gruvbox links the 3 unstaged gitsigns groups (Add/Change/Delete) to its own sign
+        -- colors, but leaves every staged-hunk group undefined. gitsigns then falls back to its
+        -- own built-in defaults for them (`highlight default link`, which only takes effect
+        -- because gitsigns loads after gruvbox), which read as a muted, off-palette
+        -- olive/green/rust rather than this colorscheme's green/aqua/red (found while checking
+        -- T123's real-terminal render: a staged add hunk showed as a dull yellow-green instead
+        -- of the same green as an unstaged add). Topdelete and Changedelete are not `link`
+        -- entries on the staged side (unlike their unstaged counterparts, which do default-link
+        -- to Delete/Change), so each of the 5 needs its own override here rather than 3.
+        GitSignsStagedAdd = { link = "GruvboxGreenSign" },
+        GitSignsStagedChange = { link = "GruvboxAquaSign" },
+        GitSignsStagedDelete = { link = "GruvboxRedSign" },
+        GitSignsStagedTopdelete = { link = "GruvboxRedSign" },
+        GitSignsStagedChangedelete = { link = "GruvboxAquaSign" },
       },
       dim_inactive = false,
       transparent_mode = false,

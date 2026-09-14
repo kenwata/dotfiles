@@ -2,9 +2,13 @@
 -- on the first frame drawn (signcolumn = "yes" already reserves the column, lua/config/general.lua),
 -- and BufNewFile covers files created inside the session that BufReadPost would miss.
 
+-- signs / signs_staged / numhl were picked on the real terminal (Ghostty) with the sign-pattern
+-- harness the design doc lays out, comparing "既定" (v2.1.0 defaults, chosen below) against
+-- "細線" and "記号" alternatives; numhl was compared against a numhl = true variant. v2.1.0's
+-- defaults are spelled out explicitly rather than left unset, so this is a recorded decision
+-- rather than an inherited one (same reasoning as claudecode.lua's fully-spelled-out setup()).
+
 -- One record per buffer-local mapping created in on_attach below: { mode, lhs, rhs, desc }.
--- signs / signs_staged / numhl are left at gitsigns' defaults here; a later task picks them on
--- the real terminal and writes them into opts below.
 local function build_keymaps(gitsigns)
   return {
     {
@@ -85,6 +89,22 @@ return {
   version = "2",
   event = { "BufReadPost", "BufNewFile" },
   opts = {
+    signs = {
+      add = { text = "┃" },
+      change = { text = "┃" },
+      delete = { text = "▁" },
+      topdelete = { text = "▔" },
+      changedelete = { text = "~" },
+      untracked = { text = "┆" },
+    },
+    signs_staged = {
+      add = { text = "┃" },
+      change = { text = "┃" },
+      delete = { text = "▁" },
+      topdelete = { text = "▔" },
+      changedelete = { text = "~" },
+    },
+    numhl = false,
     on_attach = function(bufnr)
       local gitsigns = require("gitsigns")
 
