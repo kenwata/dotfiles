@@ -1,14 +1,3 @@
-local lazy = require("common.lazy")
-
--- nvim-treesitter-textobjects has no plugin/ directory: it only exposes functions, so there
--- is no startup-time work to defer around. Loading is deferred purely to keep the first
--- packadd (and the parser/query lookups it triggers) off the startup path.
-local function load()
-  return lazy.require("nvim-treesitter-textobjects", "nvim-treesitter-textobjects", function(textobjects)
-    textobjects.setup({ select = { lookahead = true } })
-  end)
-end
-
 ---@class textobjects.SelectKey
 ---@field key string Key suffixed to `a`/`i`, e.g. "af" for the outer function object.
 ---@field query string Treesitter capture name passed to select_textobject.
@@ -40,13 +29,6 @@ local SELECT_KEYS = {
   { key = "ag", query = "@statement.outer", desc = "Select a statement (outer)" },
 }
 
-for _, entry in ipairs(SELECT_KEYS) do
-  vim.keymap.set({ "x", "o" }, entry.key, function()
-    load()
-    require("nvim-treesitter-textobjects.select").select_textobject(entry.query, "textobjects")
-  end, { silent = true, desc = entry.desc })
-end
-
 ---@class textobjects.MoveKey
 ---@field key string
 ---@field func "goto_next_start"|"goto_previous_start"|"goto_next_end"|"goto_previous_end"
@@ -63,21 +45,55 @@ local MOVE_KEYS = {
   { key = "[k", func = "goto_previous_start", queries = { "@class.outer" }, desc = "Go to previous class start" },
 }
 
-for _, entry in ipairs(MOVE_KEYS) do
-  vim.keymap.set({ "n", "x", "o" }, entry.key, function()
-    load()
-    require("nvim-treesitter-textobjects.move")[entry.func](entry.queries, "textobjects")
-  end, { silent = true, desc = entry.desc })
+local keys = {}
+
+for _, entry in ipairs(SELECT_KEYS) do
+  table.insert(keys, {
+    entry.key,
+    function()
+      require("nvim-treesitter-textobjects.select").select_textobject(entry.query, "textobjects")
+    end,
+    mode = { "x", "o" },
+    desc = entry.desc,
+  })
 end
 
-vim.keymap.set("n", "<Leader>s", function()
-  load()
-  require("nvim-treesitter-textobjects.swap").swap_next({ "@parameter.inner" }, "textobjects")
-end, { silent = true, desc = "Swap parameter with next" })
+for _, entry in ipairs(MOVE_KEYS) do
+  table.insert(keys, {
+    entry.key,
+    function()
+      require("nvim-treesitter-textobjects.move")[entry.func](entry.queries, "textobjects")
+    end,
+    mode = { "n", "x", "o" },
+    desc = entry.desc,
+  })
+end
 
-vim.keymap.set("n", "<Leader>S", function()
-  load()
-  require("nvim-treesitter-textobjects.swap").swap_previous({ "@parameter.inner" }, "textobjects")
-end, { silent = true, desc = "Swap parameter with previous" })
+table.insert(keys, {
+  "<Leader>s",
+  function()
+    require("nvim-treesitter-textobjects.swap").swap_next({ "@parameter.inner" }, "textobjects")
+  end,
+  desc = "Swap parameter with next",
+})
 
-return { load = load }
+table.insert(keys, {
+  "<Leader>S",
+  function()
+    require("nvim-treesitter-textobjects.swap").swap_previous({ "@parameter.inner" }, "textobjects")
+  end,
+  desc = "Swap parameter with previous",
+})
+
+return {
+  "nvim-treesitter/nvim-treesitter-textobjects",
+  commit = "5c7b0263797dfd1bd6202f2b219f3b53a80b2187",
+  -- nvim-treesitter-textobjects has no plugin/ directory: it only exposes functions, so there
+  -- is no startup-time work to defer around. Loading is deferred purely to keep the first
+  -- require (and the parser/query lookups it triggers) off the startup path. surround.lua also
+  -- loads this plugin, through lazy.nvim's own API rather than through a key here.
+  keys = keys,
+  config = function()
+    require("nvim-treesitter-textobjects").setup({ select = { lookahead = true } })
+  end,
+}

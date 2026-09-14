@@ -1,21 +1,3 @@
-local lazy = require("common.lazy")
-
--- plugin/nvim-surround.lua reads this global when packadd runs, so it must be set before
--- that point (module load time). Setting it later, e.g. inside load_surround(), would not
--- stop the plugin's default keymaps from being registered.
-vim.g.nvim_surround_no_mappings = true
-
-local function load_surround()
-  -- Load textobjects first so nvim-surround's `f` (call surround) can resolve @call.outer;
-  -- without it, `f` silently falls back to a regex match instead of erroring (design doc,
-  -- "依存関係と落とし穴" #1).
-  require("plugins.textobjects").load()
-
-  return lazy.require("nvim-surround", "nvim-surround", function(surround)
-    surround.setup()
-  end)
-end
-
 ---@class surround.Stub
 ---@field mode string
 ---@field lhs string
@@ -62,10 +44,35 @@ local SURROUND_KEYS = {
   },
 }
 
+local keys = {}
 for _, entry in ipairs(SURROUND_KEYS) do
-  vim.keymap.set(entry.mode, entry.lhs, function()
-    load_surround()
-
-    return entry.plug
-  end, { expr = true, silent = true, desc = entry.desc })
+  table.insert(keys, {
+    entry.lhs,
+    function()
+      return entry.plug
+    end,
+    mode = entry.mode,
+    expr = true,
+    desc = entry.desc,
+  })
 end
+
+return {
+  "kylechui/nvim-surround",
+  version = "4",
+  keys = keys,
+  init = function()
+    -- plugin/nvim-surround.lua reads this global when it is loaded, so it must be set before
+    -- that point. Setting it later, e.g. inside config() below, would not stop the plugin's
+    -- default keymaps from being registered.
+    vim.g.nvim_surround_no_mappings = true
+  end,
+  config = function()
+    -- Load textobjects first so nvim-surround's `f` (call surround) can resolve @call.outer;
+    -- without it, `f` silently falls back to a regex match instead of erroring (design doc,
+    -- "依存関係と落とし穴" #1).
+    require("lazy").load({ plugins = { "nvim-treesitter-textobjects" } })
+
+    require("nvim-surround").setup()
+  end,
+}

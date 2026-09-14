@@ -1,12 +1,62 @@
-local lazy = require("common.lazy")
+-- rg does not search hidden files/dirs by default; ripgreprc turns that on. Setting
+-- RIPGREP_CONFIG_PATH on vim.env for the whole session would leak into every child process
+-- (:terminal shells, the claude CLI that claudecode.nvim spawns), since vim.env mutates the
+-- Neovim process environment itself. Scoping it to the picker call keeps the effect inside
+-- the synchronous MiniPick.start loop that fn runs in.
+local function with_ripgreprc(fn)
+  local original = vim.env.RIPGREP_CONFIG_PATH
+  vim.env.RIPGREP_CONFIG_PATH = vim.fs.joinpath(vim.fn.stdpath("config"), "ripgreprc")
+  local ok, err = pcall(fn)
+  vim.env.RIPGREP_CONFIG_PATH = original
+  if not ok then
+    error(err)
+  end
+end
 
--- mini.pick is loaded on first use, not at startup. The three mappings and vim.ui.select below
--- are the entry points that can trigger it before the plugin is on disk.
---
--- setup() re-creates highlight groups and user commands and reassigns vim.ui.select on every
--- call; common.lazy guards against re-running it once mini.pick is loaded.
-local function load_minipick()
-  return lazy.require("mini.pick", "mini.pick", function(minipick)
+return {
+  "echasnovski/mini.pick",
+  version = "0.18",
+  -- mini.pick is loaded on first use, not at startup. The three keys below and vim.ui.select
+  -- (init, further down) are the entry points that can trigger it before the plugin is on disk.
+  keys = {
+    {
+      "<leader>ff",
+      function()
+        with_ripgreprc(function()
+          require("mini.pick").builtin.files()
+        end)
+      end,
+      desc = "Find files by name",
+    },
+    {
+      "<leader>fg",
+      function()
+        with_ripgreprc(function()
+          require("mini.pick").builtin.grep_live()
+        end)
+      end,
+      desc = "Search file contents (live grep)",
+    },
+    -- Not wrapped in with_ripgreprc: this picker lists buffers from :buffers and never spawns rg.
+    {
+      "<leader>fb",
+      function()
+        require("mini.pick").builtin.buffers()
+      end,
+      desc = "Switch to an open file (buffers)",
+    },
+  },
+  init = function()
+    -- Forwards to the real MiniPick.ui_select explicitly (not by re-reading vim.ui.select):
+    -- once config() below runs setup(), it reassigns vim.ui.select to MiniPick.ui_select
+    -- itself, so this wrapper is only ever invoked once, before mini.pick is on disk. Not an
+    -- entry point reached through keys, so the load is explicit here.
+    vim.ui.select = function(...)
+      require("lazy").load({ plugins = { "mini.pick" } })
+      return require("mini.pick").ui_select(...)
+    end
+  end,
+  config = function()
     -- Only the mappings below are given; every other mini.pick option stays at its default.
     -- The prompt is not insert mode -- mini.pick reads keys itself and consults this table
     -- alone -- so the Emacs-style insert-mode keys from lua/config/keybind.lua never reach it.
@@ -16,7 +66,7 @@ local function load_minipick()
     -- termcode), so naming a key here takes it away from whatever held that action before. The
     -- arrows, <Del> and <BS> are what pay for the four: <C-h> and <BS> are separate keys to
     -- Neovim (byte 8 against the <80>kb special), so this genuinely retires <BS> in the prompt.
-    minipick.setup({
+    require("mini.pick").setup({
       mappings = {
         caret_left = "<C-b>",
         caret_right = "<C-f>",
@@ -43,44 +93,5 @@ local function load_minipick()
         stop_alt = { char = "<C-q>", func = function() vim.api.nvim_feedkeys("\3", "t", true) end },
       },
     })
-  end)
-end
-
--- rg does not search hidden files/dirs by default; ripgreprc turns that on. Setting
--- RIPGREP_CONFIG_PATH on vim.env for the whole session would leak into every child process
--- (:terminal shells, the claude CLI that claudecode.nvim spawns), since vim.env mutates the
--- Neovim process environment itself. Scoping it to the picker call keeps the effect inside
--- the synchronous MiniPick.start loop that fn runs in.
-local function with_ripgreprc(fn)
-  local original = vim.env.RIPGREP_CONFIG_PATH
-  vim.env.RIPGREP_CONFIG_PATH = vim.fs.joinpath(vim.fn.stdpath("config"), "ripgreprc")
-  local ok, err = pcall(fn)
-  vim.env.RIPGREP_CONFIG_PATH = original
-  if not ok then
-    error(err)
-  end
-end
-
-vim.keymap.set("n", "<leader>ff", function()
-  with_ripgreprc(function()
-    load_minipick().builtin.files()
-  end)
-end, { noremap = true, silent = true, desc = "Find files by name" })
-
-vim.keymap.set("n", "<leader>fg", function()
-  with_ripgreprc(function()
-    load_minipick().builtin.grep_live()
-  end)
-end, { noremap = true, silent = true, desc = "Search file contents (live grep)" })
-
--- Not wrapped in with_ripgreprc: this picker lists buffers from :buffers and never spawns rg.
-vim.keymap.set("n", "<leader>fb", function()
-  load_minipick().builtin.buffers()
-end, { noremap = true, silent = true, desc = "Switch to an open file (buffers)" })
-
--- Forwards to the real MiniPick.ui_select explicitly (not by re-reading vim.ui.select): once
--- load_minipick() runs setup(), it reassigns vim.ui.select to MiniPick.ui_select itself, so
--- this wrapper is only ever invoked once, before mini.pick is on disk.
-vim.ui.select = function(...)
-  return load_minipick().ui_select(...)
-end
+  end,
+}
