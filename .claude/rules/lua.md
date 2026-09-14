@@ -67,7 +67,9 @@ Project-specific rules for the config under `~/.config/nvim` (the real files liv
 - When a path is genuinely needed, derive it: `vim.fn.stdpath("config")` for the config
   directory, `vim.fn.stdpath("data")` for plugin and state data.
 - `require("config.general")` takes a module name, not a path, so it is portable by design.
-  `vim.pack` derives its clone directory and lockfile location on its own. Neither needs a path.
+  lazy.nvim's bootstrap block derives its own clone directory from `vim.fn.stdpath("data")`,
+  and its lockfile (`lazy-lock.json`) is written under `vim.fn.stdpath("config")` on its own.
+  Neither needs a path.
 
 ### File layout
 
@@ -88,15 +90,16 @@ Project-specific rules for the config under `~/.config/nvim` (the real files liv
 
 ### Plugins
 
-- Declare every plugin in a single `vim.pack.add({...})` call in `lua/plugins/init.lua`.
-  Per-plugin configuration goes in `lua/plugins/<name>.lua`, one file per plugin.
+- Each `lua/plugins/<name>.lua` returns a lazy.nvim plugin spec table, one file per plugin.
+  `lua/config/lazy.lua` imports the whole directory (`spec = { { import = "plugins" } }`).
 - Lazy loading is the default. Load a plugin at startup only when it affects the first frame
-  drawn (colorscheme, statusline). Everything else is loaded on first use via
-  `vim.pack.add(..., { load = function() end })` plus `vim.cmd.packadd()` from a stub mapping,
-  command, or autocommand.
-- Pin a version: a semver range (`vim.version.range("0.3")`), a tag, or a commit hash.
-  Leaving `version` unset follows the default branch and makes updates unreproducible.
-- Keep `nvim-pack-lock.json` under version control and never edit it by hand.
+  drawn (colorscheme, statusline), via `lazy = false`. Everything else declares its trigger in
+  the spec (`keys` / `cmd` / `event` / `ft`); a case that cannot be declared calls
+  `require("lazy").load({ plugins = { "<name>" } })` from `init` instead.
+- Pin a version: a semver range in the spec's `version` field (e.g. `version = "0.3"`), or a
+  commit hash in `commit`. Leaving both unset follows the default branch and makes updates
+  unreproducible.
+- Keep `lazy-lock.json` under version control and never edit it by hand.
 
 ### Comments
 
@@ -107,5 +110,3 @@ Project-specific rules for the config under `~/.config/nvim` (the real files liv
 ### Abstraction
 
 - Rule of three: do not extract a shared helper until the same shape appears a third time.
-  The first two lazy-loaded plugins spell out their loader inline; the third one earns
-  `lua/common/lazy.lua`.
