@@ -10,20 +10,19 @@ symlink.
 .config/nvim/
 ├── README.md              # This file
 ├── init.lua                # Loader only: sets the leader key, requires the modules below
-├── nvim-pack-lock.json     # vim.pack lockfile (installed plugin revisions); never edit by hand
+├── lazy-lock.json          # lazy.nvim lockfile (installed plugin revisions); never edit by hand
 ├── ripgreprc               # rg config, applied only while <leader>ff/<leader>fg run (not the shell's rg)
 └── lua/
-    ├── common/
-    │   └── lazy.lua       # Shared packadd-then-setup-once loader for lazy-loaded plugins
     ├── config/
     │   ├── general.lua     # Editor options (UI, window, indent, search, editing, timing, clipboard, etc.)
     │   ├── keybind.lua      # Key mappings
-    │   └── autocmd.lua      # Autocommands
+    │   ├── autocmd.lua      # Autocommands
+    │   └── lazy.lua         # Bootstraps lazy.nvim, then hands lua/plugins/ to it
     └── plugins/
-        ├── init.lua        # vim.pack.add() (single call, deferred load), then requires below
         ├── autopairs.lua   # windwp/nvim-autopairs config, lazy-loaded on first InsertEnter
         ├── claudecode.lua  # coder/claudecode.nvim config, lazy-loaded on first <leader>a* key
         ├── gruvbox.lua     # ellisonleao/gruvbox.nvim config, loaded at startup (colorscheme)
+        ├── lazy.lua        # lazy.nvim's own spec entry (pins its version)
         ├── lspconfig.lua   # nvim-lspconfig registration and vim.lsp.enable() for 7 servers
         ├── lualine.lua     # nvim-lualine/lualine.nvim config, loaded at startup (status line)
         ├── markview.lua    # OXY2DEV/markview.nvim config, lazy-loaded on the first markdown FileType
@@ -40,7 +39,8 @@ symlink.
 
 - `init.lua`: calls `vim.loader.enable()` first (the bytecode cache only covers modules
   `require`d after it), sets `vim.g.mapleader`, then `require`s each module in `lua/config/`,
-  then `require("plugins")`.
+  ending with `config.lazy` (which bootstraps lazy.nvim and hands it every file under
+  `lua/plugins/`).
 - `lua/config/general.lua`: `vim.o`/`vim.opt` settings, grouped by section comment.
 - `lua/config/keybind.lua`: `vim.keymap.set` mappings, each with an English `desc`. Covers
   leaving Insert/Terminal mode (`jj`), Emacs-style cursor movement and deletion in Insert mode
@@ -58,39 +58,57 @@ symlink.
   `CursorMovedI`). A `TermOpen` entry clears `'buflisted'` on every terminal buffer, which
   keeps terminals out of the buffer list as a whole — `:ls`, `[b`/`]b`, `<leader>fb` and the
   tabline alike; `:ls!` still lists them.
-- `lua/plugins/init.lua`: declares every plugin in a single `vim.pack.add({...})` call with
-  `load = function() end` (deferred), then `require`s each per-plugin config file below.
+- `lua/config/lazy.lua`: bootstraps lazy.nvim on first run (clones it to
+  `stdpath("data")/lazy/lazy.nvim` if that path does not yet exist, then prepends it to
+  `'runtimepath'`), then calls `require("lazy").setup()` with `spec = { { import = "plugins" } }`
+  so every file under `lua/plugins/` is read as a spec. Four options are decided here and
+  everything else keeps lazy.nvim's own default: `rocks.enabled = false` (none of the plugins
+  below needs a luarocks package), `install.colorscheme = { "gruvbox" }` (the very first install
+  screen already uses this config's colorscheme instead of the default habamax),
+  `change_detection.enabled = false` (editing dotfiles from outside this Neovim session, e.g.
+  Claude Code, would otherwise pop a reload notification and re-read specs mid-edit; a config
+  change applies on the next `:restart` instead), and `checker.enabled` stays at its own default
+  (`false`, so plugin updates stay manual via `:Lazy update`, never auto-checked).
+- `lua/plugins/lazy.lua`: pins lazy.nvim's own version (`version = "11"`). lazy.nvim adds
+  itself to the plugin spec implicitly with no version pinned; this file pins it explicitly,
+  per `.claude/rules/lua.md`'s "pin a version" rule.
 - `lua/plugins/autopairs.lua`: config for `windwp/nvim-autopairs` (auto-closes brackets and
   quotes as they are typed, and offers a fast-wrap operation for closing an existing word).
-  Not loaded at startup; an `InsertEnter` autocmd (`once = true`) loads it through
-  `lua/common/lazy.lua` the first time Insert mode is entered, since none of its entry keys
-  (`(`, `[`, `{`, `"`, `'`, `` ` ``, `<CR>`, `<BS>`, `<C-h>`, `<M-e>`) means anything outside
-  Insert mode. Three options are set: `map_c_h = true` (deleting both characters of a pair
-  with `<C-h>`, on top of the plain single-character deletion it already did), `fast_wrap`
-  (mapped to `<M-e>`; its marker colors were chosen on the real Ghostty terminal --
-  `highlight = "IncSearch"`, `highlight_grey = "NonText"`, `use_virt_lines = true`), and
-  `disable_filetype` (the plugin's own defaults plus `minifiles`, since `mini.files` rewrites
-  the buffer's text as filenames for renaming and a single `(` there would otherwise become
-  `()`). `map_cr` (default true) and `map_c_w` (default false) are left at their defaults; the
-  file comments explain why each is not disabled/enabled. `add_rules()` also registers
-  `nvim-autopairs.rules.endwise-lua`, which inserts the matching `end` when Enter is pressed at
-  the end of a line ending in `then`, `do`, or `function name(...)`. It decides this from the
-  syntax tree under the cursor, so it depends on the surrounding code: inside an enclosing
-  block (e.g. typing `if x then` within a function body) the `end` is inserted, but in an
-  otherwise empty buffer, or at top level with other statements following, Neovim's bundled
+  Not loaded at startup; the spec's `event = "InsertEnter"` loads it the first time Insert mode
+  is entered, since none of its entry keys (`(`, `[`, `{`, `"`, `'`, `` ` ``, `<CR>`, `<BS>`,
+  `<C-h>`, `<M-e>`) means anything outside Insert mode. Three options are set: `map_c_h = true`
+  (deleting both characters of a pair with `<C-h>`, on top of the plain single-character
+  deletion it already did), `fast_wrap` (mapped to `<M-e>`; its marker colors were chosen on the
+  real Ghostty terminal -- `highlight = "IncSearch"`, `highlight_grey = "NonText"`,
+  `use_virt_lines = true`), and `disable_filetype` (the plugin's own defaults plus `minifiles`,
+  since `mini.files` rewrites the buffer's text as filenames for renaming and a single `(` there
+  would otherwise become `()`). `map_cr` (default true) and `map_c_w` (default false) are left at
+  their defaults; the file comments explain why each is not disabled/enabled. `config()` also
+  registers `nvim-autopairs.rules.endwise-lua`, which inserts the matching `end` when Enter is
+  pressed at the end of a line ending in `then`, `do`, or `function name(...)`. It decides this
+  from the syntax tree under the cursor, so it depends on the surrounding code: inside an
+  enclosing block (e.g. typing `if x then` within a function body) the `end` is inserted, but in
+  an otherwise empty buffer, or at top level with other statements following, Neovim's bundled
   Lua parser reads the unclosed statement as `ERROR` and no `end` is added (observed with the
   pinned commit).
 - `lua/plugins/claudecode.lua`: config for `coder/claudecode.nvim`. Not loaded at startup;
-  every `<leader>a*` key (toggle, focus, resume, continue, model, add buffer, send selection,
-  accept/deny diff) runs `vim.cmd.packadd()` and `setup()` on first press, so no single key has
-  to come first. `<C-q>` in terminal mode closes the Claude window without being an entry point.
+  the spec's `keys` table declares one entry per `<leader>a*` key (toggle, focus, resume,
+  continue, model, add buffer, send selection, accept/deny diff), so any one of them loads the
+  plugin and runs `config()` on first press -- no single key has to come first. Each entry calls
+  `vim.cmd(<command>)` rather than a `<cmd>` mapping string, since the command does not exist
+  until `config()` has registered it, and lazy.nvim runs `config()` before invoking the key's own
+  function on that first press. `init()` binds `<C-q>` in terminal mode globally to close the
+  Claude Code terminal; this one is not an entry point, so it only checks `package.loaded`
+  rather than triggering a load of its own.
 - `lua/plugins/gruvbox.lua`: config for `ellisonleao/gruvbox.nvim` (colorscheme). Unlike
-  `claudecode.lua` and `minipick.lua`, this one is loaded at startup with `packadd!`, because a
+  `claudecode.lua` and `minipick.lua`, this one is loaded at startup (`lazy = false`), because a
   colorscheme affects the first frame drawn and deferring it would leave the default colors on
-  screen until something triggered the load. Sets `background` to `dark`, passes every option
-  the plugin accepts to `setup()` (each one chosen by looking at the result on screen), then
-  applies it with `:colorscheme`.
-- `lua/plugins/lspconfig.lua`: loads `nvim-lspconfig` at startup with `packadd!` (a pure
+  screen until something triggered the load. `priority = 1000` places it ahead of the other
+  `lazy = false` plugins at startup, since `lualine.lua`'s theme calls `require("gruvbox").palette`
+  and needs gruvbox's own `config()` to have already run. Sets `background` to `dark`, passes
+  every option the plugin accepts to `setup()` (each one chosen by looking at the result on
+  screen), then applies it with `:colorscheme`.
+- `lua/plugins/lspconfig.lua`: loads `nvim-lspconfig` at startup (`lazy = false`; a pure
   configuration-data repository, not a runtime plugin, so this costs nothing measurable),
   overrides `lua_ls` to recognize Neovim's `vim` global and runtime files, and enables the
   7 language servers listed below with `vim.lsp.enable()`. The `lua_ls` override applies to
@@ -99,14 +117,16 @@ symlink.
   Every other setting each server receives comes from nvim-lspconfig's own `lsp/*.lua` and is
   deliberately left untouched.
 - `lua/plugins/lualine.lua`: config for `nvim-lualine/lualine.nvim` (status line), pinned to
-  commit `221ce6b2d999187044529f49da6554a92f740a96` in `lua/plugins/init.lua` (no release tag
-  exists for this plugin). Loaded at startup with `packadd!`, for the same reason as
-  `gruvbox.lua` and `minitabline.lua`: the status line is part of the first frame drawn, and
-  there is no "first use" a key could stand in for. Must load after `gruvbox.lua`: its custom
-  theme calls `require("gruvbox").palette`, which errors "module not found" until
-  `gruvbox.lua`'s own `packadd` has put `gruvbox.nvim` on runtimepath. The custom theme reuses
-  `gruvbox_dark`'s own `b`/`c` colors and inactive state verbatim, replacing only each mode's
-  `a` section background, since `mini.tabline`'s current-tab highlight is already a solid
+  commit `221ce6b2d999187044529f49da6554a92f740a96` (no release tag exists for this plugin).
+  Loaded at startup (`lazy = false`), for the same reason as `gruvbox.lua` and
+  `minitabline.lua`: the status line is part of the first frame drawn, and there is no "first
+  use" a key could stand in for. `dependencies = { "gruvbox.nvim", "mini.icons" }` makes
+  lazy.nvim run both of those plugins' specs before this one's `config()`: its custom theme
+  calls `require("gruvbox").palette`, which errors "module not found" until gruvbox's own
+  `config()` has put `gruvbox.nvim` on runtimepath, and its filetype component looks for the
+  fake `nvim-web-devicons` module `mini.icons` registers (`miniicons.lua`). The custom theme
+  reuses `gruvbox_dark`'s own `b`/`c` colors and inactive state verbatim, replacing only each
+  mode's `a` section background, since `mini.tabline`'s current-tab highlight is already a solid
   bright-green fill and a green mode block would read as the same colored chunk repeated one
   line below it. The configuration picked on real hardware (see
   `docs/design/lualine-startup-statusline.md` in the planning repository): the
@@ -123,11 +143,11 @@ symlink.
   what the other is responsible for.
 - `lua/plugins/markview.lua`: config for `OXY2DEV/markview.nvim` (decorates markdown in the
   buffer being edited -- headings, code blocks, tables, links -- without changing the file).
-  Not loaded at startup; a `FileType markdown` autocmd loads it through `lua/common/lazy.lua`
-  the first time a markdown buffer appears, since opening one is itself the moment decoration
-  starts to matter. `<Leader>im` toggles the decoration for the current buffer, and loads the
-  plugin first so the key also works before any markdown file has been opened. Only three
-  options are set: `preview.filetypes` narrowed to `markdown` alone, `preview.icon_provider`
+  Not loaded at startup; the spec's `ft = "markdown"` loads it the first time a markdown buffer
+  appears, since opening one is itself the moment decoration starts to matter. The spec's `keys`
+  table also declares `<Leader>im`, which toggles the decoration for the current buffer and
+  loads the plugin first so the key also works before any markdown file has been opened. Only
+  three options are set: `preview.filetypes` narrowed to `markdown` alone, `preview.icon_provider`
   left at markview's own `internal`, and `markdown_inline.tags` disabled. The last two are
   not defaults chosen by inertia:
   - `icon_provider` was tried as `"mini"` (matching the icon set `mini.pick` / `mini.files` /
@@ -146,11 +166,11 @@ symlink.
   in those planning documents land. The `listchars` dots and eol arrows are hidden while the
   decoration is on screen and come back in insert and replace mode, through the `MarkviewAttach`
   / `MarkviewEnable` / `MarkviewDisable` / `MarkviewDetach` events plus a `ModeChanged` and a
-  `BufWinEnter` autocmd. The `BufWinEnter` restore only touches a normal file buffer
-  (`buftype == ""`); a terminal, quickfix, or `nofile` buffer already has something else
-  deciding `'list'` (Neovim itself for a terminal), and writing the global value on top of that
-  used to make listchars reappear the second time a closed terminal was reopened. Parsers for
-  `html` and `latex` are not installed, so markdown written
+  `BufWinEnter` autocmd, all set up in `init()`. The `BufWinEnter` restore only touches a normal
+  file buffer (`buftype == ""`); a terminal, quickfix, or `nofile` buffer already has something
+  else deciding `'list'` (Neovim itself for a terminal), and writing the global value on top of
+  that used to make listchars reappear the second time a closed terminal was reopened. Parsers
+  for `html` and `latex` are not installed, so markdown written
   in those (inline HTML, math) stays undecorated. `yaml` and `toml` are installed (see
   `lua/plugins/treesitter.lua` below); Neovim's own `$VIMRUNTIME/queries/markdown/injections.scm`
   routes YAML-delimited front matter (`---`) through `yaml` and TOML-delimited front matter
@@ -159,25 +179,32 @@ symlink.
   highlighting, with none of markview's own field decoration.
 - `lua/plugins/miniclue.lua`: config for `echasnovski/mini.clue` (shows the next available
   keys and their descriptions in a floating window after a prefix key is held). Not loaded
-  at startup; 19 key/mode combinations (`<Leader>`, `g`, `s`, `z`, `[`/`]`, `<C-w>`, `"`, `'`,
-  `` ` ``, `<C-x>`) each carry a global `<nowait>` stub that deletes every stub, loads
-  `mini.clue` through `lua/common/lazy.lua`, then replays the key so mini.clue's own
-  (buffer-local) trigger takes over from the second press onward. The clue window appears
-  after a 300ms delay.
+  at startup; `lazy = true` with no trigger declared in the spec, since the entry points here
+  are not real commands but 19 manual stubs `init()` sets up (one per key/mode combination:
+  `<Leader>`, `g`, `s`, `z`, `[`/`]`, `<C-w>`, `"`, `'`, `` ` ``, `<C-x>`). Each stub deletes
+  every stub, calls `require("lazy").load({ plugins = { "mini.clue" } })`, then replays the key
+  that triggered it (`nvim_feedkeys`), so mini.clue's own (buffer-local) trigger takes over from
+  the second press onward. `config()` sets up the trigger list, named groups for prefixes whose
+  own `desc` does not say what the group is (mini.clue's `gen_clues` cover the builtin groups:
+  `g`, `square_brackets`, `marks`, `registers`, `windows`, `z`, `builtin_completion`; `s` is not
+  listed since `keybind.lua`'s `desc` on each `ssvhjk` mapping already says what it does), and a
+  300ms window delay with `width = "auto"` (the default fixed 30-column width truncates the
+  longest `square_brackets` descriptions to the same prefix and makes them indistinguishable).
 - `lua/plugins/minifiles.lua`: config for `echasnovski/mini.files` (file explorer: browse,
-  create, rename, move, and delete files by editing a buffer). Not loaded at startup;
-  `<Leader>e` toggles it open/closed through `lua/common/lazy.lua`, opening at the current
+  create, rename, move, and delete files by editing a buffer). Not loaded at startup; the spec's
+  `keys` table declares `<Leader>e`, which toggles it open/closed, opening at the current
   working directory. Also replaces netrw as the explorer that appears when a directory is
-  opened (`nvim <dir>` or `:e <dir>`): `vim.g.loaded_netrw`/`loaded_netrwPlugin` disable netrw
-  at startup, and a `BufEnter` stub opens `mini.files` for the first directory buffer before
-  the plugin itself is loaded (its own `BufEnter`, registered by `setup()`, handles every one
-  after that). Deletion is permanent (`options.permanent_delete = true`, no trash/recycle bin).
-  `<C-q>` closes the explorer as well as the built-in `q`, bound buffer-locally on
-  `User MiniFilesBufferCreate` since `mappings` only accepts one key per action.
-  `windows.width_preview` is widened from the default 25 to 80 columns, picked on the real
-  Ghostty terminal; `width_focus`/`width_nofocus` are left at their defaults.
+  opened (`nvim <dir>` or `:e <dir>`): `init()` sets `vim.g.loaded_netrw`/`loaded_netrwPlugin` to
+  disable netrw at startup, and a `BufEnter` stub opens `mini.files` (via
+  `require("lazy").load(...)`) for the first directory buffer before the plugin itself is
+  loaded (its own `BufEnter`, registered by `config()`, handles every one after that). Deletion
+  is permanent (`options.permanent_delete = true`, no trash/recycle bin). `<C-q>` closes the
+  explorer as well as the built-in `q`, bound buffer-locally on `User MiniFilesBufferCreate`
+  since `mappings` only accepts one key per action. `windows.width_preview` is widened from the
+  default 25 to 80 columns, picked on the real Ghostty terminal; `width_focus`/`width_nofocus`
+  are left at their defaults.
 - `lua/plugins/miniicons.lua`: config for `echasnovski/mini.icons` (icon and highlight-group
-  provider; draws nothing itself). Loaded at startup with `packadd!`, for the same reason as
+  provider; draws nothing itself). Loaded at startup (`lazy = false`), for the same reason as
   `gruvbox.lua` and `minitabline.lua` below: `mini.tabline` looks for `_G.MiniIcons` on its
   very first draw (`show_icons = true`, see `minitabline.lua` below), and loading `mini.icons`
   any later would leave that first frame without a provider and shift the tabline's layout once
@@ -193,9 +220,10 @@ symlink.
   session, so it runs unconditionally rather than being gated on anything, and it lives here
   rather than in `lualine.lua` so that "who supplies icons" stays readable from a single file.
 - `lua/plugins/minipick.lua`: config for `echasnovski/mini.pick` (fuzzy finder). Not loaded
-  at startup; `<leader>ff` (find files), `<leader>fg` (live grep), `<leader>fb` (switch
-  between open files), or the first call to `vim.ui.select` (e.g. picking an LSP code action)
-  each run `vim.cmd.packadd()` and `setup()` on first trigger. `<leader>ff` and `<leader>fg`
+  at startup; the spec's `keys` table declares `<leader>ff` (find files), `<leader>fg` (live
+  grep) and `<leader>fb` (switch between open files), and `init()` wraps `vim.ui.select` so the
+  first call to it (e.g. picking an LSP code action) also loads the plugin -- these are the
+  entry points that can trigger it before the plugin is on disk. `<leader>ff` and `<leader>fg`
   set `RIPGREP_CONFIG_PATH` to `ripgreprc` only for the duration of the call, so `rg` also
   searches hidden files/dirs (except `.git`) there, without affecting `rg` anywhere else.
   The prompt is not Insert mode — mini.pick reads keys itself and consults only its own
@@ -211,14 +239,15 @@ symlink.
   same way `<Esc>` does.
 - `lua/plugins/minitabline.lua`: config for `echasnovski/mini.tabline` (draws the open
   buffers as a row of tabs along the top line of the screen). What is listed there are
-  buffers, not Vim tab pages, which this config does not use. Loaded at startup with
-  `packadd!`, for the same reason as `gruvbox.lua` and unlike the ten lazy-loaded plugins:
+  buffers, not Vim tab pages, which this config does not use. Loaded at startup (`lazy = false`),
+  for the same reason as `gruvbox.lua` and unlike the ten lazy-loaded plugins:
   the tabline is part of the first frame drawn, and there is no "first use" a key could stand
-  in for, since the line is simply always visible. `setup()` forces `showtabline = 2`;
+  in for, since the line is simply always visible. `dependencies = { "mini.icons" }` makes
+  lazy.nvim run `mini.icons`'s own `config()` first, so `_G.MiniIcons` already exists by this
+  plugin's first draw. `config()` forces `showtabline = 2`;
   `showtabline = 1` counts tab pages rather than buffers, so it would keep the line hidden
-  permanently here. `show_icons` is `true`: `lua/plugins/miniicons.lua` (above) loads
-  `mini.icons` at startup before this file's `require()` runs, so `_G.MiniIcons` already
-  exists by the tabline's first draw. `format` is left at its default and, because a
+  permanently here. `show_icons` is `true`, relying on that dependency ordering. `format` is
+  left at its default and, because a
   Lua table literal cannot distinguish `format = nil` from an omitted key, is not written out.
   Switching buffers is done with the built-in `[b`/`]b`, with `<leader>fb`, or by clicking a
   tab with the mouse; no mapping is added for it. Terminals get no tab, because
@@ -231,11 +260,29 @@ symlink.
   identically, and an unsaved tab borrows the status line's pale bar, which sits one row below
   it under `laststatus = 3`. The overrides give the current tab a solid green block, leave
   green text for a visible-but-not-current one, and move the unsaved variants to yellow.
+- `lua/plugins/surround.lua`: config for `kylechui/nvim-surround`. Not loaded at startup; the
+  spec's `keys` table declares 11 expr mappings, one per action (`ys`, `yss`, `yS`, `ySS`, `ds`,
+  `cs`, `cS`, `S`, `gS`, `<C-g>s`, `<C-g>S`), each returning the matching `<Plug>` name so
+  lazy.nvim loads the plugin and runs `config()` on first press before the expr mapping resolves.
+  `init()` sets `vim.g.nvim_surround_no_mappings = true` before the plugin's own `plugin/`
+  script can read it, which is what stops its default keymaps from being registered (setting it
+  later, inside `config()`, would be too late). `config()` first calls
+  `require("lazy").load({ plugins = { "nvim-treesitter-textobjects" } })` so nvim-surround's `f`
+  (call surround) can resolve `@call.outer`; without it, `f` silently falls back to a regex
+  match instead of erroring (design doc, "依存関係と落とし穴" #1). Then it calls
+  `require("nvim-surround").setup()` with no arguments (every option stays at its default).
+- `lua/plugins/textobjects.lua`: config for `nvim-treesitter/nvim-treesitter-textobjects`.
+  The spec's `keys` table declares 22 select keys (`{ "x", "o" }` mode) for the standard
+  select-a-thing pairs, 6 move keys (`{ "n", "x", "o" }` mode) for jumping between
+  function/class boundaries, and 2 swap keys (`n` mode) for parameter reordering -- 30 entries
+  in total, each loading the plugin and running `config()` on first press. `surround.lua` also
+  loads this plugin, through lazy.nvim's own load API rather than through a key here.
+  `config()` calls `setup({ select = { lookahead = true } })`.
 - `lua/plugins/toggleterm.lua`: config for `akinsho/toggleterm.nvim` (opens and hides a shell
-  terminal with one key). Not loaded at startup; `<C-\>` in Normal mode runs
-  `vim.cmd.packadd()` and `setup()` on first press through `lua/common/lazy.lua`. That mapping
-  reads `v:count` itself so that `2<C-\>` reaches the second terminal on the very first press
-  as well.
+  terminal with one key). Not loaded at startup; the spec's `keys` table declares one entry,
+  `<C-\>` in Normal mode, whose function reads `v:count` before calling
+  `require("lazy").load({ plugins = { "toggleterm.nvim" } })` (count does not survive the
+  require) so `2<C-\>` reaches the second terminal on the very first press as well.
   **Only one terminal is ever on screen.** toggleterm gives each terminal its own split, so
   opening a second one would leave both visible side by side; every entry point here closes the
   others first, turning the bottom of the screen into a single 12-row slot whose occupant the
@@ -245,10 +292,11 @@ symlink.
   before it, hides the terminal when one is up, and otherwise reopens the one used last. Inside a
   terminal, `<C-\>` and `<C-q>` hide it (matching how the Claude Code terminal closes), and
   `<M-1>` through `<M-9>` switch to that terminal, starting it when the number is unused. Those
-  are buffer-local: Terminal mode passes every unbound key to the shell, so without them there is
-  no way from one terminal into another -- even `<C-w>k` reaches zsh -- and binding them globally
-  would collide with the `<C-q>` that `claudecode.lua` binds for its own terminal. The cost is
-  that zsh loses `<C-q>`, `<C-\>` and its digit arguments inside these terminals.
+  are buffer-local, bound in `config()`'s `on_create`: Terminal mode passes every unbound key to
+  the shell, so without them there is no way from one terminal into another -- even `<C-w>k`
+  reaches zsh -- and binding them globally would collide with the `<C-q>` that `claudecode.lua`
+  binds for its own terminal. The cost is that zsh loses `<C-q>`, `<C-\>` and its digit
+  arguments inside these terminals.
   The winbar above the slot lists every terminal as `1 zsh 2 zsh ...`, marks the visible one, and
   is clickable; it stands in for the tabline, which never lists terminals because
   `lua/config/autocmd.lua` clears their `'buflisted'`. toggleterm's own `:TermSelect` also works
@@ -267,11 +315,14 @@ symlink.
   Claude Code's terminal is untouched by all of this -- it keeps its own vertical split on the
   right (`claudecode.lua`).
 - `lua/plugins/treesitter.lua`: config for `nvim-treesitter/nvim-treesitter`. Pinned to the
-  `main` branch, at commit `5cb0114e6242625db56dd6440e945ed1ece10bc7` in `lua/plugins/init.lua`
-  (the branch is a parser install/update/remove tool and a filetype-to-parser-name mapping,
+  `main` branch, at commit `5cb0114e6242625db56dd6440e945ed1ece10bc7` (the branch is a parser
+  install/update/remove tool and a filetype-to-parser-name mapping,
   not a syntax highlighter itself -- highlighting is Neovim core's own
-  `vim.treesitter.start()`, called here once a parser is confirmed installed). Not loaded at
-  startup; two `FileType` autocmds trigger it. The first covers ten filetypes (`rust`,
+  `vim.treesitter.start()`, called here once a parser is confirmed installed). `lazy = true`
+  with no trigger declared in the spec; instead `init()` sets up two `FileType` autocmds that
+  each call `require("lazy").load({ plugins = { "nvim-treesitter" } })` before doing their own
+  work, since only an autocmd can run that same load for every matching buffer, not just the
+  first. The first covers ten filetypes (`rust`,
   `python`, `typescript`, `typescriptreact`, `sh`, `bash`, `json`, `jsonc`, `toml`, `yaml`),
   calls `vim.treesitter.start()`, and sets `foldmethod`/`foldexpr` to
   `v:lua.vim.treesitter.foldexpr()` for structural code folding (`foldlevelstart` in
@@ -283,21 +334,16 @@ symlink.
   parser name -- `sh` -> `bash`, `typescriptreact` -> `tsx`, `jsonc` -> `json` -- resolved
   through `vim.treesitter.language.get_lang()`). A buffer whose parser is missing runs an
   async `install()` instead of blocking and stays unhighlighted until that filetype is next
-  opened. Installing or updating a parser shells out to the `tree-sitter` CLI, which comes
+  opened. `config()` is an empty function: its only possible role would be changing
+  `install_dir`, which already defaults to where Neovim puts things on runtimepath. Installing
+  or updating a parser shells out to the `tree-sitter` CLI, which comes
   from `mise` (declared in `~/workspace/repos/dotfiles/.config/mise/config.toml`, distinct
   from the language servers in the table below) and is only on `PATH` once `mise activate`
   has run for the shell that launched Neovim. Bumping the pinned commit hash in
-  `lua/plugins/init.lua` updates the plugin's own Lua code and query files, but not the
+  this file updates the plugin's own Lua code and query files, but not the
   eight already-compiled parsers; keeping those current after such a bump needs a manual
   `:TSUpdate`.
-- `lua/common/lazy.lua`: shared loader for lazy-loaded plugins (`autopairs.lua`, `claudecode.lua`,
-  `markview.lua`, `miniclue.lua`, `minifiles.lua`, `minipick.lua`, `surround.lua`,
-  `textobjects.lua`, `toggleterm.lua`, `treesitter.lua`). Exposes
-  one function, `M.require(pack_name, module_name, setup)`, that runs
-  `vim.cmd.packadd(pack_name)` and `setup(require(module_name))` exactly once — while
-  `package.loaded[module_name]` is already filled, neither runs again — then returns
-  `require(module_name)`.
-- `nvim-pack-lock.json`: generated by `vim.pack` once a plugin is installed. Records the
+- `lazy-lock.json`: generated by lazy.nvim once a plugin is installed. Records the
   exact revision in use so another machine can reproduce it.
 - `ripgreprc`: `rg` (ripgrep) config (`--hidden` and `--glob=!.git`). Only takes effect
   while `<leader>ff`/`<leader>fg` run, via `RIPGREP_CONFIG_PATH` set for that call in
@@ -326,3 +372,32 @@ Two prerequisites are not covered by `mise install` alone:
 - mise's own activation must be the last step of shell startup, after every setting that
   modifies `PATH`, or a stale binary (e.g. a rustup proxy) can shadow the mise-managed one.
   See `~/workspace/repos/dotfiles/.config/zsh/README.md` for the load-order convention.
+
+## Moving to another machine
+
+`lazy-lock.json` records the exact revision of every plugin, so a fresh checkout reproduces
+this setup rather than tracking each plugin's latest commit.
+
+1. `git pull` (or clone this repository) on the new machine.
+2. Start Neovim. `install.missing = true` (`lua/config/lazy.lua`) makes lazy.nvim clone
+   every plugin it is missing -- lazy.nvim itself included -- at the revision `lazy-lock.json`
+   records, and shows an install screen while it does. Wait for that to finish before doing
+   anything else; the parsers `nvim-treesitter` installs are a separate, later step (see
+   `treesitter.lua` above) and are not part of this screen.
+3. Re-link the ten `nvim-treesitter` query symlinks by hand -- `:TSInstall`/`install()` treats
+   an existing (even dangling) symlink under `~/.local/share/nvim/site/queries/` as already
+   installed and skips it, so it will not fix a stale link on its own:
+
+   ```sh
+   for lang in bash ecma json jsx python rust toml tsx typescript yaml; do
+     ln -sfn ~/.local/share/nvim/lazy/nvim-treesitter/runtime/queries/$lang \
+       ~/.local/share/nvim/site/queries/$lang
+   done
+   ```
+
+4. Delete any old `vim.pack` clone still on this machine from before the lazy.nvim migration
+   (`docs/design/vim-pack-to-lazy-nvim-migration.md` in the planning repository):
+
+   ```sh
+   rm -rf ~/.local/share/nvim/site/pack/core/
+   ```
