@@ -91,6 +91,8 @@ return {
       clues = {
         { mode = "n", keys = "<Leader>a", desc = "+Claude Code" },
         { mode = "x", keys = "<Leader>a", desc = "+Claude Code" },
+        { mode = "n", keys = "<Leader>g", desc = "+Git" },
+        { mode = "x", keys = "<Leader>g", desc = "+Git" },
         { mode = "n", keys = "<Leader>f", desc = "+Find" },
         { mode = "n", keys = "<Leader>i", desc = "+Toggle display" },
         miniclue.gen_clues.builtin_completion(),
