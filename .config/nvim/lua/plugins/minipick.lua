@@ -27,6 +27,7 @@ return {
         end)
       end,
       desc = "Find files by name",
+      silent = true,
     },
     {
       "<leader>fg",
@@ -36,6 +37,7 @@ return {
         end)
       end,
       desc = "Search file contents (live grep)",
+      silent = true,
     },
     -- Not wrapped in with_ripgreprc: this picker lists buffers from :buffers and never spawns rg.
     {
@@ -44,6 +46,7 @@ return {
         require("mini.pick").builtin.buffers()
       end,
       desc = "Switch to an open file (buffers)",
+      silent = true,
     },
   },
   init = function()

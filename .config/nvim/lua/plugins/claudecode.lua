@@ -32,6 +32,7 @@ for _, entry in ipairs(ENTRY_KEYS) do
     end,
     mode = mode,
     desc = desc,
+    silent = true,
   })
 end
 

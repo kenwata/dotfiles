@@ -18,6 +18,7 @@ return {
         end
       end,
       desc = "Toggle the file explorer",
+      silent = true,
     },
   },
   init = function()

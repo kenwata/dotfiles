@@ -168,6 +168,7 @@ return {
         end
       end,
       desc = "Toggle the terminal",
+      silent = true,
     },
   },
   config = function()

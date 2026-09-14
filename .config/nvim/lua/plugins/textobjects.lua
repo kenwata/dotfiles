@@ -55,6 +55,7 @@ for _, entry in ipairs(SELECT_KEYS) do
     end,
     mode = { "x", "o" },
     desc = entry.desc,
+    silent = true,
   })
 end
 
@@ -66,6 +67,7 @@ for _, entry in ipairs(MOVE_KEYS) do
     end,
     mode = { "n", "x", "o" },
     desc = entry.desc,
+    silent = true,
   })
 end
 
@@ -75,6 +77,7 @@ table.insert(keys, {
     require("nvim-treesitter-textobjects.swap").swap_next({ "@parameter.inner" }, "textobjects")
   end,
   desc = "Swap parameter with next",
+  silent = true,
 })
 
 table.insert(keys, {
@@ -83,6 +86,7 @@ table.insert(keys, {
     require("nvim-treesitter-textobjects.swap").swap_previous({ "@parameter.inner" }, "textobjects")
   end,
   desc = "Swap parameter with previous",
+  silent = true,
 })
 
 return {

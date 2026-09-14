@@ -16,6 +16,7 @@ return {
         vim.cmd("Markview toggle")
       end,
       desc = "Toggle markdown decoration",
+      silent = true,
     },
   },
   init = function()

@@ -53,6 +53,7 @@ for _, entry in ipairs(SURROUND_KEYS) do
     end,
     mode = entry.mode,
     expr = true,
+    silent = true,
     desc = entry.desc,
   })
 end
