@@ -55,18 +55,27 @@ return {
       end,
     })
 
-    -- <C-q> as a second way to close the explorer, alongside the built-in close = 'q'.
-    -- mini.files only accepts one key per action, so a second key has to be a plain
-    -- buffer-local mapping instead of a mappings.close entry. The event fires once per
+    -- Buffer-local keys that mappings cannot express: <C-q> as a second way to close the
+    -- explorer alongside the built-in close = 'q', and <CR> as a second key for go_in_plus
+    -- alongside the built-in L. mini.files only accepts one key per action, so a second key has
+    -- to be a plain buffer-local mapping instead of a mappings entry. The event fires once per
     -- explorer buffer, and only after mini.files is loaded, so require() here just returns the
     -- already-loaded module.
     vim.api.nvim_create_autocmd("User", {
       pattern = "MiniFilesBufferCreate",
-      desc = "Close the file explorer with <C-q> as well as the default q",
+      desc = "Add <C-q> to close and <CR> to confirm in the file explorer",
       callback = function(args)
         vim.keymap.set("n", "<C-q>", function()
           require("mini.files").close()
         end, { buffer = args.data.buf_id, silent = true, desc = "Close the file explorer" })
+
+        vim.keymap.set("n", "<CR>", function()
+          require("mini.files").go_in({ close_on_file = true })
+        end, {
+          buffer = args.data.buf_id,
+          silent = true,
+          desc = "Open the file and close the explorer, or enter the directory",
+        })
       end,
     })
   end,
