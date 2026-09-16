@@ -1,4 +1,4 @@
--- Highest terminal number reachable with <M-n> from inside a terminal. Nine is simply how many
+-- Highest terminal number reachable with <Fn> from inside a terminal. Nine is simply how many
 -- digits there are; nothing in toggleterm caps the count.
 local LAST_REACHABLE_TERMINAL = 9
 
@@ -234,8 +234,8 @@ return {
         end,
       },
       -- Off, against its default: it restores the mode each terminal was left in, and a terminal
-      -- is always left in Normal mode when <M-n> hops away from it. Restoring that on the way back
-      -- would strand the cursor outside Terminal mode, where <M-n> no longer fires. With this off,
+      -- is always left in Normal mode when <Fn> hops away from it. Restoring that on the way back
+      -- would strand the cursor outside Terminal mode, where <Fn> no longer fires. With this off,
       -- start_in_insert applies on every open and every hop lands ready to type.
       persist_mode = false,
       -- Off, against its default: it closes the window the moment a shell exits, and reopening it
@@ -263,7 +263,7 @@ return {
           -- the next tick and is undone here, since Neovim leaves Terminal mode itself once this
           -- callback returns. Only the delayed one below lands. The wasted call is harmless --
           -- both do nothing outside a terminal buffer -- and dropping it from show_terminal()
-          -- would break the <M-n> path, which has no such delay to wait for.
+          -- would break the <Fn> path, which has no such delay to wait for.
           enter_terminal_mode(EXIT_MODE_RESTORE_DELAY_MS)
         end)
       end,
@@ -287,9 +287,17 @@ return {
         -- Terminal mode hands every unmapped key to the shell, so there is otherwise no way out of
         -- one terminal and into another: even <C-w>k reaches zsh rather than moving a window.
         -- These address terminals by number, matching the border title above; a number nothing
-        -- answers to yet starts that terminal. The cost is zsh's digit-argument.
+        -- answers to yet starts that terminal.
+        --
+        -- Function keys, not Option or Ctrl+digit (both tried and rejected 2026-09-16 while
+        -- picking T135's look): AeroSpace's aerospace.toml binds alt-1..alt-9 to workspace
+        -- switching (swallowed <M-1>..<M-9> before Ghostty/Neovim ever saw them), and herdr's
+        -- ~/.config/herdr/config.toml binds ctrl+1..9 to focus_agent (same problem for
+        -- <C-1>..<C-9>). <F1>..<F9> collide with neither; buffer-local to the terminal, so it
+        -- doesn't touch <F1>'s normal-mode :help mapping elsewhere (user accepted losing <F1> as
+        -- help inside a terminal buffer -- :help by name still works).
         for id = 1, LAST_REACHABLE_TERMINAL do
-          vim.keymap.set("t", ("<M-%d>"):format(id), function()
+          vim.keymap.set("t", ("<F%d>"):format(id), function()
             show_terminal(id)
           end, {
             buffer = term.bufnr,
