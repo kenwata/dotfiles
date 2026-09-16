@@ -196,10 +196,10 @@ return {
     },
   },
   config = function()
-    -- Provisional float geometry: size, position, and border are all chosen for real in T135 by
-    -- rendering against Ghostty. These only need to be non-crashing placeholders until then.
-    local FLOAT_WIDTH_FRACTION = 0.8
-    local FLOAT_HEIGHT_FRACTION = 0.8
+    -- Chosen in T135 by rendering against Ghostty (2026-09-16, user decision): width close to
+    -- the screen edges, height trimmed a bit further so the bottom edge clears the statusline.
+    local FLOAT_WIDTH_FRACTION = 0.92
+    local FLOAT_HEIGHT_FRACTION = 0.82
 
     local function float_dimension(fraction, total)
       return math.floor(total * fraction)
@@ -213,9 +213,10 @@ return {
       -- terminal alongside any already on screen; the keys entry above routes the only entry
       -- point through show_terminal() so that exactly one terminal is ever visible.
       --
-      -- Floating keeps the terminal off to the side of claudecode.nvim's own terminal (a
-      -- vertical split on the right, lua/plugins/claudecode.lua) by overlapping rather than
-      -- competing for space with it; T135 picks the final size/position with that in mind.
+      -- Floating overlaps claudecode.nvim's own terminal (a vertical split on the right,
+      -- lua/plugins/claudecode.lua) rather than competing for space with it. Centered and
+      -- overlapping was accepted as-is in T135 (2026-09-16, user decision) -- worth revisiting
+      -- only if the overlap turns out to bother in practice.
       direction = "float",
       float_opts = {
         border = "rounded",
