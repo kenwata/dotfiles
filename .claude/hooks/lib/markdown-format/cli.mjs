@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "node:fs";
+import { isatty } from "node:tty";
 import { formatMarkdown } from "./format.mjs";
 import { lintMarkdown } from "./lint.mjs";
 import { shouldFormat } from "./gate.mjs";
@@ -25,14 +26,23 @@ import { editedLineRanges } from "./scope.mjs";
 // (未編集の既存箇所への波及を防ぐ)。stdin 無し・JSON でない・Write・new_string 空の
 // 場合は従来どおりファイル全体が対象(CLI 直接実行・/markdown-cleanup 経由も同様)。
 // new_string がファイル内に見つからない場合は、スコープを安全に決定できないため
-// 全体扱いにはせずフェイルオープンで何もしない。
+// 全体扱いにはせずフェイルオープンで何もしない。stdin の読み取り自体が失敗した場合も
+// 同じ理由で何もしない(STDIN_UNREADABLE)。
+//
+// TTY 判定に process.stdin.isTTY を使ってはならない。process.stdin に触れると fd 0 の
+// パイプがノンブロッキングになり、パイプのバッファ(約 64KB)を超える hook 入力で
+// readFileSync(0) が EAGAIN を投げる(2026-09-16 に実測。PostToolUse の入力は編集前の
+// ファイル全文を含むため、大きなファイルへの Edit で起きる)。
+const STDIN_UNREADABLE = Symbol("stdin-unreadable");
+
 function readStdinJson() {
-  if (process.stdin.isTTY) return null;
+  if (isatty(0)) return null;
   let raw;
   try {
     raw = readFileSync(0, "utf8");
   } catch {
-    return null;
+    // exit 0 の stderr は hook スクリプトが捨てるため出力しない(ファイル冒頭の出力規約)
+    return STDIN_UNREADABLE;
   }
   if (!raw) return null;
   try {
@@ -76,6 +86,9 @@ function main() {
 
   let lineRanges;
   const input = readStdinJson();
+  if (input === STDIN_UNREADABLE) {
+    process.exit(0);
+  }
   if (input?.tool_name === "Edit" && input.tool_input?.new_string) {
     const ranges = editedLineRanges(original, input.tool_input.new_string);
     if (ranges.size === 0) {

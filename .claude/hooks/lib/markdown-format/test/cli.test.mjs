@@ -118,6 +118,46 @@ test("Edit の PostToolUse JSON は new_string の出現行だけを対象にす
   }
 });
 
+// 実害バグの回帰(2026-09-16): 修正前は stdin を読む前に process.stdin.isTTY を参照して
+// いた。process.stdin に触れると fd 0 のパイプがノンブロッキングになり、パイプの
+// バッファ(約 64KB)を超える入力で readFileSync(0) が EAGAIN を投げる。これを
+// 「stdin 無し」と同じ扱いにしていたため、大きなファイルへの Edit が全体モードに落ち、
+// 未編集行まで整形された。PostToolUse の入力には編集前のファイル全文
+// (tool_response.originalFile)が入るため、入力はファイルの大きさに比例して大きくなる。
+const LARGE_PAYLOAD_CHARS = 600_000;
+const LARGE_PAYLOAD_RUNS = 5;
+
+test("パイプのバッファを超える大きな Edit 入力でも new_string の出現行だけを対象にする", () => {
+  const root = makeProject();
+  try {
+    const target = join(root, "a.md");
+    const content = "日本語**A**日本語\n日本語**B**日本語\n";
+    const input = JSON.stringify({
+      tool_name: "Edit",
+      tool_input: {
+        file_path: target,
+        old_string: "日本語**B**日本語",
+        new_string: "日本語**B**日本語",
+      },
+      tool_response: { originalFile: "x".repeat(LARGE_PAYLOAD_CHARS) },
+    });
+
+    // EAGAIN は子プロセスの読み取りと親の書き込みの競合で起きるため、複数回試す
+    const outputs = Array.from({ length: LARGE_PAYLOAD_RUNS }, () => {
+      writeFileSync(target, content, "utf8");
+      runCli(target, root, input);
+      return readFileSync(target, "utf8");
+    });
+
+    assert.deepEqual(
+      outputs,
+      Array(LARGE_PAYLOAD_RUNS).fill("日本語**A**日本語\n日本語 **B** 日本語\n"),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("Edit の new_string がファイル内に見つからない場合は何もしない(フェイルオープン)", () => {
   const root = makeProject();
   try {
