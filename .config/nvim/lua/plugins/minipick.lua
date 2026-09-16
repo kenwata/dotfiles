@@ -14,30 +14,26 @@ local function with_ripgreprc(fn)
 end
 
 -- Placement of the picker's own window and the side preview window for <Leader>ff/<Leader>fg/
--- <Leader>fb, computed once per open/resize from these ratios. This is the "既定寄せ"
--- (default-aligned) placeholder pattern from the design doc -- T130 replaces the values below
--- (and, if a differently-anchored pattern is chosen, likely the row/col arithmetic in
--- compute_layout() too) after choosing the look on the real terminal. Until then this is not the
--- visual decision, just a value to build and test against.
+-- <Leader>fb. Chosen on the real Ghostty terminal from 3 named patterns (T130, 2026-09-16): the
+-- pair is centered on screen at width 0.9 / height 0.8, split list:preview = 2:3, the matched
+-- line centered in the preview, and the preview border showing the selected candidate's path.
 local LAYOUT = {
-  width_ratio = 0.618, -- combined width of list + preview, as a share of the screen width
-  height_ratio = 0.618, -- height of both windows, as a share of the screen height
-  anchor = "SW", -- corner the pair is anchored to (mini.pick's own default position)
-  list_share = 0.5, -- fraction of the combined width given to the candidate list
-  line_position = "top", -- MiniPick.default_preview's line_position for the side window
+  width_ratio = 0.9, -- combined width of list + preview, as a share of the screen width
+  height_ratio = 0.8, -- height of both windows, as a share of the screen height
+  list_share = 0.4, -- fraction of the combined width given to the candidate list (list:preview = 2:3)
+  line_position = "center", -- MiniPick.default_preview's line_position for the side window
+  title = true, -- whether the side window's border shows the candidate's path as a title
 }
 
 --- Computes where the picker's own window and the side preview window go, from `LAYOUT` and the
---- current screen size. The row/max_height arithmetic mirrors what mini.pick uses for its own
---- default window (`H.picker_compute_win_config` in pick.lua) so the pair anchors to the same
---- corner mini.pick would use unassisted; duplicated here because that helper is private.
+--- current screen size. Both windows are centered on the screen (T130).
 ---@return table layout Has `list` and `preview` fields, each a floating-window config table.
 local function compute_layout()
   local has_tabline = vim.o.showtabline == 2 or (vim.o.showtabline == 1 and #vim.api.nvim_list_tabpages() > 1)
   local has_statusline = vim.o.laststatus > 0
   local max_width = vim.o.columns
   local max_height = vim.o.lines - vim.o.cmdheight - (has_tabline and 1 or 0) - (has_statusline and 1 or 0)
-  local row = max_height + (has_tabline and 1 or 0)
+  local top_offset = has_tabline and 1 or 0
 
   -- Clamped to 1 the same way pick.lua's own H.picker_compute_win_config clamps its window: on a
   -- small enough terminal, an unclamped height/width here would be zero or negative, and
@@ -50,20 +46,26 @@ local function compute_layout()
   local preview_width = math.max(total_width - list_width, 1)
   local border_width = 2 -- the list window's own left + right border columns
 
+  -- "center" placement is not an nvim_open_win anchor corner, so it is expressed as "NW" with
+  -- row/col computed to center the pair on screen.
+  local anchor = "NW"
+  local row = top_offset + math.floor((max_height - height) / 2)
+  local col = math.floor((max_width - total_width) / 2)
+
   return {
     list = {
       relative = "editor",
-      anchor = LAYOUT.anchor,
+      anchor = anchor,
       row = row,
-      col = 0,
+      col = col,
       width = list_width,
       height = height,
     },
     preview = {
       relative = "editor",
-      anchor = LAYOUT.anchor,
+      anchor = anchor,
       row = row,
-      col = list_width + border_width,
+      col = col + list_width + border_width,
       width = preview_width,
       height = height,
       focusable = false,
@@ -166,6 +168,19 @@ local function show_with_side_preview(buf_id, items, query)
 
   if current ~= nil then
     minipick.default_preview(preview_buf, current, { line_position = LAYOUT.line_position })
+  end
+
+  -- Shows the selected candidate's path as the side window's border title (T130).
+  if LAYOUT.title then
+    local path = type(current) == "table" and current.text or current
+    local config = compute_layout().preview
+    -- title_pos is only valid alongside title; nvim_win_set_config rejects one without the
+    -- other, so both are added together or neither is.
+    if path ~= nil then
+      config.title = " " .. tostring(path) .. " "
+      config.title_pos = "center"
+    end
+    vim.api.nvim_win_set_config(side.win, config)
   end
 end
 
