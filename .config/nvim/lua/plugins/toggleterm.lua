@@ -16,6 +16,41 @@ local function open_terminals()
   end, require("toggleterm.terminal").get_all(true))
 end
 
+--- Names a terminal as `<id> <command>` (e.g. `1 zsh`), for the floating window's border title.
+---
+--- The full path the default formatter prints (`1:/bin/zsh`) is wider than it needs to be for a
+--- row that doubles as a tab bar. _display_name() is the only way to reach the name: term.cmd is
+--- filled in for custom-command terminals only, and stays nil for the plain shell ones here.
+---@param term table
+---@return string
+local function terminal_label(term)
+  return ("%d %s"):format(term.id, vim.fn.fnamemodify(term:_display_name(), ":t"))
+end
+
+--- Rewrites the border title of the visible terminal's window to list every terminal that
+--- exists (not just the one on screen -- only one is ever visible at a time), highlighting the
+--- one currently shown.
+---
+--- toggleterm does not draw a winbar for floating terminals (lua/toggleterm/ui.lua's
+--- M.set_winbar early-returns on term:is_float(), with a "TODO: make this configurable"), so
+--- this replaces it with the window's own title -- the counterpart to winbar's tab row. Reads
+--- get_all(true) rather than open_terminals(): the latter is_open()-filters down to the single
+--- visible window, which would make every hidden terminal disappear from its own tab row.
+local function update_terminal_title()
+  local visible = open_terminals()[1]
+  if visible == nil or visible.window == nil or not vim.api.nvim_win_is_valid(visible.window) then
+    return
+  end
+
+  local title = {}
+  for _, term in ipairs(require("toggleterm.terminal").get_all(true)) do
+    local hl = term.id == visible.id and "Directory" or "Comment"
+    table.insert(title, { (" %s "):format(terminal_label(term)), hl })
+  end
+
+  vim.api.nvim_win_set_config(visible.window, { title = title })
+end
+
 --- Puts the cursor back into Terminal mode once the current round of window juggling settles.
 ---
 --- Deferring is what makes it stick: called outright from a mapping's callback, startinsert is
@@ -43,9 +78,8 @@ end
 --- Reaches into Terminal.window because toggleterm has no API for reusing a window. Keeping that
 --- field in step is what the rest of the plugin reads: is_open() answers by checking whether the
 --- window still holds the terminal's own buffer, so the terminal being replaced reports itself
---- closed from here on without any bookkeeping of its own. The winbar is re-set because its
---- expression carries the terminal id it was built for, and would otherwise keep marking the
---- previous terminal as the current one.
+--- closed from here on without any bookkeeping of its own. The title is refreshed by the caller
+--- (show_terminal()), the one entry point both this route and the reopen route pass through.
 ---@param term table
 ---@return boolean
 local function swap_into_visible_window(term)
@@ -65,7 +99,6 @@ local function swap_into_visible_window(term)
   vim.api.nvim_win_set_buf(window, term.bufnr)
   term.window = window
   vim.api.nvim_set_current_win(window)
-  require("toggleterm.ui").set_winbar(term)
   return true
 end
 
@@ -73,7 +106,7 @@ end
 ---
 --- toggleterm opens each terminal in its own split, so opening a second one leaves both visible
 --- side by side. Closing the others first turns the terminal area into a single slot whose
---- occupant this swaps -- the winbar above it then reads as the tab bar for that slot.
+--- occupant this swaps -- the border title above it then reads as the tab bar for that slot.
 ---@param id integer
 local function show_terminal(id)
   local term = require("toggleterm.terminal").get_or_create_term(id)
@@ -94,6 +127,8 @@ local function show_terminal(id)
     end
     term:open()
   end
+
+  update_terminal_title()
 
   -- Neither route above lands in Terminal mode on its own: a swapped window keeps whatever mode
   -- it had (Normal mode, when the shell it held has just exited), and open() reaches its own
@@ -125,17 +160,6 @@ local function hide_terminals()
   for _, term in ipairs(open_terminals()) do
     term:close()
   end
-end
-
---- Names a terminal for the winbar as `<id> <command>` (e.g. `1 zsh`).
----
---- The full path the default formatter prints (`1:/bin/zsh`) is wider than it needs to be for a
---- row that doubles as a tab bar. _display_name() is the only way to reach the name: term.cmd is
---- filled in for custom-command terminals only, and stays nil for the plain shell ones here.
----@param term table
----@return string
-local function terminal_winbar_name(term)
-  return ("%d %s"):format(term.id, vim.fn.fnamemodify(term:_display_name(), ":t"))
 end
 
 return {
@@ -172,31 +196,47 @@ return {
     },
   },
   config = function()
+    -- Provisional float geometry: size, position, and border are all chosen for real in T135 by
+    -- rendering against Ghostty. These only need to be non-crashing placeholders until then.
+    local FLOAT_WIDTH_FRACTION = 0.8
+    local FLOAT_HEIGHT_FRACTION = 0.8
+
+    local function float_dimension(fraction, total)
+      return math.floor(total * fraction)
+    end
+
     -- Only the options this config actually decides are written out. The rest keep their
     -- defaults: start_in_insert, persist_size, shade_terminals, auto_scroll, hide_numbers,
-    -- autochdir, clear_env, shell, float_opts and responsiveness.
+    -- autochdir, clear_env, shell and responsiveness.
     require("toggleterm").setup({
       -- open_mapping is deliberately left unset. It would bind <Cmd>ToggleTerm<CR>, which opens a
       -- terminal alongside any already on screen; the keys entry above routes the only entry
       -- point through show_terminal() so that exactly one terminal is ever visible.
       --
-      -- Horizontal keeps the terminal clear of claudecode.nvim, which puts its own terminal in a
-      -- vertical split on the right (lua/plugins/claudecode.lua).
-      direction = "horizontal",
-      size = 12,
+      -- Floating keeps the terminal off to the side of claudecode.nvim's own terminal (a
+      -- vertical split on the right, lua/plugins/claudecode.lua) by overlapping rather than
+      -- competing for space with it; T135 picks the final size/position with that in mind.
+      direction = "float",
+      float_opts = {
+        border = "rounded",
+        width = function()
+          return float_dimension(FLOAT_WIDTH_FRACTION, vim.o.columns)
+        end,
+        height = function()
+          return float_dimension(FLOAT_HEIGHT_FRACTION, vim.o.lines)
+        end,
+        row = function()
+          return math.floor((vim.o.lines - float_dimension(FLOAT_HEIGHT_FRACTION, vim.o.lines)) / 2)
+        end,
+        col = function()
+          return math.floor((vim.o.columns - float_dimension(FLOAT_WIDTH_FRACTION, vim.o.columns)) / 2)
+        end,
+      },
       -- Off, against its default: it restores the mode each terminal was left in, and a terminal
       -- is always left in Normal mode when <M-n> hops away from it. Restoring that on the way back
       -- would strand the cursor outside Terminal mode, where <M-n> no longer fires. With this off,
       -- start_in_insert applies on every open and every hop lands ready to type.
       persist_mode = false,
-      -- The tabline never lists terminals -- the TermOpen autocommand in lua/config/autocmd.lua
-      -- clears their 'buflisted' -- so without this there is nothing on screen saying which
-      -- terminals exist. Since only one is visible at a time, this row is what makes the others
-      -- discoverable: it lists every terminal, marks the visible one, and each entry is clickable.
-      winbar = {
-        enabled = true,
-        name_formatter = terminal_winbar_name,
-      },
       -- Off, against its default: it closes the window the moment a shell exits, and reopening it
       -- for the neighbour is visible as a flicker. Leaving the window standing lets on_exit below
       -- swap the neighbour into it with nothing to redraw.
@@ -245,7 +285,7 @@ return {
 
         -- Terminal mode hands every unmapped key to the shell, so there is otherwise no way out of
         -- one terminal and into another: even <C-w>k reaches zsh rather than moving a window.
-        -- These address terminals by number, matching the winbar above; a number nothing
+        -- These address terminals by number, matching the border title above; a number nothing
         -- answers to yet starts that terminal. The cost is zsh's digit-argument.
         for id = 1, LAST_REACHABLE_TERMINAL do
           vim.keymap.set("t", ("<M-%d>"):format(id), function()
