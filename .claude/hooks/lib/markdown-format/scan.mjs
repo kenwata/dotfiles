@@ -74,6 +74,67 @@ export function tableRowSegments(rowContent) {
   return segments;
 }
 
+// インライン構文の解析単位(段落)の区切りになる text 行の判定。CommonMark では
+// ATX 見出しは 1 行で閉じ、HTML コメント(HTML block type 2)は段落を中断して
+// `-->` を含む行で閉じるため、どちらも前後の行と同じ段落にしない。
+const ATX_HEADING = /^[ \t]*#{1,6}(?:[ \t]|$)/;
+const HTML_COMMENT_OPEN = /^[ \t]*<!--/;
+const HTML_COMMENT_CLOSE = "-->";
+
+function startsNewParagraph(prev, line) {
+  const content = line.raw.slice(line.contentStart);
+  const prevContent = prev.raw.slice(prev.contentStart);
+  return (
+    prev.kind !== "text" ||
+    prev.bqDepth !== line.bqDepth ||
+    line.listItem === true ||
+    ATX_HEADING.test(content) ||
+    ATX_HEADING.test(prevContent) ||
+    HTML_COMMENT_OPEN.test(content) ||
+    prevContent.includes(HTML_COMMENT_CLOSE)
+  );
+}
+
+// 連続する text 行を段落にまとめ、インライン走査用の文字列を作る。code span は
+// 段落内で行をまたげる(CommonMark 6.1)ため、行単位で走査すると前の行から続く
+// code span の閉じ backtick を開きと誤認する。
+// 戻り値: [{ text, parts: [{ lineIdx, textStart, absStart }] }]
+//   text      — 各行の blockquote prefix を剥がした本文を "\n" で連結したもの
+//   textStart — その行の本文が text 内で始まる位置
+//   absStart  — 同じ位置のファイル先頭からのオフセット
+export function textParagraphs(doc) {
+  const paragraphs = [];
+  let current = null;
+  doc.lines.forEach((line, idx) => {
+    if (line.kind !== "text") {
+      current = null;
+      return;
+    }
+    if (!current || startsNewParagraph(doc.lines[idx - 1], line)) {
+      current = { text: "", parts: [] };
+      paragraphs.push(current);
+    } else {
+      current.text += "\n";
+    }
+    current.parts.push({
+      lineIdx: idx,
+      textStart: current.text.length,
+      absStart: doc.lineStarts[idx] + line.contentStart,
+    });
+    current.text += line.raw.slice(line.contentStart);
+  });
+  return paragraphs;
+}
+
+// textParagraphs の段落内オフセットを、そのオフセットを含む行の part へ引く。
+export function partAt(paragraph, offset) {
+  let found = paragraph.parts[0];
+  for (const part of paragraph.parts) {
+    if (part.textStart <= offset) found = part;
+  }
+  return found;
+}
+
 export function scanDocument(source) {
   const rawLines = source.split("\n");
   const lineStarts = [];
@@ -236,6 +297,7 @@ export function scanDocument(source) {
         continue;
       }
       tableActive = false;
+      lines[i].listItem = true;
       prevKind = "text";
       continue;
     }

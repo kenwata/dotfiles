@@ -1,26 +1,22 @@
-import { scanDocument, tableRowSegments } from "./scan.mjs";
+import { partAt, scanDocument, tableRowSegments, textParagraphs } from "./scan.mjs";
 import { scanInline } from "./inline.mjs";
 import { applyEdits, isWordChar } from "./text-util.mjs";
 import { lineInScope, rangeInScope, translateLineRanges } from "./scope.mjs";
 
-// インライン装飾のスペース挿入対象になる行種(fence 内・インデント式 code・
-// frontmatter・table delimiter は対象外)
-const INLINE_KINDS = new Set(["text", "table-row"]);
-
-// 1 セグメント(text 行なら行全体、table-row 行なら 1 セル)分の scanInline 結果から
-// 装飾スペースの edit を積む。segStart はセグメント先頭の絶対オフセット。
-function pushSpacingEdits(edits, segText, segStart) {
+// 1 セグメント(text 行なら段落全体、table-row 行なら 1 セル)分の scanInline 結果から、
+// 装飾の外側にスペースを入れる位置(セグメント内オフセット)を返す。
+function spacingOffsets(segText) {
   const { spans } = scanInline(segText);
+  const offsets = [];
   for (const span of spans) {
-    const before = span.start > 0 ? segText[span.start - 1] : "";
-    if (isWordChar(before)) {
-      edits.push({ start: segStart + span.start, end: segStart + span.start, replacement: " " });
-    }
-    const after = segText[span.end] ?? "";
-    if (isWordChar(after)) {
-      edits.push({ start: segStart + span.end, end: segStart + span.end, replacement: " " });
-    }
+    if (isWordChar(segText[span.start - 1])) offsets.push(span.start);
+    if (isWordChar(segText[span.end])) offsets.push(span.end);
   }
+  return offsets;
+}
+
+function insertSpaceAt(offset) {
+  return { start: offset, end: offset, replacement: " " };
 }
 
 // strong/emphasis/delete/inlineCode/inlineMath の外側に、隣接文字が
@@ -28,22 +24,29 @@ function pushSpacingEdits(edits, segText, segStart) {
 // table-row 行は GFM のインライン解析がセル単位で行われるのに合わせ、セルごとに
 // 区切って走査する(行全体を 1 本として走査すると、別セルの装飾記号と誤って
 // 対応付けられ、成立した span の内側にスペースが入る事故が起きる)。
+// text 行は段落単位で走査する(行をまたぐ code span を 1 つとして扱うため)。段落の
+// 一部だけが範囲内の場合も段落全体を走査し、範囲内の行に落ちる挿入だけを残す。
+// fence 内・インデント式 code・frontmatter・table delimiter は対象外。
 function decorationSpacingEdits(doc, lineRanges) {
-  const edits = [];
-  doc.lines.forEach((line, idx) => {
-    if (!INLINE_KINDS.has(line.kind)) return;
-    if (!lineInScope(lineRanges, idx)) return;
-    const lineStart = doc.lineStarts[idx];
-    if (line.kind === "table-row") {
-      const content = line.raw.slice(line.contentStart);
-      for (const seg of tableRowSegments(content)) {
-        pushSpacingEdits(edits, content.slice(seg.start, seg.end), lineStart + line.contentStart + seg.start);
-      }
-    } else {
-      pushSpacingEdits(edits, line.raw, lineStart);
-    }
+  const paragraphEdits = textParagraphs(doc).flatMap((paragraph) =>
+    spacingOffsets(paragraph.text)
+      .map((offset) => ({ offset, part: partAt(paragraph, offset) }))
+      .filter(({ part }) => lineInScope(lineRanges, part.lineIdx))
+      .map(({ offset, part }) => insertSpaceAt(part.absStart + offset - part.textStart)),
+  );
+
+  const tableEdits = doc.lines.flatMap((line, idx) => {
+    if (line.kind !== "table-row" || !lineInScope(lineRanges, idx)) return [];
+    const contentStart = doc.lineStarts[idx] + line.contentStart;
+    const content = line.raw.slice(line.contentStart);
+    return tableRowSegments(content).flatMap((seg) =>
+      spacingOffsets(content.slice(seg.start, seg.end)).map((offset) =>
+        insertSpaceAt(contentStart + seg.start + offset),
+      ),
+    );
   });
-  return edits;
+
+  return [...paragraphEdits, ...tableEdits];
 }
 
 // 4 backticks 以上への昇格と、開始・終了 fence の backtick 数の一致を保証する。

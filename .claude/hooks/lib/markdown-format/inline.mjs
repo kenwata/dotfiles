@@ -1,5 +1,9 @@
-// 1 行分のインライン構文走査器。remark AST の代替として、装飾スペース挿入と
+// 1 段落分(scan.mjs の textParagraphs。改行 "\n" を含みうる)または 1 table cell 分の
+// インライン構文走査器。remark AST の代替として、装飾スペース挿入と
 // lint(地の文に残った装飾記号の検出)に必要な span 境界だけを求める。
+//
+// 行をまたいで組にするのは code span だけ。inline math と emphasis は 1 行内でのみ
+// 組にする(複数行にまたがる strong を触らない意図的差分を維持する — README.md 参照)。
 //
 // 処理順(先に確定した領域は後段の走査から除外する):
 //   1. backslash エスケープの解決
@@ -46,16 +50,27 @@ function markTaken(taken, start, end) {
   for (let i = start; i < end; i++) taken[i] = true;
 }
 
-// spans: { start, end(exclusive), type: 'code' | 'math' | 'emphasis' }
-export function scanInline(line) {
-  const escaped = computeEscaped(line);
-  const taken = new Array(line.length).fill(false);
+// runs を、run が属する行(text 内の "\n" で区切った行)ごとの配列に分ける。
+function groupRunsByLine(text, runs) {
+  const groups = new Map();
+  for (const run of runs) {
+    const lineNo = text.slice(0, run.start).split("\n").length - 1;
+    if (!groups.has(lineNo)) groups.set(lineNo, []);
+    groups.get(lineNo).push(run);
+  }
+  return [...groups.values()];
+}
+
+// spans: { start, end(exclusive), type: 'code' | 'math' | 'emphasis' }(text 内オフセット)
+export function scanInline(text) {
+  const escaped = computeEscaped(text);
+  const taken = new Array(text.length).fill(false);
   const spans = [];
   const protectedRanges = [];
 
   // --- code span ---
   {
-    const runs = collectRuns(line, "`", escaped, taken);
+    const runs = collectRuns(text, "`", escaped, taken);
     let i = 0;
     while (i < runs.length) {
       const open = runs[i];
@@ -78,8 +93,8 @@ export function scanInline(line) {
   }
 
   // --- 保護領域(装飾扱いせず、スペース挿入も lint もしない) ---
-  for (const re of [/\]\([^)]*\)/g, /<[^>]*>/g]) {
-    for (const m of line.matchAll(re)) {
+  for (const re of [/\]\([^)\n]*\)/g, /<[^>\n]*>/g]) {
+    for (const m of text.matchAll(re)) {
       const start = m.index;
       const end = m.index + m[0].length;
       let overlap = false;
@@ -91,11 +106,11 @@ export function scanInline(line) {
   }
 
   // --- inline math ---
-  {
-    const runs = collectRuns(line, "$", escaped, taken).filter((r) => r.len <= 2);
-    const canOpen = (r) => !uniWs(line[r.start + r.len]);
+  const mathRuns = collectRuns(text, "$", escaped, taken).filter((r) => r.len <= 2);
+  for (const runs of groupRunsByLine(text, mathRuns)) {
+    const canOpen = (r) => !uniWs(text[r.start + r.len]);
     const canClose = (r) =>
-      !uniWs(line[r.start - 1]) && !/[0-9]/.test(line[r.start + r.len] ?? "");
+      !uniWs(text[r.start - 1]) && !/[0-9]/.test(text[r.start + r.len] ?? "");
     let i = 0;
     while (i < runs.length) {
       const open = runs[i];
@@ -122,29 +137,30 @@ export function scanInline(line) {
   }
 
   // --- emphasis / strong / delete ---
-  {
+  const emphasisRuns = ["*", "_", "~"].flatMap((ch) =>
+    collectRuns(text, ch, escaped, taken).map((run) => ({ ...run, ch })),
+  );
+  for (const runs of groupRunsByLine(text, emphasisRuns)) {
     const delims = [];
-    for (const ch of ["*", "_", "~"]) {
-      for (const run of collectRuns(line, ch, escaped, taken)) {
-        if (ch === "~" && run.len > 2) continue; // GFM strikethrough は 1〜2 連のみ
-        const before = run.start > 0 ? line[run.start - 1] : "";
-        const after = line[run.start + run.len] ?? "";
-        const leftFlanking =
-          !uniWs(after) && (!uniPunct(after) || uniWs(before) || uniPunct(before));
-        const rightFlanking =
-          !uniWs(before) && (!uniPunct(before) || uniWs(after) || uniPunct(after));
-        let canOpen;
-        let canClose;
-        if (ch === "_") {
-          // CommonMark: `_` は intraword で無効(snake_case を壊さないための要)
-          canOpen = leftFlanking && (!rightFlanking || uniPunct(before));
-          canClose = rightFlanking && (!leftFlanking || uniPunct(after));
-        } else {
-          canOpen = leftFlanking;
-          canClose = rightFlanking;
-        }
-        if (canOpen || canClose) delims.push({ ...run, ch, canOpen, canClose });
+    for (const { ch, ...run } of runs) {
+      if (ch === "~" && run.len > 2) continue; // GFM strikethrough は 1〜2 連のみ
+      const before = run.start > 0 ? text[run.start - 1] : "";
+      const after = text[run.start + run.len] ?? "";
+      const leftFlanking =
+        !uniWs(after) && (!uniPunct(after) || uniWs(before) || uniPunct(before));
+      const rightFlanking =
+        !uniWs(before) && (!uniPunct(before) || uniWs(after) || uniPunct(after));
+      let canOpen;
+      let canClose;
+      if (ch === "_") {
+        // CommonMark: `_` は intraword で無効(snake_case を壊さないための要)
+        canOpen = leftFlanking && (!rightFlanking || uniPunct(before));
+        canClose = rightFlanking && (!leftFlanking || uniPunct(after));
+      } else {
+        canOpen = leftFlanking;
+        canClose = rightFlanking;
       }
+      if (canOpen || canClose) delims.push({ ...run, ch, canOpen, canClose });
     }
     delims.sort((a, b) => a.start - b.start);
 

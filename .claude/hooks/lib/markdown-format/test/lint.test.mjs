@@ -137,3 +137,16 @@ test("table の別セルにまたがる ** を残留装飾記号として誤検�
   const findings = lintMarkdown("| a | b |\n| --- | --- |\n| 。**推奨 | それは**表**であり |\n");
   assert.deepEqual(rules(findings), []);
 });
+
+test("行をまたぐ code span の内側にある ** は検出しない", () => {
+  const findings = lintMarkdown("`x\n語**「a」**語`\n");
+  assert.deepEqual(rules(findings), []);
+});
+
+test("段落の 2 行目に残った ** は 2 行目として報告する", () => {
+  const findings = lintMarkdown("前の行\n語**「a」**語\n");
+  assert.deepEqual(
+    findings.map((f) => [f.rule, f.line]),
+    [["possible-unrendered-bold", 2]],
+  );
+});

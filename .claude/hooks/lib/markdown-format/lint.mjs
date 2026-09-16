@@ -1,4 +1,4 @@
-import { scanDocument, splitTableRow, tableRowSegments } from "./scan.mjs";
+import { partAt, scanDocument, splitTableRow, tableRowSegments, textParagraphs } from "./scan.mjs";
 import { scanInline, residualMask } from "./inline.mjs";
 import { lineInScope, rangeInScope } from "./scope.mjs";
 
@@ -32,38 +32,56 @@ const MARKER_PATTERNS = [
   { re: /~~([^\n~]+?)~~/g, rule: "possible-unrendered-strikethrough" },
 ];
 
-function pushMarkerFindings(findings, masked, line) {
-  for (const { re, rule } of MARKER_PATTERNS) {
-    for (const m of masked.matchAll(re)) {
-      if (m[1].startsWith("/")) continue; // glob っぽい `**/...` を除外
-      findings.push({
-        rule,
-        line,
-        message: `装飾記号が地の文に残っている可能性: ${JSON.stringify(m[0])}`,
-      });
-    }
-  }
+// masked 内で見つかった候補を { rule, offset, match } の配列で返す(offset は masked 内)。
+function markerMatches(masked) {
+  return MARKER_PATTERNS.flatMap(({ re, rule }) =>
+    [...masked.matchAll(re)]
+      .filter((m) => !m[1].startsWith("/")) // glob っぽい `**/...` を除外
+      .map((m) => ({ rule, offset: m.index, match: m[0] })),
+  );
+}
+
+function markerFinding({ rule, match }, lineIdx) {
+  return {
+    rule,
+    line: lineIdx + 1,
+    message: `装飾記号が地の文に残っている可能性: ${JSON.stringify(match)}`,
+  };
 }
 
 // table-row 行は GFM のインライン解析がセル単位で行われるのに合わせ、セルごとに
 // mask してから regex を適用する(行全体を 1 本として mask すると、別セルの
 // 装飾記号を跨いで `**…**` が誤マッチする)。
-function checkUnrenderedMarkers(doc, findings, lineRanges) {
-  doc.lines.forEach((line, idx) => {
-    if (line.kind !== "text" && line.kind !== "table-row") return;
-    if (!lineInScope(lineRanges, idx)) return;
-    if (line.kind === "table-row") {
-      const content = line.raw.slice(line.contentStart);
-      for (const seg of tableRowSegments(content)) {
-        const segText = content.slice(seg.start, seg.end);
-        const masked = residualMask(segText, scanInline(segText));
-        pushMarkerFindings(findings, masked, idx + 1);
-      }
-    } else {
-      const masked = residualMask(line.raw, scanInline(line.raw));
-      pushMarkerFindings(findings, masked, idx + 1);
-    }
+// text 行は段落単位で mask する(行をまたぐ code span の内側を地の文と誤認しないため)。
+// regex は "\n" を跨がないため、候補は必ず 1 行に収まり、その行へ帰属させる。
+function paragraphMarkerCandidates(doc) {
+  return textParagraphs(doc).flatMap((paragraph) =>
+    markerMatches(residualMask(paragraph.text, scanInline(paragraph.text))).map((found) => ({
+      found,
+      lineIdx: partAt(paragraph, found.offset).lineIdx,
+    })),
+  );
+}
+
+function tableMarkerCandidates(doc) {
+  return doc.lines.flatMap((line, idx) => {
+    if (line.kind !== "table-row") return [];
+    const content = line.raw.slice(line.contentStart);
+    return tableRowSegments(content).flatMap((seg) => {
+      const segText = content.slice(seg.start, seg.end);
+      return markerMatches(residualMask(segText, scanInline(segText))).map((found) => ({
+        found,
+        lineIdx: idx,
+      }));
+    });
   });
+}
+
+function checkUnrenderedMarkers(doc, findings, lineRanges) {
+  [...paragraphMarkerCandidates(doc), ...tableMarkerCandidates(doc)]
+    .filter(({ lineIdx }) => lineInScope(lineRanges, lineIdx))
+    .sort((a, b) => a.lineIdx - b.lineIdx)
+    .forEach(({ found, lineIdx }) => findings.push(markerFinding(found, lineIdx)));
 }
 
 // cell の「表示テキスト」の近似(remark の text/inlineCode value 連結に対応):

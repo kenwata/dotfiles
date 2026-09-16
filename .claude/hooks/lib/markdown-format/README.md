@@ -50,8 +50,8 @@ RegExp の Unicode property escape のみ。npm・ビルド工程・node_modules
 | --- | --- |
 | `cli.mjs` | エントリポイント。gate → format → 書き戻し → lint → stderr + exit 2 |
 | `gate.mjs` | プロジェクト/ユーザーの `<rules-dir>/rules/markdown.md`(既定は `.claude` のみ)の `paths:` にマッチする場合のみ動く |
-| `scan.mjs` | 行単位のブロック走査器(frontmatter / fence / table / list 深さ / blockquote) |
-| `inline.mjs` | インライン走査器(code span / math / emphasis の flanking 判定) |
+| `scan.mjs` | 行単位のブロック走査器(frontmatter / fence / table / list 深さ / blockquote)と、インライン走査用の段落まとめ(`textParagraphs`) |
+| `inline.mjs` | 段落・table cell 単位のインライン走査器(code span / math / emphasis の flanking 判定) |
 | `format.mjs` | scan/inline の結果を編集(スペース挿入・fence 昇格・空行)へ変換 |
 | `lint.mjs` | 検出 4 ルール |
 | `glob.mjs` | `paths:` 用の最小 glob マッチャ(micromatch 代替) |
@@ -118,6 +118,31 @@ backslash エスケープ済みの `\*\*…\*\*` は lint が検出しない(rem
 
 いずれも `test/format.test.mjs` / `test/lint.test.mjs` の「実害バグの回帰」節と
 `test/fixtures/corpus/boundary-cases.*` に再現ケースを焼き込んで固定してある。
+
+## 2026-09-16 の実害バグ修正(行をまたぐ code span)
+
+nvim 計画リポジトリの `.claude/archive/TODO.md` で、行をまたぐ code span の次の行にある
+別の code span の開き backtick の直後(内側)にスペースが入った。例:
+`` `packadd({ args = {`` ↵ `` "x" }, bang = true })` の後に `require("x")` `` の 2 行目が
+`` ` require("x")` `` に変わる。
+
+原因: 装飾スペース挿入と lint が `scanInline` を 1 行ずつ呼んでいた。CommonMark の
+code span は段落内で行をまたげるが、行単位の走査では前の行から続く code span の閉じ
+backtick を開きと誤認し、次の code span の開き backtick を閉じとして組にする。その
+「外側」判定が実際の code span の内側に当たった。
+
+修正: `scan.mjs` の `textParagraphs()` で連続する text 行を段落にまとめ、`format.mjs` の
+`decorationSpacingEdits` と `lint.mjs` の `checkUnrenderedMarkers` は段落単位で走査して、
+結果を行へ引き戻す(`partAt()`)。段落の区切りは空行・text 以外の行・blockquote 深さの
+変化・list 項目の開始行・ATX 見出し・HTML コメントの開始行と `-->` を含む行の次。
+行をまたいで組にするのは code span だけで、inline math と emphasis は従来どおり 1 行内で
+組にする(上記の意図的差分 4 を維持)。Edit スコープ限定時も段落全体を走査し、範囲内の
+行に落ちる挿入・検出だけを残すため、範囲外の行で開いた code span も考慮される。
+
+確認: 修正前後の formatter を nvim 計画リポジトリと dotfiles の追跡済み `.md` 全 112
+ファイルへ全体モードで適用して比べ、出力の差は上記の実例 2 行(修正後はスペースを
+入れない)のみ、lint 結果の差は無かった。再現ケースは両テストファイルの
+「行をまたぐ code span」関連のテストに固定してある。
 
 ## 適用範囲の分離(`scope.mjs`)
 

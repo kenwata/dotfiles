@@ -221,3 +221,61 @@ test("table の別セルにある閉じられない ** と誤って対応付け�
   assert.equal(changed, true);
   assert.equal(text, "| a | b |\n| --- | --- |\n| 。**推奨 | それは **表** であり |\n");
 });
+
+// --- 実害バグの回帰(nvim 計画リポジトリの .claude/archive/TODO.md で発生、2026-09-16) ---
+// 修正前は code span の対応付けを 1 行ずつ行っていたため、前の行から続く code span の
+// 閉じ backtick を開きと誤認し、次の code span の開き backtick を閉じとして組にした。
+// その「外側」判定で、次の code span の開き backtick の直後(内側)にスペースが入った。
+
+test("行をまたぐ code span の後にある code span の内側にスペースを入れない", () => {
+  const src = "形は `packadd({ args = {\n\"x\" }, bang = true })` の後に `require(\"x\")` を呼ぶ\n";
+  const { changed } = formatMarkdown(src);
+  assert.equal(changed, false);
+});
+
+test("list 項目の継続行でも行をまたぐ code span を 1 つとして扱う", () => {
+  const src = "- 形は `packadd({ args = {\n  \"x\" }, bang = true })` の後に `require(\"x\")` を呼ぶ\n";
+  const { changed } = formatMarkdown(src);
+  assert.equal(changed, false);
+});
+
+test("blockquote の継続行でも行をまたぐ code span を 1 つとして扱う", () => {
+  const src = "> 形は `packadd({\n> bang = true })` の後に `require(\"x\")` を呼ぶ\n";
+  const { changed } = formatMarkdown(src);
+  assert.equal(changed, false);
+});
+
+test("行をまたぐ code span の外側にはスペースを入れる", () => {
+  const { text } = formatMarkdown("語`a\nb`語\n");
+  assert.equal(text, "語 `a\nb` 語\n");
+});
+
+test("空行で区切られた別段落の backtick どうしは組にしない", () => {
+  const src = "語`a\n\nb`語\n";
+  const { changed } = formatMarkdown(src);
+  assert.equal(changed, false);
+});
+
+test("次の list 項目の backtick とは組にしない", () => {
+  const src = "- 語`a\n- b`語\n";
+  const { changed } = formatMarkdown(src);
+  assert.equal(changed, false);
+});
+
+test("ATX 見出しと次の行の backtick は組にしない", () => {
+  const src = "# 語`a\nb`語\n";
+  const { changed } = formatMarkdown(src);
+  assert.equal(changed, false);
+});
+
+test("HTML コメントの内側と外側の backtick は組にしない", () => {
+  const src = "<!--\n語`a\n-->\nb`語\n";
+  const { changed } = formatMarkdown(src);
+  assert.equal(changed, false);
+});
+
+test("lineRanges 指定時は、範囲外の行で開いた code span も考慮して範囲内だけ整形する", () => {
+  const src = "語`a\nb`語 と`c`\n";
+  const { text } = formatMarkdown(src, { lineRanges: new Set([1]) });
+  assert.equal(text, "語`a\nb` 語 と `c`\n");
+});
