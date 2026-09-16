@@ -225,19 +225,30 @@ symlink.
   listed since `keybind.lua`'s `desc` on each `ssvhjk` mapping already says what it does), and a
   300ms window delay with `width = "auto"` (the default fixed 30-column width truncates the
   longest `square_brackets` descriptions to the same prefix and makes them indistinguishable).
-- `lua/plugins/minifiles.lua`: config for `echasnovski/mini.files` (file explorer: browse,
-  create, rename, move, and delete files by editing a buffer). Not loaded at startup; the spec's
-  `keys` table declares `<Leader>e`, which toggles it open/closed, opening at the current
-  working directory. Also replaces netrw as the explorer that appears when a directory is
-  opened (`nvim <dir>` or `:e <dir>`): `init()` sets `vim.g.loaded_netrw`/`loaded_netrwPlugin` to
-  disable netrw at startup, and a `BufEnter` stub opens `mini.files` (via
-  `require("lazy").load(...)`) for the first directory buffer before the plugin itself is
-  loaded (its own `BufEnter`, registered by `config()`, handles every one after that). Deletion
-  is permanent (`options.permanent_delete = true`, no trash/recycle bin). `<C-q>` closes the
-  explorer as well as the built-in `q`, bound buffer-locally on `User MiniFilesBufferCreate`
-  since `mappings` only accepts one key per action. `windows.width_preview` is widened from the
-  default 25 to 80 columns, picked on the real Ghostty terminal; `width_focus`/`width_nofocus`
-  are left at their defaults.
+- `lua/plugins/minifiles.lua`: config for `echasnovski/mini.files` (file explorer: browse, create,
+  rename, move, and delete files by editing a buffer). Not loaded at startup; the spec's `keys`
+  table declares `<Leader>e`, which toggles it open/closed. Where it opens depends on the buffer
+  on screen. The left-most column is always the "root": the directory `nvim` was started against
+  (the first directory among the command-line arguments, captured in `init()`), or the current
+  directory when there was none. When the buffer is a file that exists on disk and sits inside the
+  root, the explorer lays out one column per directory from the root down to the file's parent
+  (`MiniFiles.set_branch()`) and puts the cursor on the file; a file outside the root opens its
+  parent directory alone, cursor on the file. Anything else -- an unnamed buffer, a terminal or
+  help buffer (non-empty `'buftype'`), a new file not yet written -- opens the root as a single
+  column. Either way `open()` is called with `use_latest = false`, so the columns and cursor left
+  from the previous visit are not restored. The inside-the-root check matches on the path
+  separator, so `/a/project` is not taken to be inside `/a/proj`. Inside the explorer, `<CR>`
+  opens the file under the cursor and closes the explorer, or enters the directory under it -- the
+  same action as the built-in `L` (`go_in({ close_on_file = true })`). Also replaces netrw as the
+  explorer that appears when a directory is opened (`nvim <dir>` or `:e <dir>`): `init()` sets
+  `vim.g.loaded_netrw`/`loaded_netrwPlugin` to disable netrw at startup, and a `BufEnter` stub
+  opens `mini.files` (via `require("lazy").load(...)`) for the first directory buffer before the
+  plugin itself is loaded (its own `BufEnter`, registered by `config()`, handles every one after
+  that). Deletion is permanent (`options.permanent_delete = true`, no trash/recycle bin). `<C-q>`
+  closes the explorer as well as the built-in `q`, and `<CR>` works alongside the built-in `L`;
+  both are bound buffer-locally on `User MiniFilesBufferCreate` since `mappings` only accepts one
+  key per action. `windows.width_preview` is widened from the default 25 to 80 columns, picked on
+  the real Ghostty terminal; `width_focus`/`width_nofocus` are left at their defaults.
 - `lua/plugins/miniicons.lua`: config for `echasnovski/mini.icons` (icon and highlight-group
   provider; draws nothing itself). Loaded at startup (`lazy = false`), for the same reason as
   `gruvbox.lua` and `minitabline.lua` below: `mini.tabline` looks for `_G.MiniIcons` on its
@@ -268,6 +279,18 @@ symlink.
   take the places of `<Left>`, `<Right>`, `<BS>` and `<Del>`, which no longer work in the
   prompt. Scrolling moves to the Alt version of the same letter (`<M-f>`/`<M-b>` vertically,
   `<M-h>`/`<M-l>` horizontally); it still matters with the preview open (`<Tab>`).
+  `<leader>ff`, `<leader>fg` and `<leader>fb` show a side preview: a second floating window,
+  created by the config rather than by mini.pick (which only swaps list and preview inside one
+  window), next to the candidate list and redrawn with the selected candidate whenever the
+  selection changes. The layout was picked on the real Ghostty terminal from three named
+  patterns (T130): list and preview together take 0.9 of the screen width and 0.8 of its height,
+  centered, split 2:3 between list and preview; a `<leader>fg` match is placed at the vertical
+  center of the preview (`line_position = "center"`), and the preview's border title shows the
+  candidate's path. In these three pickers `<M-f>`/`<M-b>` scroll the side preview instead of
+  the list, falling back to scrolling the picker's own window while `<Tab>` has it showing the
+  full preview; paging the list a screen at a time is given up there (`<C-n>`/`<C-p>` still
+  move one line). All of this is passed per picker, not through `setup()`, so the
+  `vim.ui.select` picker keeps no side preview and `<M-f>`/`<M-b>` still scroll its list.
   `<C-q>` closes the picker as well as the built-in `<Esc>`, added as a custom `stop_alt`
   action that sends the raw `<C-c>` byte back through `nvim_feedkeys` rather than returning
   `true` directly, so that `vim.ui.select` sees a cancelled selection (`on_choice(nil)`) the
@@ -318,37 +341,44 @@ symlink.
   `<C-\>` in Normal mode, whose function reads `v:count` before calling
   `require("lazy").load({ plugins = { "toggleterm.nvim" } })` (count does not survive the
   require) so `2<C-\>` reaches the second terminal on the very first press as well.
-  **Only one terminal is ever on screen.** toggleterm gives each terminal its own split, so
-  opening a second one would leave both visible side by side; every entry point here closes the
-  others first, turning the bottom of the screen into a single 12-row slot whose occupant the
+  Terminals open as a floating window (`direction = "float"`) with a rounded border, 0.92 of the
+  screen width and 0.82 of its height, centered -- sizes picked on the real Ghostty terminal
+  (T135). **Only one terminal is ever on screen.** toggleterm gives each terminal its own
+  window, so opening a second one would stack another float on top of the first; every entry
+  point here closes the others first, turning the float into a single window whose occupant the
   mappings swap. `open_mapping` and `terminal_mappings` are therefore left unset -- they would
   bind `<Cmd>ToggleTerm<CR>`, which opens alongside whatever is already up -- and each key is
   bound by hand instead. In Normal mode `<C-\>` shows the terminal matching the count typed
   before it, hides the terminal when one is up, and otherwise reopens the one used last. Inside a
   terminal, `<C-\>` and `<C-q>` hide it (matching how the Claude Code terminal closes), and
-  `<M-1>` through `<M-9>` switch to that terminal, starting it when the number is unused. Those
+  `<F1>` through `<F9>` switch to that terminal, starting it when the number is unused. Those
   are buffer-local, bound in `config()`'s `on_create`: Terminal mode passes every unbound key to
   the shell, so without them there is no way from one terminal into another -- even `<C-w>k`
   reaches zsh -- and binding them globally would collide with the `<C-q>` that `claudecode.lua`
-  binds for its own terminal. The cost is that zsh loses `<C-q>`, `<C-\>` and its digit
-  arguments inside these terminals.
-  The winbar above the slot lists every terminal as `1 zsh 2 zsh ...`, marks the visible one, and
-  is clickable; it stands in for the tabline, which never lists terminals because
-  `lua/config/autocmd.lua` clears their `'buflisted'`. toggleterm's own `:TermSelect` also works
-  and picks a terminal from a list -- through `mini.pick`, since `minipick.lua` replaces
-  `vim.ui.select`. It is left unbound: `<M-1>`..`<M-9>` and the winbar already cover the switch. `persist_mode` is off, against its default:
-  a terminal is always left in Normal mode when `<M-n>` hops away from it, and restoring that on
-  the way back would strand the cursor outside Terminal mode where `<M-n>` no longer fires.
+  binds for its own terminal. The cost is that zsh loses `<C-q>` and `<C-\>` inside these
+  terminals, and `<F1>` no longer opens help there (`:help` by name still works). Function keys
+  were chosen over Option or Ctrl with a digit because AeroSpace binds `alt-1`..`alt-9` and herdr
+  binds `ctrl+1`..`ctrl+9`, so neither ever reached Neovim (T136).
+  The float's border title lists every terminal as `1 zsh 2 zsh ...` and highlights the visible
+  one; it stands in for the tabline, which never lists terminals because
+  `lua/config/autocmd.lua` clears their `'buflisted'`. toggleterm has no tab row of its own for a
+  floating terminal, so the title is rewritten by hand on every switch. A border title is not
+  clickable, so switching terminals with the mouse is no longer possible; use the keys above.
+  toggleterm's own `:TermSelect` also works and picks a terminal from a list -- through
+  `mini.pick`, since `minipick.lua` replaces `vim.ui.select`. It is left unbound: `<F1>`..`<F9>`
+  already cover the switch. `persist_mode` is off, against its default: a terminal is always
+  left in Normal mode when a function key hops away from it, and restoring that on the way back
+  would strand the cursor outside Terminal mode where those keys no longer fire.
   Switching terminals reuses the window rather than closing and reopening it, which would empty
-  the slot for an instant and flicker. `close_on_exit` is off for the same reason: ending a shell
-  with `exit` or `<C-d>` would otherwise take the whole slot with it and drop the cursor back in
+  the float for an instant and flicker. `close_on_exit` is off for the same reason: ending a shell
+  with `exit` or `<C-d>` would otherwise take the whole window with it and drop the cursor back in
   the editor even with other terminals still running, so `on_exit` swaps the neighbouring terminal
   (the next one by number, or the previous one) into the standing window instead. The window is
   only given up once the last terminal is gone. Terminal mode is restored 20ms later rather than
   on the next tick, because Neovim leaves Terminal mode itself as the last step of tearing the job
   down -- anything earlier is undone by that.
   Claude Code's terminal is untouched by all of this -- it keeps its own vertical split on the
-  right (`claudecode.lua`).
+  right (`claudecode.lua`), and the float simply overlaps it while open.
 - `lua/plugins/treesitter.lua`: config for `nvim-treesitter/nvim-treesitter`. Pinned to the
   `main` branch, at commit `5cb0114e6242625db56dd6440e945ed1ece10bc7` (the branch is a parser
   install/update/remove tool and a filetype-to-parser-name mapping,
