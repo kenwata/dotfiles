@@ -9,6 +9,14 @@
 -- after gruvbox.nvim (priority 1000) is fine because snacks defines its SnacksDashboard*
 -- highlights as `default = true` on UIEnter, so gruvbox's earlier `overrides` are already in
 -- place and win (docs/design/snacks-dashboard-vimatrix-rain.md "読み込み方式").
+--
+-- No `cond` gate either. T139 measured a `cond = function() return vim.fn.argc(-1) == 0 end`
+-- variant (skips loading snacks -- and, once T143 adds it, the <Leader>d dashboard-reopen key --
+-- for any session started with a file argument) against this always-loaded version. The
+-- with-argument startup-time increase over the pre-T138 baseline was smaller for `cond`
+-- (+5.027ms, 95% CI [1.419, 7.503]) than for always-loaded (+9.475ms, 95% CI [4.674, 15.539]),
+-- but the user judged the difference too small to matter and kept always-loaded
+-- (docs/design/snacks-dashboard-vimatrix-rain.md "読み込み方式"; decision recorded 2026-09-17).
 return {
   "folke/snacks.nvim",
   version = "2",
