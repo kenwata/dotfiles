@@ -177,6 +177,20 @@ return {
     -- above requires either module -- start_rain() only does so inside itself, and is never
     -- called before this setup() has returned.
     require("vimatrix").setup({
+      auto_activation = {
+        screensaver = {
+          -- 10 minutes of no input starts the Rain screensaver even during normal editing, not
+          -- just while the dashboard is shown (user decision 2026-09-17). The other 4 fields
+          -- (setup_deferral, ignore_focus, block_on_term, block_on_cmd_line) stay at plugin
+          -- defaults (docs/design/snacks-dashboard-vimatrix-rain.md "スクリーンセーバー").
+          -- The timer only starts after the first activity (CursorMoved etc.) in the session --
+          -- an untouched session never triggers it. block_on_term checks *mode* (t/nt), so a
+          -- visible terminal split does not block the timer as long as the cursor is in a normal
+          -- buffer. FocusLost pauses the timer and FocusGained resumes it; confirmed Ghostty
+          -- delivers FocusLost by switching apps while watching an autocmd-written marker file.
+          timeout = 600,
+        },
+      },
       window = {
         by_filetype = {
           snacks_dashboard = {
