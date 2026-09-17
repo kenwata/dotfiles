@@ -17,10 +17,58 @@
 -- wins and Rain can start as soon as the dashboard opens rather than waiting for VeryLazy.
 
 local dashboard_buf = nil ---@type integer?
+local dashboard_win = nil ---@type integer?
 local last_screen_size = nil ---@type {columns: integer, lines: integer}?
 
 local function screen_size()
   return { columns = vim.o.columns, lines = vim.o.lines }
+end
+
+-- Larger than any realistic terminal width, so line * COLUMN_STRIDE + col never collides
+-- across rows (docs/design/snacks-dashboard-vimatrix-rain.md "マスク").
+local COLUMN_STRIDE = 4096
+local occupied = {} ---@type table<integer, true> screen cells (line * COLUMN_STRIDE + col) Rain must not draw over
+
+--- Rebuilds `occupied` from the live dashboard window: every cell outside its rectangle (so Rain
+--- stays inside the dashboard window when it isn't fullscreen, e.g. a future split reopen), plus
+--- every cell inside it holding a non-whitespace dashboard character. Cheap enough to run on
+--- every redraw/layout change since it's called once per change, not once per Rain frame like
+--- ignore_cells() itself (docs/design/snacks-dashboard-vimatrix-rain.md "マスク").
+local function rebuild_mask()
+  local next_occupied = {}
+  if dashboard_buf == nil or dashboard_win == nil or not vim.api.nvim_win_is_valid(dashboard_win) then
+    occupied = next_occupied
+    return
+  end
+
+  local win_pos = vim.api.nvim_win_get_position(dashboard_win)
+  local win_top, win_left = win_pos[1], win_pos[2]
+  local win_bottom = win_top + vim.api.nvim_win_get_height(dashboard_win)
+  local win_right = win_left + vim.api.nvim_win_get_width(dashboard_win)
+  for screen_line = 1, vim.o.lines do
+    for screen_col = 1, vim.o.columns do
+      if screen_line <= win_top or screen_line > win_bottom or screen_col <= win_left or screen_col > win_right then
+        next_occupied[screen_line * COLUMN_STRIDE + screen_col] = true
+      end
+    end
+  end
+
+  -- Iterate by codepoint (not byte) so multi-byte dashboard glyphs (Nerd Font icons) mask a
+  -- single screen cell instead of one per continuation byte; screenpos() takes a byte column.
+  for lnum, text in ipairs(vim.api.nvim_buf_get_lines(dashboard_buf, 0, -1, false)) do
+    local char_starts = vim.str_utf_pos(text)
+    for i, bytecol in ipairs(char_starts) do
+      local char_end = (char_starts[i + 1] or (#text + 1)) - 1
+      if not text:sub(bytecol, char_end):match("^%s$") then
+        local pos = vim.fn.screenpos(dashboard_win, lnum, bytecol)
+        if pos.row > 0 then
+          next_occupied[pos.row * COLUMN_STRIDE + pos.col] = true
+        end
+      end
+    end
+  end
+
+  occupied = next_occupied
 end
 
 --- Starts Rain over the dashboard, guarded against the dashboard buffer having already been
@@ -50,6 +98,12 @@ return {
       desc = "Load vimatrix.nvim and start Rain over the dashboard",
       callback = function()
         dashboard_buf = vim.api.nvim_get_current_buf()
+        dashboard_win = vim.api.nvim_get_current_win()
+        -- Opened fires after snacks's own D:update() (and the UpdatePost it fires from inside
+        -- that) has already drawn this dashboard (dashboard.lua:228-229: self:update() runs
+        -- before self.fire("Opened")). The UpdatePost autocmd below only catches later redraws,
+        -- so the first mask has to be built here, synchronously, before Rain can start.
+        rebuild_mask()
         require("lazy").load({ plugins = { "vimatrix.nvim" } })
         -- SnacksDashboardOpened fires while UIEnter is still being processed (before the first
         -- frame). Deferring past that with vim.schedule lets the dashboard draw first, since
@@ -62,10 +116,23 @@ return {
     })
 
     vim.api.nvim_create_autocmd("User", {
+      pattern = "SnacksDashboardUpdatePost",
+      desc = "Rebuild the Rain mask after the dashboard redraws (e.g. on resize)",
+      callback = rebuild_mask,
+    })
+
+    vim.api.nvim_create_autocmd({ "WinScrolled", "WinResized" }, {
+      desc = "Rebuild the Rain mask when the dashboard window's position or scroll changes",
+      callback = rebuild_mask,
+    })
+
+    vim.api.nvim_create_autocmd("User", {
       pattern = "SnacksDashboardClosed",
       desc = "Stop Rain when the dashboard buffer is wiped",
       callback = function()
         dashboard_buf = nil
+        dashboard_win = nil
+        occupied = {}
         -- The dashboard buffer is bufhidden=wipe, so every close path (opening a file, q,
         -- :ene) fires this. VimatrixClose skips setup_cancellation's own undo (no keymap
         -- restore, no VimatrixUndo), but that's fine here because the buffer the <Esc> mapping
@@ -116,9 +183,10 @@ return {
             blend = 100, -- cells with no character stay fully transparent
             border = "none", -- omitting this defaults to 'winborder' and shifts the grid by 1
             zindex = 20, -- above the non-floating dashboard (10), below toggleterm (50)
-            -- Always-false placeholder; masking out the dashboard's own text is T141's job.
-            ignore_cells = function()
-              return false
+            -- occupied is rebuilt by rebuild_mask() above, not read here; T144 chooses the mask's
+            -- shape (character-only, +1 column padding, or rectangle) by swapping this function.
+            ignore_cells = function(_, line, col)
+              return occupied[line * COLUMN_STRIDE + col] == true
             end,
           },
         },
