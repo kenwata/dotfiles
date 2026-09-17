@@ -11,16 +11,51 @@
 -- place and win (docs/design/snacks-dashboard-vimatrix-rain.md "読み込み方式").
 --
 -- No `cond` gate either. T139 measured a `cond = function() return vim.fn.argc(-1) == 0 end`
--- variant (skips loading snacks -- and, once T143 adds it, the <Leader>d dashboard-reopen key --
+-- variant (skips loading snacks -- and the <Leader>d dashboard-reopen key below (T143) with it --
 -- for any session started with a file argument) against this always-loaded version. The
 -- with-argument startup-time increase over the pre-T138 baseline was smaller for `cond`
 -- (+5.027ms, 95% CI [1.419, 7.503]) than for always-loaded (+9.475ms, 95% CI [4.674, 15.539]),
 -- but the user judged the difference too small to matter and kept always-loaded
 -- (docs/design/snacks-dashboard-vimatrix-rain.md "読み込み方式"; decision recorded 2026-09-17).
+-- Reopens the startup dashboard in the current window (used by the <leader>d key below).
+-- Non-floating, like the startup path (Snacks.dashboard.open's `win` argument skips creating a
+-- float), so <Esc> stays unbound here and doesn't collide with vimatrix's Rain-stop <Esc>
+-- (docs/design/snacks-dashboard-vimatrix-rain.md "再表示キー `<Leader>d`"; a floating
+-- Snacks.dashboard() was rejected for this reason, see the design's "検討した代替案"). A terminal
+-- buffer or a winfixbuf window can't have its buffer swapped like this, so those are refused
+-- with a notification instead.
+local function reopen_dashboard()
+  local win = vim.api.nvim_get_current_win()
+  local buf = vim.api.nvim_win_get_buf(win)
+  if vim.bo[buf].buftype == "terminal" or vim.wo[win].winfixbuf then
+    vim.notify("Can't reopen the dashboard in this window", vim.log.levels.WARN)
+    return
+  end
+  local dashboard_buf = vim.api.nvim_create_buf(false, true)
+  Snacks.dashboard.open({ win = win, buf = dashboard_buf })
+  -- D:update() (called synchronously inside Snacks.dashboard.open above) binds every `keys`
+  -- item, including the "Quit" item ("q" -> ":qa"), as its own buffer-local "q" mapping,
+  -- overwriting D:init()'s earlier "q" -> "<cmd>bd<cr>" (dashboard.lua:248,692-694). That's the
+  -- desired behavior for the startup dashboard (buf 1: "q" really does mean "quit Neovim", per
+  -- the "q"/"Quit" row above), but reopening mid-session must not let "q" close the whole editor
+  -- (docs/design/snacks-dashboard-vimatrix-rain.md "再表示キー `<Leader>d`": "`q` で `:bd` され、
+  -- ウィンドウは直前のバッファに戻る"). Re-setting "q" here, after open(), targets only this
+  -- reopened buffer and leaves the startup dashboard's own "q" untouched.
+  vim.keymap.set("n", "q", "<cmd>bd<cr>", { buffer = dashboard_buf, silent = true, desc = "Close dashboard" })
+end
+
 return {
   "folke/snacks.nvim",
   version = "2",
   lazy = false,
+  -- Registered from startup (lazy = false), same as the dashboard itself, so <leader>d works in
+  -- every session including ones started with a file argument. No mini.clue entry is added: `d`
+  -- is a leaf key under <leader>, not a group, and mini.clue reads its label straight from this
+  -- `desc` the same way it does for <leader>e and <leader>ff (lua/plugins/miniclue.lua only lists
+  -- group prefixes).
+  keys = {
+    { "<leader>d", reopen_dashboard, desc = "Reopen dashboard" },
+  },
   ---@type snacks.Config
   opts = {
     dashboard = {
