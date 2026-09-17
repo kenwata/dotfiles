@@ -31,8 +31,40 @@ local function reopen_dashboard()
     vim.notify("Can't reopen the dashboard in this window", vim.log.levels.WARN)
     return
   end
+  -- Hide the tabline and statusline like the startup dashboard does (T144, user decision
+  -- 2026-09-17), restoring them the same way snacks' own startup path does in dashboard.lua's
+  -- M.setup: on Closed, or when another non-floating window is entered while this one stays.
+  local options = { showtabline = vim.o.showtabline, laststatus = vim.o.laststatus }
+  vim.o.showtabline, vim.o.laststatus = 0, 0
   local dashboard_buf = vim.api.nvim_create_buf(false, true)
-  Snacks.dashboard.open({ win = win, buf = dashboard_buf })
+  local dashboard = Snacks.dashboard.open({ win = win, buf = dashboard_buf })
+  local restore = vim.schedule_wrap(function()
+    local view = vim.fn.winsaveview()
+    for name, value in pairs(options) do
+      if vim.o[name] == 0 and value ~= 0 then
+        vim.o[name] = value
+      end
+    end
+    options = {}
+    vim.fn.winrestview(view)
+  end)
+  vim.api.nvim_create_autocmd("User", {
+    group = dashboard.augroup,
+    pattern = "SnacksDashboardClosed",
+    once = true,
+    desc = "Restore tabline/statusline hidden by the dashboard reopen",
+    callback = restore,
+  })
+  vim.api.nvim_create_autocmd("WinEnter", {
+    group = dashboard.augroup,
+    desc = "Restore tabline/statusline when leaving the reopened dashboard for a normal window",
+    callback = function()
+      local current = vim.api.nvim_get_current_win()
+      if current ~= win and vim.api.nvim_win_get_config(current).relative == "" then
+        restore()
+      end
+    end,
+  })
   -- D:update() (called synchronously inside Snacks.dashboard.open above) binds every `keys`
   -- item, including the "Quit" item ("q" -> ":qa"), as its own buffer-local "q" mapping,
   -- overwriting D:init()'s earlier "q" -> "<cmd>bd<cr>" (dashboard.lua:248,692-694). That's the
@@ -69,20 +101,28 @@ return {
         keys = {
           { icon = " ", key = "f", desc = "Find File", action = "<leader>ff" },
           { icon = " ", key = "g", desc = "Grep", action = "<leader>fg" },
-          { icon = " ", key = "e", desc = "Explorer", action = "<leader>e" },
+          -- U+F07C nf-fa-folder_open, picked on real hardware in T144 (user decision 2026-09-17)
+          -- from mini.icons' tree/mini.files glyphs and the Font Awesome folders; this one matches
+          -- the Font Awesome family of f/g/n/q above. The line is written by a script, not the
+          -- editor tools, because private-use glyphs get dropped there.
+          { icon = " ", key = "e", desc = "Explorer", action = "<leader>e" },
           { icon = " ", key = "n", desc = "New File", action = ":ene | startinsert" },
           { icon = "󰒲 ", key = "L", desc = "Lazy", action = ":Lazy" },
           { icon = " ", key = "q", desc = "Quit", action = ":qa" },
         },
-        -- Header text, layout, and item counts stay at snacks' defaults here; picked on real
-        -- hardware in T144 (docs/design/snacks-dashboard-vimatrix-rain.md "見た目の選定").
+        -- Header text (the default NEOVIM logo) and the one-column layout are snacks' defaults,
+        -- kept after seeing the alternatives on real hardware in T144 (user decisions 2026-09-17,
+        -- docs/design/snacks-dashboard-vimatrix-rain.md "見た目の選定"). Item counts are set per
+        -- section below.
       },
       sections = {
         { section = "header" },
         { section = "keys", gap = 1, padding = 1 },
         -- cwd = true scopes Recent Files to v:oldfiles under the launch directory, matching the
         -- per-project feel of the Projects section below rather than a global history.
-        { section = "recent_files", title = "Recent Files", cwd = true, padding = 1 },
+        -- limit = 8 (snacks' default is 5) for both this and Projects: picked on real hardware in
+        -- T144 (user decision 2026-09-17).
+        { section = "recent_files", title = "Recent Files", cwd = true, padding = 1, limit = 8 },
         -- The default action (chdir -> try session restore -> Snacks.dashboard.pick("files"))
         -- ends by calling mini.pick directly, bypassing minipick.lua's side-preview/ripgreprc
         -- setup; Snacks.dashboard.pick("oldfiles") has no mini.pick picker to call either. This
@@ -92,6 +132,7 @@ return {
           section = "projects",
           title = "Projects",
           padding = 1,
+          limit = 8,
           action = function(dir)
             vim.fn.chdir(dir)
             vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<leader>ff", true, true, true), "tm", true)
@@ -100,5 +141,8 @@ return {
         { section = "startup" },
       },
     },
+    -- 'cursorline' stays off here (snacks' dashboard style default): the current-item marker is a
+    -- band limited to the dashboard's text rectangle, drawn by lua/plugins/vimatrix.lua because
+    -- it shares that file's rectangle geometry (T144, user decision 2026-09-17).
   },
 }

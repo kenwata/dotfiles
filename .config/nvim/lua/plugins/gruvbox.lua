@@ -50,6 +50,29 @@ return {
       -- list, so the picker borrows it and keeps following the colorscheme if it ever changes.
       overrides = {
         MiniPickMatchCurrent = { link = "PmenuSel" },
+        -- mini.files links its explorer cursor line to CursorLine, the same #3c3836 as its float
+        -- background, so the current entry had no visible band (only the cursor marked it, and the
+        -- dashboard's Rain hides the cursor). Same treatment as the picker above, so both mini.nvim
+        -- lists mark the current entry alike (T144, user decision 2026-09-17). mini.files defines
+        -- its groups with default = true, so this override wins.
+        MiniFilesCursorLine = { link = "PmenuSel" },
+        -- Dashboard colours picked on real hardware in T144 (user decisions 2026-09-17,
+        -- docs/design/snacks-dashboard-vimatrix-rain.md "見た目の選定"): every snacks dashboard group
+        -- in the blue family, three shades -- bright for the logo, section titles, file names and
+        -- the startup numbers; neutral for keys, icons and the startup text. Item descriptions
+        -- ("Find File" ...) use the body text colour and path prefixes light4 instead of
+        -- faded_blue, which sits at a 2.23:1 contrast against the dark0 background. snacks
+        -- defines these as default links on UIEnter, after this colorscheme has loaded, so the
+        -- overrides win.
+        SnacksDashboardHeader = { fg = palette.bright_blue },
+        SnacksDashboardTitle = { fg = palette.bright_blue, bold = true },
+        SnacksDashboardFile = { fg = palette.bright_blue },
+        SnacksDashboardSpecial = { fg = palette.bright_blue },
+        SnacksDashboardKey = { fg = palette.neutral_blue },
+        SnacksDashboardIcon = { fg = palette.neutral_blue },
+        SnacksDashboardFooter = { fg = palette.neutral_blue },
+        SnacksDashboardDesc = { fg = palette.light1 },
+        SnacksDashboardDir = { fg = palette.light4 },
         -- mini.tabline links both MiniTablineCurrent and MiniTablineVisible to TabLineSel, so
         -- the buffer being edited and a buffer merely shown in another split are drawn
         -- identically. Splitting them: the current tab reverses into a solid green block, and
