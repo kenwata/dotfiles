@@ -32,12 +32,12 @@ return {
         -- them exactly as they do everywhere else, instead of snacks opening a plain, unstyled
         -- mini.pick window of its own.
         keys = {
-          { icon = " ", key = "f", desc = "Find File", action = "<leader>ff" },
-          { icon = " ", key = "g", desc = "Grep", action = "<leader>fg" },
+          { icon = " ", key = "f", desc = "Find File", action = "<leader>ff" },
+          { icon = " ", key = "g", desc = "Grep", action = "<leader>fg" },
           { icon = " ", key = "e", desc = "Explorer", action = "<leader>e" },
-          { icon = " ", key = "n", desc = "New File", action = ":ene | startinsert" },
+          { icon = " ", key = "n", desc = "New File", action = ":ene | startinsert" },
           { icon = "󰒲 ", key = "L", desc = "Lazy", action = ":Lazy" },
-          { icon = " ", key = "q", desc = "Quit", action = ":qa" },
+          { icon = " ", key = "q", desc = "Quit", action = ":qa" },
         },
         -- Header text, layout, and item counts stay at snacks' defaults here; picked on real
         -- hardware in T144 (docs/design/snacks-dashboard-vimatrix-rain.md "見た目の選定").

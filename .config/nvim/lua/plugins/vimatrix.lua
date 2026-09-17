@@ -108,9 +108,10 @@ return {
         -- SnacksDashboardOpened fires while UIEnter is still being processed (before the first
         -- frame). Deferring past that with vim.schedule lets the dashboard draw first, since
         -- synchronously filling the whole screen with extmarks here would delay it instead
-        -- (docs/design/snacks-dashboard-vimatrix-rain.md "vim.schedule で開始する理由"). pty
-        -- verification below confirms this doesn't push the dashboard's own draw time later
-        -- than before vimatrix existed (T138); a short defer_fn would be the fallback.
+        -- (docs/design/snacks-dashboard-vimatrix-rain.md "vim.schedule で開始する理由"). In the
+        -- T140 pty measurement (8 runs each, no interval) the header appeared at a median of
+        -- 199.95ms vs 191.4ms before vimatrix (T138); that was judged not a real delay, so a
+        -- short defer_fn, the fallback, was not adopted.
         vim.schedule(start_rain)
       end,
     })
@@ -182,7 +183,7 @@ return {
             background = "", -- let gruvbox's background show through the float
             blend = 100, -- cells with no character stay fully transparent
             border = "none", -- omitting this defaults to 'winborder' and shifts the grid by 1
-            zindex = 20, -- above the non-floating dashboard (10), below toggleterm (50)
+            zindex = 20, -- above the floating dashboard (10), below toggleterm (50)
             -- occupied is rebuilt by rebuild_mask() above, not read here; T144 chooses the mask's
             -- shape (character-only, +1 column padding, or rectangle) by swapping this function.
             ignore_cells = function(_, line, col)
