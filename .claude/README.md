@@ -98,7 +98,12 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     AskUserQuestion を書く瞬間には想起されず、主語・述語・目的語の省略や内輪の略称の再発が
     止まらなかった。PreToolUse hook(`hooks/check-question-legibility.sh`)が呼び出しごとに
     1回 deny してチェックリストで書き直しを強制する(セッション中に何度呼ばれても deny→
-    書き直し→通過のサイクルを繰り返す。1回きりの静的ルールでは届かない「書いた瞬間」に効く)
+    書き直し→通過のサイクルを繰り返す。1回きりの静的ルールでは届かない「書いた瞬間」に効く)。
+    同じゲートの第 1 段で、聞く必要があるか・「推奨」の向きが正しいかも点検する(2026-09-18 追加)。
+    エージェントが手直しの少ない方に「推奨」を付け、優劣の分かる判断まで聞く傾向が続いたため。
+    比べる軸は仕組みとしての完成度で、判断でき可逆なら質問を取りやめて自律的に決めて実行する。
+    規則の正は `CLAUDE.md` の Rules「Decision」。auto memory では効かなかった。取りやめが正当な
+    出口になり素通しの機会が増えるため、再呼び出しを通すマーカーの失効を 30 分から 10 分に縮めた
 13. **Markdown の装飾規則は formatter/linter で決定論的に保証** — `templates/rules/markdown.md`
     のうち機械判定できる規則(装飾の外側スペース・code fence の backtick 数)を、プロンプト遵守に
     頼らず PostToolUse hook(`hooks/format-markdown.sh` → `hooks/lib/markdown-format/`、
@@ -142,7 +147,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── hooks/
 │   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md の未コミット変更を検知(設計方針 7)
 │   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
-│   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認文の可読性ゲート(呼び出しごとに1回 deny→書き直し)
+│   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認の要否・推奨の向き・可読性のゲート(呼び出しごとに1回 deny→取りやめ or 書き直し。設計方針 12)
 │   ├── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
 │   ├── format-markdown.sh       # PostToolUse(Write|Edit) hook — 保存された .md を markdown-format CLI に通す(編集行のみ。全体整形は /markdown-cleanup)
 │   └── lib/markdown-format/     # 上記 hook が呼ぶ formatter/linter 本体(依存ゼロ・ビルドなし。cli/format/lint/scope 等 + test/。詳細は同所の README.md)
