@@ -16,6 +16,7 @@
 .claude/shell-snapshots/
 .claude/stats-cache.json
 .claude/plans/
+.claude/skills/synced/
 .claude/tasks/
 .claude/telemetry/
 .claude/.last-cleanup
@@ -48,6 +49,7 @@
 .claude-bedrock/mcp-needs-auth-cache.json
 .claude-bedrock/paste-cache/
 .claude-bedrock/plans/
+.claude-bedrock/stats-cache.json
 .claude-bedrock/plugins/
 .claude-bedrock/debug/
 # .claude-bedrock/projects/ は .claude/projects への symlink(履歴・memory 共有)なので
