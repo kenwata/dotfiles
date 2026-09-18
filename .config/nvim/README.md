@@ -34,10 +34,12 @@ symlink.
         ├── miniicons.lua    # echasnovski/mini.icons config, loaded at startup (icon provider)
         ├── minipick.lua     # echasnovski/mini.pick config, lazy-loaded on first <leader>ff/fg/fb or vim.ui.select
         ├── minitabline.lua  # echasnovski/mini.tabline config, loaded at startup (tabline)
+        ├── snacks.lua       # folke/snacks.nvim config, loaded at startup (dashboard)
         ├── surround.lua     # kylechui/nvim-surround config, lazy-loaded on first surround key
         ├── textobjects.lua  # nvim-treesitter/nvim-treesitter-textobjects config, lazy-loaded on first select/move/swap key
         ├── toggleterm.lua   # akinsho/toggleterm.nvim config, lazy-loaded on first <C-\> press
-        └── treesitter.lua   # nvim-treesitter/nvim-treesitter config, lazy-loaded on two FileType autocmds
+        ├── treesitter.lua   # nvim-treesitter/nvim-treesitter config, lazy-loaded on two FileType autocmds
+        └── vimatrix.lua     # wolfwfr/vimatrix.nvim config, lazy-loaded on VeryLazy / first dashboard
 ```
 
 - `init.lua`: calls `vim.loader.enable()` first (the bytecode cache only covers modules
@@ -142,7 +144,11 @@ symlink.
   `lazy = false` plugins at startup, since `lualine.lua`'s theme calls `require("gruvbox").palette`
   and needs gruvbox's own `config()` to have already run. Sets `background` to `dark`, passes
   every option the plugin accepts to `setup()` (each one chosen by looking at the result on
-  screen), then applies it with `:colorscheme`.
+  screen), then applies it with `:colorscheme`. `overrides` also sets nine `SnacksDashboard*`
+  groups (`Header`/`Title`/`File`/`Special` in `bright_blue`, `Key`/`Icon`/`Footer` in
+  `neutral_blue`, `Desc` in `light1`, `Dir` in `light4`) -- snacks defines these as `default = true`
+  links on `UIEnter`, after this colorscheme has already loaded, so the overrides win (see
+  `snacks.lua` below).
 - `lua/plugins/lspconfig.lua`: loads `nvim-lspconfig` at startup (`lazy = false`; a pure
   configuration-data repository, not a runtime plugin, so this costs nothing measurable),
   overrides `lua_ls` to recognize Neovim's `vim` global and runtime files, and enables the
@@ -318,6 +324,37 @@ symlink.
   identically, and an unsaved tab borrows the status line's pale bar, which sits one row below
   it under `laststatus = 3`. The overrides give the current tab a solid green block, leave
   green text for a visible-but-not-current one, and move the unsaved variants to yellow.
+- `lua/plugins/snacks.lua`: config for `folke/snacks.nvim` (`version = "2"`; only its `dashboard`
+  module is configured -- see `docs/design/snacks-dashboard-vimatrix-rain.md` in the planning
+  repository). Loaded at startup (`lazy = false`), for the same reason as `gruvbox.lua` and
+  `minitabline.lua` above: the dashboard it draws is the first frame Neovim shows on a
+  no-argument launch. No `priority` is set: the dashboard acts on `UIEnter`, which runs after
+  every plugin's `config()` regardless of load order, unlike the `priority = 1000` plugins above
+  that hook `BufReadPre` and must win a startup race. No `cond` gate either -- T139 measured a
+  `cond = function() return vim.fn.argc(-1) == 0 end` variant (skips loading snacks, and the
+  `<leader>d` key below with it, for any session started with a file argument) against this
+  always-loaded version. The with-argument startup-time increase over the pre-dashboard baseline
+  was smaller for `cond` (+5.0ms, 95% CI [1.4, 7.5]) than for always-loaded (+9.5ms, 95%
+  CI [4.7, 15.5]), but the user judged the difference too small to matter and kept always-loaded,
+  which also keeps `<leader>d` working in file-argument sessions.
+  The dashboard shows six key items -- `f` Find File (`<leader>ff`), `g` Grep (`<leader>fg`),
+  `e` Explorer (`<leader>e`), `n` New File, `L` Lazy, `q` Quit (`:qa`) -- routed through the
+  existing keymaps rather than snacks' own pickers, so `f`/`g` keep the mini.pick side-preview
+  windows (`minipick.lua` above) and `e` keeps the mini.files explorer (`minifiles.lua` above).
+  Below the keys, a Recent Files and a Projects section (both `limit = 8`, picked on real
+  hardware, T144) list `v:oldfiles`/known project roots scoped to the launch directory
+  (`cwd = true`); picking a Projects entry chdirs and replays `<leader>ff`. Header text and the
+  one-column layout are snacks' own defaults, kept after comparing alternatives on real hardware
+  in T144. `<leader>d` reopens the dashboard in the current window -- non-floating, matching the
+  startup path, so `<Esc>` stays free for vimatrix's Rain-stop key below and doesn't collide with
+  a floating dashboard's own `<Esc>` binding. It hides the tabline/statusline the same way the
+  startup dashboard does and restores them on close or on leaving the window, refuses to run
+  inside a terminal buffer or a `winfixbuf` window (notifies instead), and re-binds `q` to close
+  only the reopened buffer (`:bd`) rather than quitting Neovim, since snacks' own `q` -> `:qa`
+  binding would otherwise win there too. `'cursorline'` stays off (snacks' dashboard style
+  default): the current-item band is instead a `CursorLine`-highlighted strip limited to the
+  dashboard's text rectangle, drawn by `vimatrix.lua` below because it shares that file's
+  rectangle geometry (T144).
 - `lua/plugins/surround.lua`: config for `kylechui/nvim-surround`. Not loaded at startup; the
   spec's `keys` table declares 11 expr mappings, one per action (`ys`, `yss`, `yS`, `ySS`, `ds`,
   `cs`, `cS`, `S`, `gS`, `<C-g>s`, `<C-g>S`), each returning the matching `<Plug>` name so
@@ -408,6 +445,55 @@ symlink.
   this file updates the plugin's own Lua code and query files, but not the
   eight already-compiled parsers; keeping those current after such a bump needs a manual
   `:TSUpdate`.
+- `lua/plugins/vimatrix.lua`: config for `wolfwfr/vimatrix.nvim` (Matrix-style Digital Rain,
+  drawn as a full-screen non-focusable float), pinned to commit
+  `eea0efca87dde2e83b9a744dc4f93a582586466c` (no release tag exists for this plugin) --
+  see `docs/design/snacks-dashboard-vimatrix-rain.md` in the planning repository. Not loaded
+  at startup; lazy-loaded through two racing paths, whichever fires first on a given session
+  (lazy.nvim runs `config()` once and the other path becomes a no-op): `event = "VeryLazy"`
+  (fires after startup on every session, needed so the 10-minute screensaver below is armed
+  even in a session that never opens the dashboard) and `init()` listening for
+  `User SnacksDashboardOpened` and calling `require("lazy").load()` itself (`event = "User ..."`
+  cannot be used directly here -- lazy.nvim drops the pattern on the *first* firing of a `User`
+  event it triggered by loading a plugin, so a handler registered inside `config()` would miss
+  that first firing). On a no-argument launch the dashboard-open path normally wins, so Rain
+  starts as soon as the dashboard appears rather than waiting for `VeryLazy`.
+  Rain starts over the dashboard once `SnacksDashboardOpened` fires (guarded against the
+  dashboard buffer having already been replaced by fast typeahead, e.g. `:e file<CR>` right
+  after launch) and stops when the dashboard closes (`SnacksDashboardClosed` -> `:VimatrixClose`).
+  `<Esc>` stops only the Rain, leaving the dashboard on screen; `q` closes the dashboard and
+  Rain together. The same Rain also runs as a screensaver after 10 minutes of no input during
+  normal editing, not just while the dashboard is shown (`auto_activation.screensaver.timeout =
+  600`; the other four screensaver fields stay at the plugin's own defaults). The timer only
+  starts after the first activity in the session, pauses on `FocusLost` and resumes on
+  `FocusGained`, and does not fire while inside a terminal-mode buffer or the command line
+  (plugin defaults). `:VimatrixScreenSaverStop` (a command the plugin itself defines) disables
+  it for the rest of the session without restarting Neovim.
+  Rain is masked to stay off the dashboard's text: every screen cell outside the dashboard
+  window, plus each non-whitespace dashboard character and one cell on either side of it, is
+  excluded through `window.by_filetype.snacks_dashboard.ignore_cells`, rebuilt on every
+  dashboard redraw/resize. A `CursorLine`-highlighted band tracks the cursor row within that
+  same rectangle (the "current item" marker `'cursorline'` would otherwise draw for the whole
+  window; see `snacks.lua` above). A `nvim_set_decoration_provider` callback repaints the Rain
+  glyphs that do fall inside the dashboard's rectangle at 25% of their original color, mixed
+  toward the colorscheme background, without modifying vimatrix itself; it also skips any cell
+  that lies under (or one cell around) another visible float such as mini.files or a mini.pick
+  window, which otherwise flickered wide characters in those floats for a frame (measured 386
+  changed cells over 15 samples before this guard, 0 after; T144). Because mini.pick blocks
+  redraws with `getcharstr()` while a picker is open, a timer redraws the screen at Rain's own
+  frame rate for as long as a picker stays open, so Rain does not appear to freeze behind it.
+  The terminal cursor is hidden for the whole session while dashboard Rain is open (the plugin's
+  own behavior, via `Cursor` blend 100), so this file re-shows it whenever focus leaves the
+  dashboard window (another window, or the command line) and hides it again on return; the
+  file-editing screensaver is left to vimatrix's own cursor handling. A terminal resize restarts
+  Rain at the new size through the plugin's own `VimatrixUndo` cancellation path rather than a
+  direct restart, to avoid chaining stale keymap closures across repeated resizes.
+  `colourscheme = "green"` and the glyph pool (`alphabet.built_in`: half-width katakana, digits,
+  symbols, upper-case Latin, binary) were picked on real hardware in T144 over the alternatives
+  (`docs/design/snacks-dashboard-vimatrix-rain.md` "見た目の選定"); the `droplet` block copied
+  from the README's "Recommendation for low-power systems" (lower `max_fps`, fewer glitches) is
+  kept in the file, commented out, because T144 chose the plugin's own defaults (25 fps,
+  glitches on) instead after seeing both on real hardware.
 - `lazy-lock.json`: generated by lazy.nvim once a plugin is installed. Records the
   exact revision in use so another machine can reproduce it.
 - `ripgreprc`: `rg` (ripgrep) config (`--hidden` and `--glob=!.git`). Only takes effect
