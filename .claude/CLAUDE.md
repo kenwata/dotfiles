@@ -28,6 +28,8 @@ Once an outcome is set, derive the minimal path by working backward from the ide
 - **Debug**: Eliminate non-obvious bugs by observation, pattern comparison, 3+ hypotheses, and testing. Avoid single-hypothesis conclusion
 - **Naming**: No ad-hoc abbreviated IDs (M0, P1, Tier2...) in designs, plans, or docs. Use descriptive names ("Phase 1: schema migration"). Sole exception: IDs defined by TODO.md's own convention (task IDs T<n>; grouping/sort indices #<n> and #<n>-<m>)
 - **Reader-context**: User-facing text must survive a first-time reader: no elided subject/verb/object; define self-coined names, IDs, and jargon at first use in the same message; restate content instead of back-references ("as discussed above"). The reader has not seen your code, tool output, or screenshots. Define once per message — don't repeat definitions in every sentence
+- **Recurrence**: Before designing any research, analysis, or operational system, establish two things first: does this run again, and how much human involvement does the second round onward assume? A system designed for a single run gets rebuilt once the human gate turns out to be the bottleneck on round two. Say which answer you are building for
+- **Estimate**: When asked how long something will take, give a rough number up front instead of deferring to "not measured yet". Separate the human's attended hours from AI execution time, and state the basis (measured runs, item count, per-item cost) and the spread
 
 ## Work style
 
