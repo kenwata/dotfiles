@@ -181,6 +181,15 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/check-stop-question.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
       }
     ],
     "StopFailure": [
