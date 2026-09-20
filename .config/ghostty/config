@@ -1,0 +1,6 @@
+font-size = 15
+font-family = Moralerspace Neon HW
+background-opacity = 0.9
+keybind = global:option+space=toggle_visibility
+window-save-state = always
+macos-option-as-alt = left

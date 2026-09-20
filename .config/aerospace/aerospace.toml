@@ -92,6 +92,11 @@ on-window-detected = [
         run = 'move-node-to-workspace 2',
     },
     {
+        # Trialling WezTerm alongside ghostty; both land on the terminal workspace.
+        if = 'test %{app-bundle-id} = com.github.wez.wezterm',
+        run = 'move-node-to-workspace 2',
+    },
+    {
         if = 'test %{app-bundle-id} = com.openai.codex',
         run = 'move-node-to-workspace 3',
     },
