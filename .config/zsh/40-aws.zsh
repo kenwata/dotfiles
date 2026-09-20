@@ -34,6 +34,11 @@ claude-bedrock() {
 # ccusage にそのまま渡すと Anthropic 直の利用分まで混ざる。Bedrock 発行分は
 # message.id が msg_bdrk_ で始まり requestId が null になる(Anthropic 直は
 # msg_01.../req_...)ので、その行だけを一時ディレクトリへ抽出してから渡す。
+#
+# 統合(複数エージェント横断)版の `ccusage monthly` はキャッシュトークンを
+# 二重計算するらしく、モデルによって実測(`ccusage claude monthly`)の
+# 1.0〜2.3倍の値になる(2026-09時点、ccusage v20.0.23で確認)。Claude 専用の
+# `claude monthly --breakdown` を使う。
 bedrock-cost() {
   local src="$HOME/.claude/projects"
   local tmp
@@ -49,9 +54,10 @@ bedrock-cost() {
   done
 
   CLAUDE_CONFIG_DIR="$tmp" \
-  npx ccusage@latest monthly \
+  npx ccusage@latest claude monthly \
     --since "$(date +%Y%m01)" \
-    --timezone Asia/Tokyo "$@"
+    --timezone Asia/Tokyo \
+    --breakdown "$@"
   local exit_code=$?
 
   rm -rf "$tmp"
