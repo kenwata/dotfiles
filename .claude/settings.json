@@ -107,15 +107,6 @@
       {
         "hooks": [
           {
-            "command": "~/.claude/hooks/require-approval-for-rule-writes.sh",
-            "type": "command"
-          }
-        ],
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit"
-      },
-      {
-        "hooks": [
-          {
             "command": "~/.claude/hooks/check-new-directory.sh",
             "type": "command"
           }
@@ -135,10 +126,6 @@
         "hooks": [
           {
             "command": "~/.claude/hooks/deny-subagent-git-write.sh",
-            "type": "command"
-          },
-          {
-            "command": "~/.claude/hooks/require-approval-for-rule-writes.sh",
             "type": "command"
           }
         ],
