@@ -81,7 +81,7 @@
     ]
   },
   "language": "japanese",
-  "model": "fable",
+  "model": "sonnet",
   "outputStyle": "Natural Japanese",
   "permissions": {
     "allow": [
