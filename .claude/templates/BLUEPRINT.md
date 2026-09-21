@@ -23,8 +23,9 @@
 | 変更の三段分類(参照の訂正 / 部分改訂 / 再計画)と経路 | 本書 §6「変更の三段分類」 | `skeletons/todo.md` 冒頭コメント「書き換え」と §0・`skeletons/CLAUDE.project.md` セッション運用・`skeletons/handoff.md`(穴の記録の書式)・`skeletons/design.md`(更新の分岐)・`commands/{execute-task,amend,elaborate,breakdown,follow-up}.md`・`model-routing.md`・`README.md`(ライフサイクル)・Codex同名skill・`.codex/AGENTS.md` |
 | タスク状態の値域(`[ ]` / `[x]` / `[-]`)・未着手タスクの書き換え・由来タグ | `skeletons/todo.md` 冒頭コメント | 本書 §6・`rules/growing-docs.md`・`skeletons/CLAUDE.project.md` セッション運用・`commands/{execute-task,amend,breakdown,follow-up}.md`(`follow-up` 機械チェック⑧は検査のため規則を逐語で参照する)・`README.md`・Codex同名skill・`.codex/AGENTS.md` |
 | 本流の計器(本流の宣言・数え方・発火の判定) | 本書 §6「本流の計器」と `hooks/lib/mainline-gauge/`(計算の実体。各コマンドは文章で再現せず呼び出す) | `commands/breakdown.md` 手順 2・`commands/elaborate.md` 手順 1 と 3・`skeletons/design.md` 冒頭コメント・`skeletons/CLAUDE.project.md` セッション運用・`README.md`・Codex同名skill・`.codex/AGENTS.md`・`.codex/tests/run.sh` |
-| 段階的分解(1 回 1 段階・`未分解` の語・計画行を完了にしない規則) | `skeletons/design.md`(段階と「タスク分解」節の書式)と `skeletons/todo.md` 冒頭コメント(計画行の状態) | 本書 §6「段階的分解」・`commands/{breakdown,elaborate,execute-task,follow-up,amend}.md`・`skeletons/design-index.md`・`skeletons/CLAUDE.project.md`・`README.md`・`hooks/lib/mainline-gauge/gauge.mjs`(行頭の `段階 <n>: 未分解` を検出するため書式を逐語で持つ)・Codex同名skill・`.codex/AGENTS.md` |
-| 設計済みタスクのモデル役割・停止境界 | `model-routing.md` | 本書 §6・`commands/execute-task.md`・`commands/amend.md`・`commands/follow-up.md`・Codex同名skill |
+| 段階的分解(1 回 1 段階・`未分解` の語・計画行を完了にしない規則) | `skeletons/design.md`(「段階と分解の指針」と「タスク分解」節の書式)と `skeletons/todo.md` 冒頭コメント(計画行の状態) | 本書 §6「段階的分解」・`commands/{breakdown,elaborate,execute-task,follow-up,amend}.md`・`skeletons/design-index.md`・`skeletons/CLAUDE.project.md`・`README.md`・`hooks/lib/mainline-gauge/gauge.mjs`(行頭の `段階 <n>: 未分解` を検出するため書式を逐語で持つ)・Codex同名skill・`.codex/AGENTS.md` |
+| 設計済みタスクのモデル役割・停止境界・分業の目的・分解の基準となる実行者 | `model-routing.md` | 本書 §6・`commands/{execute-task,amend,follow-up,elaborate,breakdown}.md`・`README.md` 設計方針 16・Codex同名skill・`.codex/AGENTS.md` |
+| 自走できるタスク記述(固定と裁量の境界・共通の前提・分割の規則) | `skeletons/design.md`(「実行者の裁量と停止条件」「段階と分解の指針」「落とし穴」)・`skeletons/todo.md` 冒頭コメント(共通の前提)・`commands/breakdown.md` 手順 3(共通の前提の書き方と分割の規則) | 本書 §6「上下流の分業と自走できるタスク記述」・`commands/{elaborate,execute-task,amend,follow-up}.md`・`README.md`・Codex同名skill・`.codex/AGENTS.md` |
 | 設計書索引の書式・列定義 | `skeletons/design-index.md` 冒頭コメント | 本書 §6(位置づけと更新配線のみ)・`README.md`(列名の列挙のみ) |
 | 設計書の「全体構想」行の書式 | `skeletons/design.md` 冒頭コメント | `commands/elaborate.md` 手順5(生成側)・`commands/follow-up.md` 機械チェック⑨(検査側。書式を検査するため逐語で持つ) |
 
@@ -353,6 +354,30 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
   「続行 / スコープ削減 / 廃止」を選ばせる。後から足したタスクは完了条件ブロックの `[由来: …]`
   タグで数えられる
 
+### 上下流の分業と自走できるタスク記述
+
+設計と計画は上位モデル、実装は通常実装の役割のモデルが担う(役割と目的の正は `model-routing.md`)。
+目的は品質ではなく、上位モデルの利用枠を設計と計画に充てることである。実行中に計画工程へ戻ると
+その枠を消費するので、通常実装のモデルが上位モデルの判断なしに走り切れる設計書とタスクを書く。
+
+- **実例**: 2026-09 のプロジェクトでは、利用者が `/elaborate` と `/breakdown` のたびに「通常実装の
+  モデルで自走できるように」と手で指定しており、完了 77 件中 74 件を通常実装のモデルが単独で完了させた。
+  指定が作っていたのはタスクの細かさではなく、設計書の「裁量と停止条件」(固定するもの / 裁量に任せる
+  もの / 固定を満たせない時は変更せずに止まる)「/breakdown への指針」「落とし穴」の節(雛形では
+  「実行者の裁量と停止条件」「段階と分解の指針」「落とし穴」)と、番号付きの項(タスクが「第 n 項」で名指しする)、`TODO.md` の
+  計画ごとの「共通の前提」だった。名前や分け方を明示的に裁量へ渡したタスクも完了しており、効いて
+  いたのは判断を無くすことではなく、固定と裁量の境界を引くことだった
+- **判定を要する規則は設計書で確定する**: 段階の境界、採否、閾値を設計書で決め、タスクには規則に
+  当てはめる作業だけを残す。裁量で決めた点は実行者が `docs/decisions.md` に残し、後続のタスクが読む
+- **共通の前提は計画につき 1 回**: 設計書のどの項を読むかと停止の規則を、計画セクションのタスク表と完了条件
+  ブロックの間に書き、
+  各タスクは項を名指しする。`TODO.md` は全セッションが毎回読むので、設計書に書いてあることを完了条件へ
+  転記しない(同じプロジェクトで完了条件 1 本が中央値 約 1,900 文字、最大 約 6,500 文字まで膨らんでいた)
+- **足りないのが記述なら割らない**: 分割の理由は 大きさ / 外部状態の境界 / 検証者または実行者が別 /
+  依存 のどれかで言えること。細かく割るほど件数が積み上がり、着手前に陳腐化する
+- **個々の T に予定モデルは付けない**: 全タスクに共通の実行者の基準を置くだけで、`TODO.md` にモデルの
+  事前選択は持たせない。詰まった時は `/execute-task` の既存の停止条件とエスカレーション提案に任せる
+
 ### 本流の計器(支線の積み増しを見える形で通過させる)
 
 支線(道具立て・基盤整備など、本流を止めて行う計画)は、毎回 `plan.md` に正式に追記され利用者も
@@ -430,7 +455,7 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 2. 改訂された規約の段落だけを冒頭コメント・§0 へ移す(表の本体・タスク行・完了条件ブロックには触れない)
 3. 同梱先を同じコミットで同期する: プロジェクトの `CLAUDE.md`(または `AGENTS.md`)のセッション運用、
    `.claude/rules/`(および `.codex/rules/`)の該当ルール、archive の冒頭コメント
-4. `/follow-up` 機械チェック⑧相当(追記位置マーカーの本数、タスク行と完了条件ブロックの 1 対 1)を
+4. `/follow-up` 機械チェック⑧相当(追記位置マーカーの本数、タスク行と完了条件ブロックの 1 対 1。`共通の前提(` で始まる段落は対象外)を
    実行し、移行で構造を壊していないことを確認する
 
 コマンド側は、冒頭コメントが新しい規約(未着手タスクの書き換え、`[-]`)を定義していない
