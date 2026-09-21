@@ -54,6 +54,7 @@ grep -qx 'system-marker' "$fake_codex/skills/.system/marker"
 grep -qx 'session-marker' "$fake_codex/sessions/marker"
 [[ -L "$fake_codex/skills/follow-up" ]]
 [[ -L "$fake_codex/skills/elaborate" ]]
+[[ -L "$fake_codex/skills/amend" ]]
 grep -qx 'existing-proposal-reviewer-backup' "$backup/agents/proposal-reviewer.toml"
 migrated_proposal_reviewer_backup="$(find "$backup/agents" -maxdepth 1 -type l -name 'proposal-reviewer.toml.*')"
 [[ -n "$migrated_proposal_reviewer_backup" ]]

@@ -20,7 +20,9 @@
 | ディレクトリ配置規約 | `rules/coding-principles.md` §13 | `skeletons/architecture.md` 冒頭コメント(ポインタのみ・転記しない) |
 | plan mode 粒度の判定基準(計画粒度 / タスク粒度) | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用 |
 | タスク実行・軽量終了・総点検の三層 | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用・`commands/execute-task.md`・`commands/follow-up.md` |
-| 設計済みタスクのモデル役割・停止境界 | `model-routing.md` | 本書 §6・`commands/execute-task.md`・`commands/follow-up.md`・Codex同名skill |
+| 変更の三段分類(参照の訂正 / 部分改訂 / 再計画)と経路 | 本書 §6「変更の三段分類」 | `skeletons/todo.md` 冒頭コメント「書き換え」と §0・`skeletons/CLAUDE.project.md` セッション運用・`skeletons/handoff.md`(穴の記録の書式)・`skeletons/design.md`(更新の分岐)・`commands/{execute-task,amend,elaborate,breakdown,follow-up}.md`・`model-routing.md`・`README.md`(ライフサイクル)・Codex同名skill・`.codex/AGENTS.md` |
+| タスク状態の値域(`[ ]` / `[x]` / `[-]`)・未着手タスクの書き換え・由来タグ | `skeletons/todo.md` 冒頭コメント | 本書 §6・`rules/growing-docs.md`・`skeletons/CLAUDE.project.md` セッション運用・`commands/{execute-task,amend,breakdown,follow-up}.md`(`follow-up` 機械チェック⑧は検査のため規則を逐語で参照する)・`README.md`・Codex同名skill・`.codex/AGENTS.md` |
+| 設計済みタスクのモデル役割・停止境界 | `model-routing.md` | 本書 §6・`commands/execute-task.md`・`commands/amend.md`・`commands/follow-up.md`・Codex同名skill |
 | 設計書索引の書式・列定義 | `skeletons/design-index.md` 冒頭コメント | 本書 §6(位置づけと更新配線のみ)・`README.md`(列名の列挙のみ) |
 | 設計書の「全体構想」行の書式 | `skeletons/design.md` 冒頭コメント | `commands/elaborate.md` 手順4(生成側)・`commands/follow-up.md` 機械チェック⑨(検査側。書式を検査するため逐語で持つ) |
 
@@ -163,11 +165,13 @@ HANDOFF.md は全体上書きで過去が消え、decisions.md は判断(なぜ)
 (自動ロードされない)で、必要時のみ検索して引く。
 
 - **粒度**: 1 タスク完了 = 1 コミット。Claude が自動で実行する。変更を生まないタスク
-  (調査・見送り判断)も `git commit --allow-empty` で T<n> 付きコミットを残し、
+  (調査・見送り判断。調査して「変更不要」と結論したタスクは成果が出ているので `[x]` であり、
+  実行しないと決めたタスクの `[-]`(廃止)とは区別する)も `git commit --allow-empty` で T<n> 付きコミットを残し、
   調査結果の要点は本文「対応:」に書く(diff ゼロの作業を作業ログ層から欠落させない)
-- **メッセージ書式**(prefix は feat / fix / docs / refactor / design / plan / chore または
+- **メッセージ書式**(prefix は feat / fix / docs / refactor / design / plan / amend / chore または
   スコープ名。design は /elaborate による設計書コミット用、plan は /breakdown による
-  計画着地コミット用):
+  計画着地コミット用、amend は /amend による設計の部分改訂コミット用 — amend のコミットは
+  総点検の契機になる「完了した T の件数」に数えない):
 
   ````
   <prefix>: <タスク要約(50字以内)>
@@ -202,7 +206,7 @@ TODO.md 側が完了タスクを積極的にローテーションして手放す
 40 行を超えそうな内容は HANDOFF.md に書かず、要約してポインタ(パス+行番号、または
 `docs/decisions.md`・後述の TODO.md 等への参照)に留める。HANDOFF.md 自体はロー
 テーションしない(全体上書きが前提のため `rules/growing-docs.md` のローテーション手順は
-適用対象外)。TODO.md・changelog 等の真に append-only なファイルが予算を超えた場合のみ、
+適用対象外)。TODO.md・changelog 等の伸び続けるファイルが予算を超えた場合のみ(TODO.md で逐語不変なのは完了・廃止済みの項目と archive であり、未着手タスクは後述「変更の三段分類」の経路で改訂できる)、
 同ルールに従い `.claude/archive/` へ **一字一句そのまま** 移動し、移動後は元データとの
 diff で無損失を機械的に検証する。archive は自動ロードされないため、肥大化しても
 コンテキストコストはゼロのまま(必要時のみ明示的に読む)。
@@ -215,10 +219,11 @@ diff で無損失を機械的に検証する。archive は自動ロードされ�
 壁打ち(通常モード)→ plan.md(全体構想)→ /initialize(下地)
   → /elaborate(設計書へ。入力は plan.md の 1 フェーズ、または plan mode の承認済みプラン+会話)
   → /breakdown(TODO へ。入力は設計書だけ)→ /execute-task(1タスク=1コミット)
+      ├─ 実行中に設計の穴を見つけたら: 穴の記録を HANDOFF.md に残して停止 → /amend(設計書の該当節と未着手タスクを一回で改訂)→ 中断した T<n> へ戻る
   → 節目で /follow-up(checkpoint間の横断総点検)
   → 次フェーズ: /elaborate へ戻る
         ├─ docs/design/<slug>.md  … 安定文書(フェーズ内の why/what。状態を書かない。plan.md のフェーズへのポインタを持つ)
-        ├─ docs/design/index.md   … 派生ビュー(設計書の索引。列定義は skeletons/design-index.md が正。/elaborate が追記・/breakdown が T 列)
+        ├─ docs/design/index.md   … 派生ビュー(設計書の索引。列定義は skeletons/design-index.md が正。/elaborate が追記・/breakdown が T 列・タスクを足した /amend も T 列)
         └─ TODO.md                … 実行状態(計画 #n = plan.md のフェーズ。タスクID通し番号+完了条件)
 実行中の plan mode(既存 T<n> を実行する手段の計画 = タスク粒度)は /elaborate・/breakdown の対象外
 ````
@@ -293,8 +298,8 @@ HANDOFF.md)」「T完了時は `/execute-task` が完了条件照合とタスク
 ① TODO.md の該当タスクと実行系を更新してT単位でコミット ② 状態が変わった場合、または
 毎回行うコールドスタート確認で不足が見つかった場合だけ HANDOFF.md を全体上書き(確認の基準は
 `skeletons/todo.md` §0、書く事実の基準と上書き前の振り分けは `skeletons/handoff.md` 冒頭コメントが正) ③ 該当すれば docs/decisions.md へ追記 ④ TODO.md から、
-セッション開始時の HEAD 時点で既に `[x]` だったタスクを `.claude/archive/TODO.md` へ移す
-(手順の実体は `skeletons/todo.md` の規約コメントが正。当該セッションで `[x]` にしたタスクは
+セッション開始時の HEAD 時点で既に `[x]` または `[-]` だったタスクを `.claude/archive/TODO.md` へ移す
+(手順の実体は `skeletons/todo.md` の規約コメントが正。当該セッションで `[x]`・`[-]` にしたタスクは
 移さない)。軽量終了処理では設計全体の照合や独立レビューを行わない。`/follow-up` は、最新の
 `Follow-Up-Checkpoint: true` 以後に完了した異なるT番号が5件に達した時、依存グループ完了時、
 統合前、ライブ検証前、設計変更または不整合を検出した時に実行し、完了時に同トレーラーを持つ
@@ -308,6 +313,56 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 機械保証が必要になった時点で `.claude/tasks.yaml` を正とし、`TODO.md` を `yq` 生成の
 ビューへ移す。SQLite は `git diff` でタスク定義の変更履歴が追えなくなるため、
 複数プロジェクト横断のダッシュボードが必要になるまで見送る。
+
+### 変更の三段分類(参照の訂正 / 部分改訂 / 再計画)
+
+実行中や総点検で「設計書または TODO を変える必要」が出た時は、変更の大きさで経路を分ける(本節が正)。
+判定は「設計書のどの節が変わるか」と「完了条件に触れるか」で行う。目的は、**修正の大きさに、読む量・
+使うモデル・増えるタスク数を比例させる** ことである。
+
+| 段 | 判定 | 経路 | モデル(正は `model-routing.md`) |
+| -- | ---- | ---- | ------------------------------ |
+| 参照の訂正 | リポジトリの現物で機械的に真偽が出る参照(パス・ファイル名・識別子名)の誤りだけ。完了条件ブロックには触れない | `/execute-task` がその場で直し、`docs/decisions.md` に 1 行、同じ T のコミットに含めて続行 | 実行中のモデル |
+| 部分改訂 | 分解済み(`TODO.md` に計画行がある)の設計書で、「方針・構成」節、または完了条件(測り方を含む)が変わる。「目的」「スコープ / 非スコープ」と `plan.md` のフェーズ構成は不変。利用者が指示する単発のタスク追加もここ | `/amend`(設計書の該当節・未着手タスクの書き換え・最小限の追加・廃止を一回で着地。新しい計画行は作らない) | 設計の部分改訂の役割 |
+| 再計画 | 「目的」「スコープ / 非スコープ」または `plan.md` のフェーズ構成が変わる | `/elaborate`(既存設計書の更新)→ `/breakdown`(同じ計画行の未着手タスクの書き換え・廃止・追記) | 計画工程 |
+
+- **区別が無かった実例**: 変更の権限が「一切変えない(`/execute-task`)」と「計画粒度でやり直す」の
+  2 段しか無かった 2026-09 の 2 プロジェクトで、(a)穴一つのために最上位モデルで設計書全体を
+  読み直す (b)1 件だけのタスク追加に `/breakdown` を流用する (c)既存タスクを書き換えられないので
+  整合を取るための別タスクを積む (d)無効になったタスク数十件が `TODO.md` に有効な顔で残り、
+  無効の事実は全体上書きされる `HANDOFF.md` にしか無い、が同時に起きた
+- **未着手タスクは書き換える。補償タスクを積まない**: 不変なのは `T<n>`・`#<n>-<m>`・完了済みと
+  廃止済みの項目・archive だけ。経緯は git 履歴と `docs/decisions.md` が持つ
+- **基準を動かす者と検査する者を分ける**: `/execute-task` は完了条件に触れない。完了条件を
+  変えられるのは利用者の承認を経る `/amend` と再計画時の `/breakdown` だけで、`/follow-up` が
+  変更前の原文と `docs/decisions.md` を突き合わせ、実装に合わせた緩和でないかを検査する
+  (`/follow-up` 自身は完了条件を変えない)
+- **穴の記録**: `/execute-task` は設計の穴で止まる時、`HANDOFF.md` の「仕掛かり中」に 4 項目
+  (観測した事実と証拠 / 矛盾または欠落している設計書の節 / 満たせない完了条件の項目 /
+  停止位置と途中成果物)を書く。安いモデルが観測で記録を作り、部分改訂のモデルは記録と
+  該当節だけを読む
+- **廃止(`[-]`)**: 実行しないと決めたタスクは、消さず・完了にもせず `[-]` にして理由と置き換え先を
+  行に書く(規約の実体は `skeletons/todo.md` 冒頭コメント)。archive へ移っても廃止と分かる
+- **追加の歯止め**: `/amend` の 1 回の実行で追加できるタスクは 3 件まで。超えるなら利用者に
+  「続行 / スコープ削減 / 廃止」を選ばせる。後から足したタスクは完了条件ブロックの `[由来: …]`
+  タグで数えられる
+
+### 規約改訂を既存プロジェクトへ届ける手順
+
+既存プロジェクトの `TODO.md`・`HANDOFF.md` 等は **自身の冒頭コメントを正とする**(各コマンドは
+既存ファイルを新形式へ勝手に変換しない)。したがって `skeletons/` の規約を改訂しても、既存
+プロジェクトには届かない。届ける時は、プロジェクトごとに次を 1 コミットで行う:
+
+1. `diff` で、プロジェクトのファイル冒頭コメント・§0 と `skeletons/` の現行版との差を取り、
+   プロジェクト固有の記述(パスの読み替え、固有の列、固有の例外)を特定して保持する
+2. 改訂された規約の段落だけを冒頭コメント・§0 へ移す(表の本体・タスク行・完了条件ブロックには触れない)
+3. 同梱先を同じコミットで同期する: プロジェクトの `CLAUDE.md`(または `AGENTS.md`)のセッション運用、
+   `.claude/rules/`(および `.codex/rules/`)の該当ルール、archive の冒頭コメント
+4. `/follow-up` 機械チェック⑧相当(追記位置マーカーの本数、タスク行と完了条件ブロックの 1 対 1)を
+   実行し、移行で構造を壊していないことを確認する
+
+コマンド側は、冒頭コメントが新しい規約(未着手タスクの書き換え、`[-]`)を定義していない
+ファイルには新しい操作を着地させず、本手順による移行が先に必要だと報告して止まる。
 
 ## 7. ロール配置パターン(agmsg)
 

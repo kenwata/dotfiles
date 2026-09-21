@@ -9,7 +9,12 @@ paths:
 
 # Growing Documents — Verbatim Archive Rotation
 
-Rules for append-only documents that grow over time (handoff, TODO lists, changelogs).
+Rules for documents that grow over time (handoff, TODO lists, changelogs).
+Most are append-only. `TODO.md` is the exception in one respect: its **open** (`[ ]`) tasks and
+their completion-criteria blocks may be revised in place by the workflows its own header comment
+names (`/amend`, and `/breakdown` during re-planning). Completed (`[x]`) and abolished (`[-]`)
+entries, task IDs, and everything already in the archive stay verbatim. When rotating `TODO.md`,
+treat `[-]` entries exactly like `[x]` entries.
 Goal: keep the working file cheap to load, with **zero information loss**.
 
 ## Line budget

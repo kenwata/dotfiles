@@ -48,7 +48,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    設計書が増えるとファイル名から作成順が追えず、名前の似た設計書の内容も判別できなくなるため、
    `docs/design/index.md`(作成日 / フェーズ / 設計書 / 表題 / タスクID範囲の索引)を併せて持つ。
    索引は設計書の実体と git の追加履歴から起こす **派生ビュー** であり正ではない
-   (`/elaborate` が行を足し、`/breakdown` が `T` 列を埋め、`/follow-up` の機械チェック⑩が
+   (`/elaborate` が行を足し、`/breakdown` が `T` 列を埋め(タスクを足した `/amend` も直す)、`/follow-up` の機械チェック⑩が
    漏れと食い違いを検出する)
 4. **ロール指示は遅延ロード** — マルチエージェント(agmsg)のロール定義は
    プロジェクト内 `agents/<role>/CLAUDE.md` に置く。その配下で作業するセッションにしか
@@ -156,12 +156,13 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   ├── log-test-analyst.md      # ログ・テスト出力の解析 — 読み取り専用
 │   ├── parallel-implementer.md  # 独立した実装スライス — 唯一 Write/Edit を持つ
 │   ├── diff-reviewer.md         # 差分の外部レビュー(/follow-up 手順 4)— 読み取り専用
-│   └── proposal-reviewer.md     # 提案・完了判断の反証レビュー(/follow-up 手順 7、/elaborate・/breakdown の生成前。設計方針 14)— 読み取り専用
+│   └── proposal-reviewer.md     # 提案・完了判断の反証レビュー(/follow-up 手順 7、/elaborate・/breakdown の生成前、/amend の改訂案の提示前。設計方針 14)— 読み取り専用
 ├── commands/
 │   ├── initialize.md            # /initialize — プロジェクト初期化(下記)
 │   ├── elaborate.md             # /elaborate — 計画(plan.md の 1 フェーズ / plan mode)を対話で詳細化し設計書へ
 │   ├── breakdown.md             # /breakdown — 設計書を TODO へ分解(設計書だけを入力)
 │   ├── execute-task.md           # /execute-task T<n> — 既存タスクを実装・検証・コミットまで閉じる
+│   ├── amend.md                 # /amend T<n> — 設計書の一部と未着手タスクを一回で改訂(設計の穴・単発の追加。新しい計画行は作らない)
 │   ├── follow-up.md             # /follow-up — checkpoint間の複数タスクを横断して総点検
 │   ├── agmsg.md                 # /agmsg — マルチエージェントメッセージング
 │   └── markdown-cleanup.md      # /markdown-cleanup — markdown-format CLI をファイル全体モードで適用し単独コミット
@@ -261,6 +262,8 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
    新規ディレクトリが要るなら docs/architecture.md もここで更新
 5. /breakdown docs/design/<slug>.md → TODO.md の計画 #n + タスク T<n>…(索引の T 列も埋める)。HANDOFF の次の一手 = T<n>
 6. /execute-task T<n> → 1 タスク = 1 コミット。セッション終了時は軽量な引き継ぎ(状態変化かコールドスタート確認の不足がある場合だけ HANDOFF を上書き)
+   設計の穴を見つけたら: 穴の記録を HANDOFF に残して停止 → /amend T<n>(設計書の該当節と未着手タスクを改訂)→ 6 へ戻る。
+   設計書の目的・スコープが変わる時だけ 4 へ戻る(分類の正は BLUEPRINT §6「変更の三段分類」)
 7. 節目で /follow-up → checkpoint以後の複数タスクを横断して総点検し、次フェーズは 4 へ戻る
 ````
 
@@ -270,7 +273,8 @@ plan mode を通っても、`/elaborate`・`/breakdown` は走らせない**(成
 
 - **開始時**: `HANDOFF.md` と `TODO.md` の 2 つを読む。着手点は HANDOFF.md の「次の一手」
 - **タスク完了ごと**: ①TODO.md の該当タスクを `[x]` に更新 ②コミット(要約に `T<n>` を含める。
-  変更を生まないタスクは `git commit --allow-empty` で記録を残す)
+  変更を生まないタスクは `git commit --allow-empty` で記録を残す)。実行しないと決めたタスクは
+  `/amend` が `[-]`(廃止)にする。状態の値域と未着手タスクの書き換え規約の正は `TODO.md` 冒頭コメント
 - **長時間の実行**: 途中終了を避けたい場合などに `/goal <検証可能な完了条件>, or stop after 20 turns`
   を補助的に使う(状態確認は `/goal`、解除は `/goal clear`)
 - **終了時**: 未コミット変更を確認する。中断状態・次の一手・要確認などが変わった場合は
