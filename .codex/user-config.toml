@@ -4,7 +4,7 @@ project_doc_fallback_filenames = ["CLAUDE.md"]
 
 [tui]
 alternate_screen = "always"
-status_line = ["model-with-reasoning", "context-remaining", "current-dir", "git-branch"]
+status_line = ["model-with-reasoning", "context-remaining", "git-branch", "five-hour-limit", "weekly-limit"]
 
 [sandbox_workspace_write]
 writable_roots = [
