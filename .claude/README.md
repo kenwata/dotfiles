@@ -151,6 +151,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認の要否・推奨の向き・可読性のゲート(呼び出しごとに1回 deny→取りやめ or 書き直し。設計方針 12)
 │   ├── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
 │   ├── format-markdown.sh       # PostToolUse(Write|Edit) hook — 保存された .md を markdown-format CLI に通す(編集行のみ。全体整形は /markdown-cleanup)
+│   ├── lib/mainline-gauge/      # 本流の計器(/breakdown が支線の分解の前に呼ぶ。node。テストは test/)
 │   └── lib/markdown-format/     # 上記 hook が呼ぶ formatter/linter 本体(依存ゼロ・ビルドなし。cli/format/lint/scope 等 + test/。詳細は同所の README.md)
 ├── agents/                      # サブエージェント定義(全プロジェクト共通。CLAUDE.md を継承する。設計方針 11)
 │   ├── codebase-explorer.md     # 広域探索 — 読み取り専用
@@ -262,6 +263,8 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
    docs/design/<slug>.md を生成 + docs/design/index.md に 1 行追記。
    新規ディレクトリが要るなら docs/architecture.md もここで更新
 5. /breakdown docs/design/<slug>.md → TODO.md の計画 #n + タスク T<n>…(索引の T 列も埋める)。HANDOFF の次の一手 = T<n>
+   1 回に分解するのは設計書の最初の未分解の 1 段階だけ。支線の設計書なら、分解の前に本流の計器
+   (hooks/lib/mainline-gauge/)を示し、本流が進まないままの積み増しなら続行・削減・本流復帰を利用者に選ばせる
 6. /execute-task T<n> → 1 タスク = 1 コミット。セッション終了時は軽量な引き継ぎ(状態変化かコールドスタート確認の不足がある場合だけ HANDOFF を上書き)
    設計の穴を見つけたら: 穴の記録を HANDOFF に残して停止 → /amend T<n>(設計書の該当節と未着手タスクを改訂)→ 6 へ戻る。
    設計書の目的・スコープが変わる時だけ 4 へ戻る(分類の正は BLUEPRINT §6「変更の三段分類」)

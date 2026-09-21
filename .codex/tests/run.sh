@@ -95,6 +95,7 @@ HOME="$fake_home" bash "$repo_root/.codex/hooks/herdr-agent-state.sh" \
 cmp "$fake_home/herdr-input.expected" "$fake_home/herdr-input.actual"
 
 node --test "$repo_root/.codex/tests/hooks.test.mjs"
+node --test "$repo_root/.claude/hooks/lib/mainline-gauge/test/gauge.test.mjs"
 
 safe_git_output="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git status"}}' \
   | bash "$repo_root/.codex/hooks/deny-git-write.sh")"
