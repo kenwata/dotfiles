@@ -64,7 +64,8 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
    されなくなった。実体は `skeletons/todo.md` の §0 セッションプロトコルに埋め込んである。
    さらにプロンプト側の配線が破られた時(セッション異常終了等)の安全網として、
    SessionStart hook(`hooks/check-handoff-stale.sh`)が次セッション起動時に HANDOFF.md の
-   未コミット変更を機構側で検知して警告する。状態が変わらないセッションでは更新しないため、
+   未コミット変更を機構側で検知して警告する。同じ hook が、未決の要確認の件数と、回収点を持たない行の件数も
+   起動時に知らせる(`/execute-task` の着手前の関門を通らずに着手するセッションへの安全網)。状態が変わらないセッションでは更新しないため、
    最新コミットからの距離は陳腐化の根拠にしない
 8. **修正指摘は再発判定してルール化** — その場しのぎの修正で終えず、スコープに応じて
    ファイル内規約 / `.claude/rules/` / templates への還元 / auto memory へ振り分ける
@@ -145,7 +146,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── settings.json                # 中核設定 — model / effortLevel / autoMode / qmd プラグイン(github: tobi/qmd)有効化
 ├── statusline.sh                # ステータスライン用スクリプト
 ├── hooks/
-│   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md の未コミット変更を検知(設計方針 7)
+│   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md の未コミット変更と、未決の要確認(件数・回収点の無い行)を通知(設計方針 7)
 │   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
 │   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認の要否・推奨の向き・可読性のゲート(呼び出しごとに1回 deny→取りやめ or 書き直し。設計方針 12)
 │   ├── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
@@ -264,7 +265,8 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
 6. /execute-task T<n> → 1 タスク = 1 コミット。セッション終了時は軽量な引き継ぎ(状態変化かコールドスタート確認の不足がある場合だけ HANDOFF を上書き)
    設計の穴を見つけたら: 穴の記録を HANDOFF に残して停止 → /amend T<n>(設計書の該当節と未着手タスクを改訂)→ 6 へ戻る。
    設計書の目的・スコープが変わる時だけ 4 へ戻る(分類の正は BLUEPRINT §6「変更の三段分類」)
-7. 節目で /follow-up → checkpoint以後の複数タスクを横断して総点検し、次フェーズは 4 へ戻る
+7. 節目で /follow-up → checkpoint以後の複数タスクを横断して総点検し、次フェーズは 4 へ戻る。
+   HANDOFF の要確認は、/execute-task の着手前(対象 T を回収点に持つ項目)と /follow-up の冒頭(全項目)で利用者に問い、決着を decisions.md に書く
 ````
 
 plan mode は 4 の入口としてだけ `/elaborate` に合流する。**6 の実行中に `T<n>` を実行するための
