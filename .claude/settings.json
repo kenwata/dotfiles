@@ -116,6 +116,15 @@
       {
         "hooks": [
           {
+            "command": "~/.claude/hooks/check-task-scope.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      },
+      {
+        "hooks": [
+          {
             "command": "~/.claude/hooks/check-question-legibility.sh",
             "type": "command"
           }
@@ -212,6 +221,15 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/check-task-scope.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
       }
     ],
     "SubagentStop": [
@@ -223,6 +241,15 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/check-task-scope.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
       }
     ],
     "TeammateIdle": [
@@ -245,6 +272,15 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude/hooks/check-task-scope.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
       }
     ]
   },

@@ -151,6 +151,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── hooks/
 │   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md の未コミット変更と、未決の要確認(件数・回収点の無い行)を通知(設計方針 7)
 │   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
+│   ├── check-task-scope.sh/.mjs # UserPromptSubmit + PreToolUse(Write|Edit) + SubagentStart/Stop hook — /execute-task 実行中に TODO.md の対象パス外への編集を拒否し、レビュー役の返答待ち中は主文脈の編集を拒否(Codex と本体を共有)
 │   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認の要否・推奨の向き・可読性のゲート(呼び出しごとに1回 deny→取りやめ or 書き直し。設計方針 12)
 │   ├── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
 │   ├── format-markdown.sh       # PostToolUse(Write|Edit) hook — 保存された .md を markdown-format CLI に通す(編集行のみ。全体整形は /markdown-cleanup)

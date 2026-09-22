@@ -169,4 +169,22 @@ bash "$repo_root/.config/git/json-normalize.sh" \
   < "$fixture_root/empty.json" > "$fixture_root/empty.actual"
 [[ ! -s "$fixture_root/empty.actual" ]]
 
+scope_repo="$fixture_root/scope-repo"
+mkdir -p "$scope_repo/src/a" "$scope_repo/src/b"
+git -C "$scope_repo" init -q
+printf '%s\n' '| #1-1 | T7 | x | 中 | — | [ ] |' '' '**#1-1 / T7** — 完了条件: 対象: `src/a/`。' > "$scope_repo/TODO.md"
+scope_home="$fixture_root/scope-home"
+mkdir -p "$scope_home/.claude"
+ln -s "$repo_root/.claude/hooks" "$scope_home/.claude/hooks"
+scope_tmp="$fixture_root/scope-tmp"
+mkdir -p "$scope_tmp"
+jq -nc --arg c "$scope_repo" '{hook_event_name:"UserPromptSubmit",session_id:"scope-s",cwd:$c,prompt:"$execute-task T7"}' \
+  | HOME="$scope_home" TMPDIR="$scope_tmp" bash "$repo_root/.codex/hooks/check-task-scope.sh"
+scope_deny="$(jq -nc --arg c "$scope_repo" '{hook_event_name:"PreToolUse",session_id:"scope-s",cwd:$c,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/b/x.ts\n@@\n+y\n*** End Patch"}}' \
+  | HOME="$scope_home" TMPDIR="$scope_tmp" bash "$repo_root/.codex/hooks/check-task-scope.sh")"
+printf '%s' "$scope_deny" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
+scope_allow="$(jq -nc --arg c "$scope_repo" '{hook_event_name:"PreToolUse",session_id:"scope-s",cwd:$c,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/a/x.ts\n@@\n+y\n*** End Patch"}}' \
+  | HOME="$scope_home" TMPDIR="$scope_tmp" bash "$repo_root/.codex/hooks/check-task-scope.sh")"
+[[ -z "$scope_allow" ]]
+
 printf 'Codex migration tests passed\n'
