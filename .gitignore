@@ -36,6 +36,7 @@
 .claude/debug/
 .claude/.credentials.json
 .claude/ide/
+.claude/state/
 
 # Claude Bedrock — runtime-generated, not config
 .claude-bedrock/image-cache/

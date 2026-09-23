@@ -89,6 +89,19 @@ run_case "stale_review_flag_expires" silent "$(sub_start s8 proposal-reviewer a9
 touch -t 202001010000 "$TMPDIR/claude-task-scope/s8.review-a9"
 run_case "edit_allowed_after_review_flag_expired" silent "$(write_input s8 "$repo/src/ai-workflows/contracts/a.ts")"
 
+handoff_write() { jq -nc --arg s "$1" --arg t "$2" --arg c "$repo" --arg f "$repo/HANDOFF.md" '{hook_event_name:"PreToolUse",session_id:$s,cwd:$c,tool_name:"Write",tool_input:{file_path:$f,content:$t}}'; }
+handoff_edit() { jq -nc --arg s "$1" --arg t "$2" --arg c "$repo" --arg f "$repo/HANDOFF.md" '{hook_event_name:"PreToolUse",session_id:$s,cwd:$c,tool_name:"Edit",tool_input:{file_path:$f,old_string:"x",new_string:$t}}'; }
+
+run_case "hole_record_state" silent "$(prompt_input s9 "/execute-task T43")"
+run_case "handoff_without_hole_record_is_allowed" silent "$(handoff_write s9 "## 仕掛かり中\n- なし")"
+run_case "first_hole_record_is_denied_with_checklist" deny "$(handoff_edit s9 "- 穴の記録: 観測した事実…")"
+run_case "second_hole_record_is_allowed" silent "$(handoff_edit s9 "- 穴の記録: 観測した事実…")"
+run_case "hole_record_state_other_session" silent "$(prompt_input s10 "/execute-task T43")"
+run_case "hole_record_check_is_per_session" deny "$(handoff_write s10 "- 穴の記録: x")"
+run_case "hole_record_outside_execute_task_is_allowed" silent "$(handoff_write s11 "- 穴の記録: x")"
+run_case "hole_record_state_codex" silent "$(prompt_input s12 "\$execute-task T43")"
+run_case "hole_record_in_codex_patch_is_denied" deny "$(jq -nc --arg c "$repo" '{hook_event_name:"PreToolUse",session_id:"s12",cwd:$c,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: HANDOFF.md\n@@\n+- 穴の記録: x\n*** End Patch"}}')"
+
 run_case "silent_on_invalid_json" silent "not json"
 run_case "silent_on_empty_input" silent ""
 

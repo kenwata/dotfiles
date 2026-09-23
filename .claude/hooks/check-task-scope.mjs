@@ -24,6 +24,11 @@
 //   Stop が届かなかった時の保険として 30 分で失効。/execute-task 実行中かどうかは問わない
 //   (レビュー対象を途中で変えればレビュー自体が無効になるので、コマンドに依らず成り立つ)。
 //
+// - PreToolUse(穴の記録の点検): /execute-task の実行中に HANDOFF.md へ「穴の記録」を書く編集を、
+//   セッションと T ごとに 1 回目だけ拒否し、点検項目を返す。2 回目は通す(2026-09-23、T133 の実行が
+//   同じ段階の T134 が担当する作業を「T133 の対象に無い」と穴の記録にして /amend を要求し、利用者の
+//   手戻りになった。止める前に他タスクの担当と自分の完了条件の引用範囲を確かめさせる)。
+//
 // 既知の限界: Bash 経由(sed / heredoc / mv)の編集は検知しない。対象パスの内側での過剰変更は
 // 止められない(/breakdown の「裁量は対象パスの中で閉じる」規則と Codex スキルの文章に依る)。
 // 状態はセッション ID 単位で、12 時間で失効する。
@@ -40,6 +45,8 @@ import { execFileSync } from "node:child_process";
 const STATE_TTL_MS = 12 * 60 * 60 * 1000;
 const REVIEW_TTL_MS = 30 * 60 * 1000;
 const REVIEW_AGENTS = new Set(["proposal-reviewer", "diff-reviewer", "proposal_reviewer", "diff_reviewer"]);
+// 穴の記録の書式の語(~/.claude/commands/execute-task.md の手順 3)。この語を含む HANDOFF.md への編集を点検する
+const HOLE_RECORD_MARKER = "穴の記録";
 const ALWAYS_ALLOWED = ["TODO.md", "HANDOFF.md", "docs/decisions.md", "docs/architecture.md", "docs/design/"];
 
 export function stateDir() {
@@ -231,6 +238,43 @@ function denyMessage(task, scope, violations) {
   );
 }
 
+// 編集で書き込まれる本文(Write の content / Edit の new_string / apply_patch の追加行)
+function editedText(input) {
+  const toolInput = input.tool_input || {};
+  if ((input.tool_name || "") === "apply_patch") return String(toolInput.command || toolInput.patch || "");
+  return String(toolInput.content ?? toolInput.new_string ?? "");
+}
+
+function isHandoff(targets, root, cwd) {
+  const realRoot = canonical(root);
+  return targets.some((target) => path.relative(realRoot, canonical(path.resolve(cwd, target))) === "HANDOFF.md");
+}
+
+function holeRecordFlagPath(input, task) {
+  return path.join(stateDir(), `${stateKey(input)}.hole-${task}`);
+}
+
+function holeRecordMessage(task) {
+  return (
+    `穴の記録を書く前の点検(${task})。` +
+    "(1) TODO.md で、同じ計画のほかのタスク(特に同じ段階のタスク)の「対象:」と完了条件が、止める理由にした作業を既に持っていないか。" +
+    `(2) 止める根拠にした完了条件の項目が、${task} の完了条件ブロックに実際に書かれているか(設計書の行を引用していても「のうち〜の分」のように範囲を絞っていないか)。` +
+    `(1) で担当先が見つかる、または (2) で自分の範囲外と分かったら、それは設計の穴ではない: 穴の記録を書かず、その作業は担当タスクに任せて ${task} を締める。` +
+    "両方を確かめてなお穴だと言えるなら、同じ編集をもう一度行う(2 回目は通す)。"
+  );
+}
+
+// 1 回目の穴の記録なら点検を返して拒否する(フラグを置き、2 回目は通す)。拒否したら true
+function checkHoleRecord(input, state, targets, cwd) {
+  if (!isHandoff(targets, state.root, cwd) || !editedText(input).includes(HOLE_RECORD_MARKER)) return false;
+  const flag = holeRecordFlagPath(input, state.task);
+  if (fs.existsSync(flag)) return false;
+  fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(flag, String(Date.now()));
+  emit({ permissionDecision: "deny", permissionDecisionReason: holeRecordMessage(state.task) });
+  return true;
+}
+
 function emit(output) {
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", ...output } }));
 }
@@ -258,9 +302,12 @@ function handleToolUse(input) {
     return;
   }
   const scope = readTaskScope(todoText, state.task);
-  if (!scope || !scope.open || !scope.declared) return;
+  if (!scope || !scope.open) return;
 
   const cwd = input.cwd || process.cwd();
+  if (checkHoleRecord(input, state, targets, cwd)) return;
+  if (!scope.declared) return;
+
   const violations = checkTargets(targets, scope, state.root, cwd);
   if (violations.length === 0) return;
 
