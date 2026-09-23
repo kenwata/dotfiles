@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, gate, packetVerifyCommands, readRollout, resolveModelFamily, restore, selectRules,
+  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, gate, packetVerifyCommands, parsePlan, readRollout, resolveModelFamily, restore, selectRules,
   takeSnapshot, validateResult,
 } from "../core.mjs";
 
@@ -282,4 +282,13 @@ test("検証節が無いか、コマンドの箇条書きが無ければ拒否�
   assert.equal(checkPacketVerify("## 検証\n試験を回す\n## 入口\n- a.ts\n").length, 1);
   assert.equal(checkPacketVerify("### 検証\n- `true`\n").length, 1);
   assert.match(checkPacketVerify("")[0], /lint・型検査/);
+});
+
+test("ステップ計画は「- s<番号>: <目的>」の行だけを読み、重複・空の目的・ステップ無しを誤りにする", () => {
+  assert.deepEqual(parsePlan("# 計画\n\n- s1: 検査を書く\n本文\n* s2a：実装する\n").steps, [
+    { step: "1", purpose: "検査を書く" }, { step: "2a", purpose: "実装する" },
+  ]);
+  assert.match(parsePlan("- s1: a\n- s1: b\n").errors.join(), /2 回/);
+  assert.match(parsePlan("- s1:\n").errors.join(), /目的が空/);
+  assert.match(parsePlan("計画は後で\n").errors.join(), /1 つも無い/);
 });

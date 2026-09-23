@@ -3,6 +3,8 @@
 // 監督の手順の正は ~/.claude/templates/codex-worker.md。
 //
 // 呼び出し規約:
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs plan --root <プロジェクトルート> --task T<n> --file <plan.md>
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs show --root <プロジェクトルート> --task T<n>
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs run --root <プロジェクトルート> --task T<n> --step <番号>
 //        --packet <packet.md> --allow <パス> [--allow <パス> ...(既定で 3 件まで)]
 //        [--model-family <luna|terra|sol ...> | --model <モデル ID>] [--timeout <秒>]
@@ -31,6 +33,10 @@
 //   exit 2 = 起動前に拒否、または引数・記録の誤り(worker を起動していない / 何も変更していない)
 // restore は、監督が accepted の結果を採らないと決めた時に、そのステップの許可パスの中の変更を snapshot 時点へ
 // 戻す(許可パスの外は触らない)。--keep を渡すと、そのパスの中の変更は残す。
+// plan は、タスクのステップ計画(「- s<番号>: <目的>」の箇条書き)を
+// ${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/tasks/<ルートのパスの記号を - にした名前>/T<n>/plan.md に登録する。
+// 登録し直すと前の計画は plan-<時刻>.md に残る。run は計画に無いステップを起動せず、packet を同じ場所の
+// s<番号>.packet.md にも写す。show は計画の各ステップの最新の run の状態と verify の結果を人向けの表で出す。
 // verify は、run の packet の「## 検証」節のコマンドを監督の環境(worker の sandbox の外)で 1 本ずつ別々に打ち、
 // コマンドごとの終了コードを JSON で stdout と <run ディレクトリ>/verify.json に出す。
 //   exit 0 = 全部 0、exit 1 = 0 でないものがある、exit 2 = 記録の誤り・worker の実行中(何も打っていない)
@@ -44,7 +50,7 @@ import { parseArgs } from "node:util";
 import { StringDecoder } from "node:string_decoder";
 import { activeWorkerLock, isInside, workerLockPath } from "../../check-task-scope.mjs";
 import {
-  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, findRollout, packetVerifyCommands, gate, readRollout, resolveModelFamily, restore, selectRules,
+  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, findRollout, packetVerifyCommands, parsePlan, gate, readRollout, resolveModelFamily, restore, selectRules,
   takeSnapshot, validateResult,
 } from "./core.mjs";
 import { lineSplitter, renderEvent, renderSummary } from "./status.mjs";
@@ -74,20 +80,41 @@ function runsDir() {
   return path.join(stateDir(), "runs");
 }
 
-// 状態行のプロジェクトごとのログ。名前は ~/.claude/projects/ と同じく、ルートのパスの記号を - にしたもの
+// プロジェクトごとの置き場の名前。~/.claude/projects/ と同じく、ルートのパスの記号を - にしたもの
+const rootSlug = (root) => root.replace(/[^A-Za-z0-9]/g, "-");
+
+// 状態行のプロジェクトごとのログ
 function statusLogPath(root) {
-  return path.join(stateDir(), "status", `${root.replace(/[^A-Za-z0-9]/g, "-")}.log`);
+  return path.join(stateDir(), "status", `${rootSlug(root)}.log`);
+}
+
+// タスクのステップ計画と packet の写しの置き場。セッションの scratchpad と違い、場所がタスクで決まる
+function taskDir(root, task) {
+  return path.join(stateDir(), "tasks", rootSlug(root), task);
+}
+
+function readPlan(root, task) {
+  const file = path.join(taskDir(root, task), "plan.md");
+  let text;
+  try { text = fs.readFileSync(file, "utf8"); } catch { return null; }
+  return { file, ...parsePlan(text) };
+}
+
+// 状態行の前置きのステップ表記。計画があれば全体の何番目かを添える
+function stepLabel(plan, step) {
+  const index = plan ? plan.steps.findIndex((s) => s.step === step) : -1;
+  return index === -1 ? `s${step}` : `s${step} ${index + 1}/${plan.steps.length}`;
 }
 
 // 状態行の出力先。stderr(Claude Code のバックグラウンドタスクの表示・手で起動した端末)と、
 // 別の端末から `tail -F` で追えるプロジェクトごとのログ。表示の失敗で run を止めない
-function statusWriter(root, task, step) {
+function statusWriter(root, task, label) {
   const logFile = statusLogPath(root);
   try { fs.mkdirSync(path.dirname(logFile), { recursive: true, mode: 0o700 }); } catch { /* 表示のみ */ }
   try {
     if (fs.statSync(logFile).size > STATUS_LOG_MAX) fs.truncateSync(logFile, 0);
   } catch { /* 初回 */ }
-  const prefix = `[Codex ${task} s${step}]`;
+  const prefix = label ? `[Codex ${task} ${label}]` : `[Codex ${task}]`;
   return (text) => {
     if (!text) return;
     const out = text.split("\n").map((line) => `${prefix} ${line}\n`).join("");
@@ -254,6 +281,13 @@ async function run(args) {
   errors.push(...workerHomeErrors(home));
   const allowCheck = root && /^T\d+$/.test(task ?? "") ? checkAllow(root, task, allow, maxAllow) : { errors: [], warnings: [] };
   errors.push(...allowCheck.errors);
+  const plan = root && /^T\d+$/.test(task ?? "") ? readPlan(root, task) : null;
+  if (root && /^T\d+$/.test(task ?? "") && step) {
+    if (!plan) errors.push(`${task} のステップ計画が無い。最初の worker を起動する前に cli.mjs plan で登録する`);
+    else if (!plan.steps.some((s) => s.step === step)) {
+      errors.push(`ステップ ${step} が ${task} の計画(${plan.file})に無い。ステップを切り直したなら cli.mjs plan で計画を登録し直す`);
+    }
+  }
   const running = root ? activeWorkerLock(root) : null;
   if (running) errors.push(`別の worker が実行中: ${running.task} ステップ ${running.step}`);
   const resolved = errors.length === 0 ? resolveModel(args, home) : { model: null };
@@ -269,14 +303,15 @@ async function run(args) {
   const runDir = path.join(runsDir(), id);
   fs.mkdirSync(runDir, { recursive: true, mode: 0o700 });
   const snapshot = takeSnapshot(root, runDir);
-  fs.writeFileSync(path.join(runDir, "run.json"), JSON.stringify({ task, step, model, allow }, null, 2));
+  fs.writeFileSync(path.join(runDir, "run.json"), JSON.stringify({ root, task, step, model, allow }, null, 2));
   fs.writeFileSync(path.join(runDir, "packet.md"), packet); // verify が検証節を読む
+  try { fs.writeFileSync(path.join(taskDir(root, task), `s${step}.packet.md`), packet); } catch { /* 写しは人が読むためのもの */ }
   const { rules, conservative } = selectRules(root, allow);
   const contract = fs.readFileSync(path.join(here, "worker-contract.md"), "utf8");
   const prompt = buildPrompt({ contract, allow, packet, rules });
   fs.writeFileSync(path.join(runDir, "prompt.md"), prompt);
 
-  const status = statusWriter(root, task, step);
+  const status = statusWriter(root, task, stepLabel(plan, step));
 
   // ロックとシグナル: runner が止められても codex を孤児にせず、ロックを残さない
   const lockFile = workerLockPath(root);
@@ -294,7 +329,8 @@ async function run(args) {
   const signals = ["SIGTERM", "SIGINT", "SIGHUP"];
   for (const signal of signals) process.on(signal, onSignal);
 
-  status(`started model=${model} allow=${allow.join(",")} run=${runDir}`);
+  status(`started: ${plan.steps.find((s) => s.step === step).purpose}`);
+  status(`model=${model} allow=${allow.join(",")} run=${runDir}`);
   const started = Date.now();
   let exec;
   try {
@@ -458,7 +494,7 @@ async function verifyRun(args) {
   const stamp = new Date().toISOString().replace(/[-:.]/g, "");
   const logDir = path.join(args.run, `verify-${stamp}`);
   fs.mkdirSync(logDir, { recursive: true, mode: 0o700 });
-  const status = statusWriter(root, meta.task, meta.step);
+  const status = statusWriter(root, meta.task, stepLabel(readPlan(root, meta.task), meta.step));
   const results = [];
   for (const [index, command] of commands.entries()) {
     status(`verify $ ${command}`);
@@ -478,6 +514,77 @@ async function verifyRun(args) {
   process.exitCode = failed === 0 ? 0 : 1;
 }
 
+// ステップ計画を登録する。切り直した時も同じコマンドで登録し直す(前の計画は残す)
+function registerPlan(args) {
+  const root = gitRoot(path.resolve(args.root ?? "."));
+  const task = args.task;
+  const errors = [];
+  if (!root) errors.push(`git のリポジトリではない: ${args.root ?? "."}`);
+  if (!/^T\d+$/.test(task ?? "")) errors.push("--task は T<n>");
+  let text = "";
+  try { text = fs.readFileSync(args.file, "utf8"); } catch { errors.push(`計画のファイルを読めない: ${args.file ?? "(--file が無い)"}`); }
+  const { steps, errors: planErrors } = parsePlan(text);
+  if (text) errors.push(...planErrors);
+  if (errors.length > 0) {
+    emit({ errors }, null, 2);
+    return;
+  }
+  const dir = taskDir(root, task);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const file = path.join(dir, "plan.md");
+  const revised = fs.existsSync(file);
+  if (revised) fs.renameSync(file, path.join(dir, `plan-${new Date().toISOString().replace(/[-:.]/g, "")}.md`));
+  fs.writeFileSync(file, text);
+  const status = statusWriter(root, task, null);
+  status(`plan ${revised ? "revised" : "registered"}: ${steps.length} steps (${file})`);
+  status(steps.map((s) => `  s${s.step}: ${s.purpose}`).join("\n"));
+  emit({ task, root, plan_file: file, revised, steps }, null, 0);
+}
+
+// 計画の各ステップについて、最新の run の状態と verify の結果を人向けの表で出す
+function showTask(args) {
+  const root = gitRoot(path.resolve(args.root ?? "."));
+  const task = args.task;
+  const plan = root && /^T\d+$/.test(task ?? "") ? readPlan(root, task) : null;
+  if (!plan) {
+    process.stderr.write(`${task ?? "(--task が無い)"} のステップ計画が無い(${root ?? args.root ?? "."})\n`);
+    process.exitCode = 2;
+    return;
+  }
+  let names = [];
+  try { names = fs.readdirSync(runsDir()).filter((n) => n.startsWith(`${task}-s`)); } catch { /* run がまだ無い */ }
+  const latest = new Map();
+  for (const name of names.sort()) { // 名前は <task>-s<step>-<時刻>-<pid> なので、並べると同じステップの後の run が後ろに来る
+    const dir = path.join(runsDir(), name);
+    let meta;
+    try { meta = JSON.parse(fs.readFileSync(path.join(dir, "run.json"), "utf8")); } catch { continue; }
+    if (meta.root === root) latest.set(meta.step, { dir, runs: (latest.get(meta.step)?.runs ?? 0) + 1 });
+  }
+  const lock = activeWorkerLock(root);
+  const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
+  const rows = plan.steps.map((s, index) => {
+    const run = latest.get(s.step);
+    let state = "未着手";
+    let verify = "";
+    if (run) {
+      const report = readJson(path.join(run.dir, "report.json"));
+      const verified = readJson(path.join(run.dir, "verify.json"));
+      if (lock?.runDir === run.dir) state = "実行中";
+      else if (report) state = report.accepted ? `accepted(${report.worker?.status ?? "?"})` : "rejected";
+      else state = "中断";
+      if (verified) verify = verified.all_passed ? "verify ok" : `verify ${verified.failed} 件失敗`;
+      if (run.runs > 1) state += ` ×${run.runs}`;
+    }
+    return [`${index + 1}/${plan.steps.length} s${s.step}`, state, verify, s.purpose];
+  });
+  const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => [...r[i]].length)));
+  const pad = (text, width) => text + " ".repeat(width - [...text].length);
+  const lines = [`${task} ${root}`, `計画: ${plan.file}`, ""];
+  for (const r of rows) lines.push(`${pad(r[0], widths[0])}  ${pad(r[1], widths[1])}  ${pad(r[2], widths[2])}  ${r[3]}`);
+  lines.push("", `packet の写し: ${path.dirname(plan.file)}/s<番号>.packet.md`);
+  process.stdout.write(lines.join("\n") + "\n");
+}
+
 let parsed;
 try {
   parsed = parseArgs({
@@ -487,6 +594,7 @@ try {
       allow: { type: "string", multiple: true }, model: { type: "string" }, "model-family": { type: "string" },
       timeout: { type: "string" }, "max-packet": { type: "string" }, "max-allow": { type: "string" },
       "peak-threshold": { type: "string" }, run: { type: "string" }, keep: { type: "string", multiple: true },
+      file: { type: "string" },
     },
   });
 } catch (error) {
@@ -497,5 +605,7 @@ if (parsed) {
   if (command === "run") await run(parsed.values);
   else if (command === "restore") restoreRun(parsed.values);
   else if (command === "verify") await verifyRun(parsed.values);
-  else emit({ errors: ["usage: cli.mjs run ... | cli.mjs restore --run <dir> | cli.mjs verify --run <dir>"] }, null, 2);
+  else if (command === "plan") registerPlan(parsed.values);
+  else if (command === "show") showTask(parsed.values);
+  else emit({ errors: ["usage: cli.mjs plan ... | cli.mjs run ... | cli.mjs show ... | cli.mjs restore --run <dir> | cli.mjs verify --run <dir>"] }, null, 2);
 }

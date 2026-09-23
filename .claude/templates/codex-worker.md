@@ -51,6 +51,29 @@ skill 一覧(名前と説明、約 3KB)は CODEX_HOME に依らず注入され�
 - report の `slice_too_large`(ピーク使用率が既定 60% 超)が立ったら、以後のステップを小さく切る。
   compaction が起きた run は runner が不採用にする。同じ packet で再試行しない。
 
+## ステップ計画
+
+切ったステップの一覧は、最初の worker を起動する前に runner へ登録する。runner は計画の無いタスクと、計画に無い
+ステップ番号の起動を拒否する。計画は、利用者が全体のステップ数と各ステップの目的を 1 か所で追うためのものである
+(会話の中や scratchpad だけに置くと、利用者からは見えない)。
+
+````bash
+node ~/.claude/hooks/lib/codex-worker/cli.mjs plan --root <プロジェクトルート> --task T<n> --file <plan.md>
+````
+
+計画のファイルは 1 ステップ 1 行で `- s<番号>: <目的 1 文>` と書く(それ以外の行は読まない)。runner はそれを
+`${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/tasks/<ルートのパスの記号を - にした名前>/T<n>/plan.md` に置き、
+一覧を状態行に出す。各 run の packet も同じ場所に `s<番号>.packet.md` として写す。登録したら、ステップの一覧と
+この置き場所を利用者への報告に書いてから最初のステップを起動する。ステップを切り直したり足したりした時は、
+同じコマンドで登録し直す(前の計画は `plan-<時刻>.md` に残る)。
+
+進み具合は次のコマンドで、ステップごとの最新の run の状態(未着手・実行中・accepted・rejected・中断)と
+verify の結果を表で見られる。利用者に進み具合を聞かれたら、これの出力で答える。
+
+````bash
+node ~/.claude/hooks/lib/codex-worker/cli.mjs show --root <プロジェクトルート> --task T<n>
+````
+
 ## packet
 
 監督は packet(Markdown、既定の上限 12KB)をファイルに書き、runner に渡す。runner は、固定の契約
@@ -109,7 +132,8 @@ worker のモデルは系統名で指定する(既定 `luna`。上げる時は `
 
 実行中の様子は、runner が状態行として stderr とプロジェクトごとのログ
 `${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/status/<ルートのパスの / などを - にした名前>.log` に出す(`codex exec --json` のイベントから、実行したコマンドと終了コード・編集したファイル・worker の進捗の一言・
-トークン数・最後の判定を選んだもの。形式は `hooks/lib/codex-worker/status.mjs`)。利用者はバックグラウンドタスクの
+トークン数・最後の判定を選んだもの。形式は `hooks/lib/codex-worker/status.mjs`)。行の前置きは `[Codex T<n> s<番号> <何番目>/<全ステップ数>]` で、
+開始の行にそのステップの目的を出す。利用者はバックグラウンドタスクの
 出力か、別の端末の `tail -F` でそのプロジェクトのログを追う(同じリポジトリでは worker が同時に 1 つなので、1 つのログの中で
 別の run と混ざらない)。状態行は人のためのもので、監督は読まない(判断は report と
 差分で行う)。生のイベントは run ディレクトリの `events.jsonl` に残るが、監督は全文を読まない。

@@ -208,6 +208,26 @@ export function restore(snapshot, paths, backupDir) {
   return { restored, unrestorable, backups };
 }
 
+// ステップ計画。監督が最初の worker を起動する前に登録し、run は計画に無いステップを起動しない
+// (2026-09-23、監督が計画を会話の中だけに持ち、利用者から全体のステップ数と各ステップの目的が見えなかったため)。
+// 形式は 1 ステップ 1 行の箇条書き「- s<番号>: <目的 1 文>」。それ以外の行は読まない
+export function parsePlan(text) {
+  const steps = [];
+  const errors = [];
+  for (const line of String(text ?? "").split("\n")) {
+    const match = /^\s*[-*]\s+s([0-9A-Za-z._-]+)\s*[:：]\s*(.*?)\s*$/.exec(line);
+    if (!match) continue;
+    const [, step, purpose] = match;
+    if (steps.some((s) => s.step === step)) errors.push(`ステップ s${step} が 2 回ある`);
+    else if (!purpose) errors.push(`ステップ s${step} の目的が空`);
+    else steps.push({ step, purpose });
+  }
+  if (steps.length === 0 && errors.length === 0) {
+    errors.push("ステップが 1 つも無い。1 ステップ 1 行で「- s<番号>: <目的 1 文>」と書く(例: - s1: 恒久の検査を先に書き、失敗を確かめる)");
+  }
+  return { steps, errors };
+}
+
 // packet の必須の節。監督がステップをまたぐ決定を現物で確かめたかを、worker を起動する前に機械で問う
 // (2026-09-23 の T55 で、確かめていない決定を packet に書いて手戻りを 4 回生んだため。/ruleize)
 const PACKET_CROSS_CHECK_HEADING = "## 横断の確認";

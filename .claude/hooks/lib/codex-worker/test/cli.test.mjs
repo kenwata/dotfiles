@@ -10,6 +10,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 // 検証節: 1 本目は worker の変更があれば通り、2 本目は必ず落ちる。束ねて打つと 1 本目の成否が分からなくなる組み合わせ
 const VERIFY_SECTION = "## 検証\n- `test -f src/a/impl.ts` (worker の変更がある)\n- `echo checked; exit 3`\n";
 
+const PLAN = "# T7 のステップ\n\n- s1: impl を書く\n- s2: 呼び出し元を直す\n";
+
 const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.mjs");
 
 // 偽の codex: `debug models` は一覧を返す。`exec` は FAKE_MODE に従って作業ツリーを変え、結果と rollout を書く
@@ -84,7 +86,18 @@ function setup() {
   const lockDir = path.join(tmp, "claude-task-scope");
   const locks = () => (fs.existsSync(lockDir) ? fs.readdirSync(lockDir).filter((n) => n.startsWith("worker-lock-")) : []);
   const statusLog = path.join(base, "state", "claude-codex-worker", "status", `${root.replace(/[^A-Za-z0-9]/g, "-")}.log`);
-  return { base, root, packet, run, locks, statusLog, cleanup: () => fs.rmSync(base, { recursive: true, force: true }) };
+  const taskDir = path.join(base, "state", "claude-codex-worker", "tasks", root.replace(/[^A-Za-z0-9]/g, "-"), "T7");
+  const plan = path.join(base, "plan.md");
+  const registerPlan = (text) => {
+    fs.writeFileSync(plan, text);
+    return run(["plan", "--root", root, "--task", "T7", "--file", plan]);
+  };
+  const show = () => spawnSync("node", [cli, "show", "--root", root, "--task", "T7"], { env, encoding: "utf8" });
+  registerPlan(PLAN);
+  return {
+    base, root, packet, run, locks, statusLog, taskDir, registerPlan, show,
+    cleanup: () => fs.rmSync(base, { recursive: true, force: true }),
+  };
 }
 
 const baseArgs = (root, packet) => ["run", "--root", root, "--task", "T7", "--step", "1", "--packet", packet, "--allow", "src/a/impl.ts"];
@@ -103,12 +116,12 @@ test("正常な run は exit 0 で、系統名から最新のモデルを解決�
     assert.ok(json.run_dir.startsWith(path.join(t.base, "state")), "run の記録は worker が書ける TMPDIR の外に置く");
     // 状態行は stderr と共有ログにだけ出る(stdout は report の JSON だけ。上の JSON.parse が通ることで確かめている)
     const expected = [
-      "[Codex T7 s1] $ npm test", "[Codex T7 s1]   ✓ npm test", "[Codex T7 s1] edit: src/a/impl.ts (add)",
-      "[Codex T7 s1] tokens: input=10 cached=0 output=5", "[Codex T7 s1] finished: accepted worker=done changed=1",
+      "[Codex T7 s1 1/2] $ npm test", "[Codex T7 s1 1/2]   ✓ npm test", "[Codex T7 s1 1/2] edit: src/a/impl.ts (add)",
+      "[Codex T7 s1 1/2] tokens: input=10 cached=0 output=5", "[Codex T7 s1 1/2] finished: accepted worker=done changed=1",
     ];
     for (const out of [stderr, fs.readFileSync(t.statusLog, "utf8")]) {
       for (const line of expected) assert.ok(out.includes(line), `${line} が無い:\n${out}`);
-      assert.match(out, /^\[Codex T7 s1\] started model=gpt-6-luna /m);
+      assert.match(out, /^\[Codex T7 s1 1\/2\] model=gpt-6-luna /m);
     }
   } finally { t.cleanup(); }
 });
@@ -193,7 +206,7 @@ test("verify は packet の検証節のコマンドを 1 本ずつ打ち、コ�
     assert.equal(verified.json.commands[1].tail, "checked");
     assert.equal(fs.readFileSync(verified.json.commands[1].log, "utf8"), "checked\n");
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(json.run_dir, "verify.json"), "utf8")), verified.json);
-    for (const line of ["[Codex T7 s1] verify $ test -f src/a/impl.ts", "[Codex T7 s1] verify   ✗ exit 3", "[Codex T7 s1] verify finished: 1/2 ok"]) {
+    for (const line of ["[Codex T7 s1 1/2] verify $ test -f src/a/impl.ts", "[Codex T7 s1 1/2] verify   ✗ exit 3", "[Codex T7 s1 1/2] verify finished: 1/2 ok"]) {
       assert.ok(verified.stderr.includes(line), `${line} が無い:\n${verified.stderr}`);
     }
 
@@ -215,5 +228,69 @@ test("verify は記録が無い・検証節が無い run では何も打たず e
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /## 検証/);
     assert.equal(fs.existsSync(path.join(json.run_dir, "verify.json")), false);
+  } finally { t.cleanup(); }
+});
+
+test("plan は計画を登録し、登録し直すと前の計画を残して、一覧を状態行に出す", () => {
+  const t = setup();
+  try {
+    const revised = t.registerPlan("- s1: impl を書く\n- s2: 呼び出し元を直す\n- s3: 文書を直す\n");
+    assert.equal(revised.code, 0, JSON.stringify(revised.json));
+    assert.equal(revised.json.revised, true);
+    assert.deepEqual(revised.json.steps.map((s) => s.step), ["1", "2", "3"]);
+    assert.equal(fs.readdirSync(t.taskDir).filter((n) => /^plan-.*\.md$/.test(n)).length, 1, "前の計画が残る");
+    const log = fs.readFileSync(t.statusLog, "utf8");
+    assert.match(log, /^\[Codex T7\] plan registered: 2 steps /m);
+    assert.match(log, /^\[Codex T7\] plan revised: 3 steps /m);
+    assert.match(log, /^\[Codex T7\]   s3: 文書を直す$/m);
+
+    for (const bad of ["ステップは後で\n", "- s1: a\n- s1: b\n", "- s1:\n"]) {
+      assert.equal(t.registerPlan(bad).code, 2, bad);
+    }
+    assert.match(fs.readFileSync(path.join(t.taskDir, "plan.md"), "utf8"), /s3: 文書を直す/, "拒否した計画で上書きしない");
+  } finally { t.cleanup(); }
+});
+
+test("run は計画が無いタスクと計画に無いステップを起動せず、計画があれば全体の何番目かと目的を出す", () => {
+  const t = setup();
+  try {
+    let result = t.run(baseArgs(t.root, t.packet).map((a, i) => (i === 6 ? "3" : a)));
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join(), /ステップ 3 が T7 の計画/);
+    fs.rmSync(t.taskDir, { recursive: true });
+    result = t.run(baseArgs(t.root, t.packet));
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join(), /T7 のステップ計画が無い/);
+    assert.equal(fs.existsSync(path.join(t.root, "src/a/impl.ts")), false);
+
+    t.registerPlan(PLAN);
+    result = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    assert.equal(result.code, 0);
+    assert.match(result.stderr, /^\[Codex T7 s1 1\/2\] started: impl を書く$/m);
+    assert.equal(fs.readFileSync(path.join(t.taskDir, "s1.packet.md"), "utf8"), fs.readFileSync(t.packet, "utf8"));
+  } finally { t.cleanup(); }
+});
+
+test("show は計画の各ステップの最新の run の状態と verify の結果を並べる", () => {
+  const t = setup();
+  try {
+    let out = t.show();
+    assert.equal(out.status, 0);
+    assert.match(out.stdout, /^1\/2 s1 +未着手 +impl を書く$/m);
+
+    const { json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    t.run(["verify", "--run", json.run_dir]); // 古い run の verify は最新の run の欄に出ない
+    out = t.show();
+    assert.match(out.stdout, /^1\/2 s1 +accepted\(done\) ×2 +impl を書く$/m);
+    assert.match(out.stdout, /^2\/2 s2 +未着手 +呼び出し元を直す$/m);
+    assert.ok(out.stdout.includes(path.join(t.taskDir, "plan.md")));
+
+    const latest = fs.readdirSync(path.join(t.base, "state", "claude-codex-worker", "runs")).sort().at(-1);
+    t.run(["verify", "--run", path.join(t.base, "state", "claude-codex-worker", "runs", latest)]);
+    assert.match(t.show().stdout, /^1\/2 s1 +accepted\(done\) ×2 +verify 1 件失敗 +impl を書く$/m);
+
+    fs.rmSync(t.taskDir, { recursive: true });
+    assert.equal(t.show().status, 2);
   } finally { t.cleanup(); }
 });
