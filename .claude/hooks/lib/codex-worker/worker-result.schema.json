@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "changed_files", "tests_run", "criteria", "holes", "reference_errors", "notes"],
+  "properties": {
+    "status": { "type": "string", "enum": ["done", "blocked", "failed"] },
+    "changed_files": { "type": "array", "items": { "type": "string" } },
+    "tests_run": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "exit_code", "summary"],
+        "properties": {
+          "command": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "summary": { "type": "string" }
+        }
+      }
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "evidence"],
+        "properties": {
+          "item": { "type": "string" },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "holes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fact", "evidence", "needed_change"],
+        "properties": {
+          "fact": { "type": "string" },
+          "evidence": { "type": "string" },
+          "needed_change": { "type": "string" }
+        }
+      }
+    },
+    "reference_errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["where", "wrong", "actual"],
+        "properties": {
+          "where": { "type": "string" },
+          "wrong": { "type": "string" },
+          "actual": { "type": "string" }
+        }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

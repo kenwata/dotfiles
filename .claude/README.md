@@ -138,7 +138,9 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     `templates/model-routing.md`。分業の目的は上位モデルの利用枠を設計と計画に充てることで、
     `/elaborate`・`/breakdown`・`/amend` は通常実装のモデルが上位モデルの判断なしに走り切れる設計書と
     タスクを書く(設計書の「実行者の裁量と停止条件」で固定と裁量の境界を引き、`TODO.md` の計画ごとの
-    「共通の前提」から名指しする。足りないのが記述ならタスクを割らない)
+    「共通の前提」から名指しする。足りないのが記述ならタスクを割らない)。Claude Code の `/execute-task` は
+    Opus が監督と受け入れを担い、実装は Codex worker へ実装ステップごとに委譲する(実装者と受け入れ役を分け、
+    worker 1 回の文脈を小さく保つ。worker には設計の意図を渡さず、規約だけを渡す。正は `templates/codex-worker.md`)
 
 ## ディレクトリ構成
 
@@ -151,10 +153,11 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── hooks/
 │   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md の未コミット変更と、未決の要確認(件数・回収点の無い行)を通知(設計方針 7)
 │   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
-│   ├── check-task-scope.sh/.mjs # UserPromptSubmit + PreToolUse(Write|Edit) + SubagentStart/Stop hook — /execute-task 実行中に TODO.md の対象パス外への編集を拒否し、レビュー役の返答待ち中は主文脈の編集を拒否(Codex と本体を共有)
+│   ├── check-task-scope.sh/.mjs # UserPromptSubmit + PreToolUse(Write|Edit) + SubagentStart/Stop hook — /execute-task 実行中に TODO.md の対象パス外への編集を拒否し、レビュー役の返答待ち中は主文脈の編集を、Codex worker の実行中はそのリポジトリへの編集を拒否(Codex と本体を共有)
 │   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認の要否・推奨の向き・可読性のゲート(呼び出しごとに1回 deny→取りやめ or 書き直し。設計方針 12)
 │   ├── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
 │   ├── format-markdown.sh       # PostToolUse(Write|Edit) hook — 保存された .md を markdown-format CLI に通す(編集行のみ。全体整形は /markdown-cleanup)
+│   ├── lib/codex-worker/        # /execute-task が実装ステップを Codex worker へ委譲する runner(起動・範囲のゲート・restore・規約の添付。node。テストは test/)
 │   ├── lib/mainline-gauge/      # 本流の計器(/breakdown が支線の分解の前に呼ぶ。node。テストは test/)
 │   └── lib/markdown-format/     # 上記 hook が呼ぶ formatter/linter 本体(依存ゼロ・ビルドなし。cli/format/lint/scope 等 + test/。詳細は同所の README.md)
 ├── agents/                      # サブエージェント定義(全プロジェクト共通。CLAUDE.md を継承する。設計方針 11)
@@ -175,6 +178,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 └── templates/                   # /initialize・/elaborate・/breakdown が読むテンプレート群
     ├── BLUEPRINT.md             # 初期化設計書 — 判断基準と手順のすべてはここ
     ├── model-routing.md          # 設計済みタスクのモデル役割・停止・エスカレーション規約
+    ├── codex-worker.md           # /execute-task の監督が Codex worker へ実装を委譲する手順(ステップの切り方・packet・report の読み方)
     ├── skeletons/               # 機械的に穴埋め・コピーする雛形(7 ファイル)
     │   ├── CLAUDE.project.md    # プロジェクト CLAUDE.md 雛形(ポインタ型)
     │   ├── handoff.md           # HANDOFF.md 雛形(書式規約をコメントで同梱)

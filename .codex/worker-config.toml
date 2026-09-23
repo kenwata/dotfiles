@@ -1,0 +1,21 @@
+# /execute-task の Codex worker 専用の設定。install.sh が worker 用の CODEX_HOME(既定 ~/.codex-worker)へ
+# config.toml として複製する。worker 用ホームには AGENTS.md・hooks・skills を置かない。通常の ~/.codex の
+# AGENTS.md は「開始時に HANDOFF.md と TODO.md を読め」と命じるため、監督が packet に絞った文脈を worker が
+# 自分で読み直してしまう(project_doc_max_bytes=0 でもグローバル AGENTS.md は注入される)。
+# なお ~/.agents/skills(利用者共通の skill 置き場)の一覧は、CODEX_HOME に依らず注入される(約 3KB。名前と
+# 説明だけで、文書を読めという指示は含まない)。
+#
+# model はここに書かない。runner(~/.claude/hooks/lib/codex-worker/cli.mjs)が系統名(既定 luna)を
+# `codex debug models` の一覧の最新の版へ解決し、-m で渡す。版番号を固定しないため。
+# Codex は実行したプロジェクトの信頼設定([projects."<path>"])をこのファイルへ書き足す。install.sh はその表を
+# 比較から除く。
+
+model_reasoning_effort = "high"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+# プロジェクトの AGENTS.md / CLAUDE.md を注入しない。プロジェクトの規約(.claude/rules・.codex/rules)は、
+# runner が許可パスに当てはまるものを全文でプロンプトに付ける
+project_doc_max_bytes = 0
+
+[sandbox_workspace_write]
+network_access = false

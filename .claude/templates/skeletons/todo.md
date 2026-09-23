@@ -55,7 +55,10 @@
   事実にならないため)。書式: <実行系名>/<モデル略称>。実行系名は Claude(Claude Code) /
   Codex(Codex CLI) の 2 値。モデルは Claude Code なら opus5 / sonnet5 / fable5 / haiku4.5、
   Codex なら設定値そのまま(gpt-5.6-sol など)を書く。モデルが判らない実行系では実行系名だけで
-  よい。未実行は — (エムダッシュ)。
+  よい。未実行は — (エムダッシュ)。Claude Code が監督として実装を Codex worker へ委譲して
+  完了させたタスクは <監督>+<worker> と両方を書く(Claude/<監督のモデル略称>+Codex/<worker の
+  モデル設定値>。worker のモデルは report の model 欄にある、最後に使ったもの。
+  ~/.claude/templates/codex-worker.md)。
   記入者はそのタスクを [x] にするエージェント自身で、自分が動いている実行系を書く
   (Claude Code は ~/.claude/CLAUDE.md を、Codex は ~/.codex/AGENTS.md を読んでいるので自明。
   判別に迷う場合、Claude Code では printenv AI_AGENT が使える)。

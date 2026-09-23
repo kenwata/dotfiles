@@ -102,6 +102,31 @@ run_case "hole_record_outside_execute_task_is_allowed" silent "$(handoff_write s
 run_case "hole_record_state_codex" silent "$(prompt_input s12 "\$execute-task T43")"
 run_case "hole_record_in_codex_patch_is_denied" deny "$(jq -nc --arg c "$repo" '{hook_event_name:"PreToolUse",session_id:"s12",cwd:$c,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: HANDOFF.md\n@@\n+- 穴の記録: x\n*** End Patch"}}')"
 
+# Codex worker の実行中ロック(runner がルート単位に置く)。セッションの状態が無くても、ルート内の編集はすべて拒否
+write_lock() {
+  node --input-type=module -e "
+    import fs from 'node:fs';
+    import path from 'node:path';
+    import { workerLockPath } from '$(cd "$(dirname "$0")/.." && pwd)/check-task-scope.mjs';
+    const file = workerLockPath(process.argv[1]);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ root: process.argv[1], task: 'T43', step: 1, expiresAt: Date.now() + Number(process.argv[2]), pid: Number(process.argv[3]) }));
+  " "$repo" "$1" "${2:-$$}"
+}
+write_lock 60000
+run_case "worker_lock_denies_edit_in_repo" deny "$(write_input s13 "$repo/src/ai-workflows/contracts/a.ts")"
+run_case "worker_lock_denies_state_docs_too" deny "$(write_input s13 "$repo/TODO.md")"
+run_case "worker_lock_denies_subagent_edit" deny "$(sub_write s13 impl1 "$repo/src/a.ts")"
+run_case "worker_lock_ignores_other_repo" silent "$(write_input s13 "$work_dir/elsewhere/a.ts")"
+# 監督のセッションの cwd は別リポジトリ(dotfiles など)でありうる。cwd ではなく編集先でロックを判定する
+run_case "worker_lock_applies_from_other_cwd" deny "$(jq -nc --arg c "$work_dir" --arg f "$repo/src/a.ts" '{hook_event_name:"PreToolUse",session_id:"s13",cwd:$c,tool_name:"Write",tool_input:{file_path:$f}}')"
+# runner も codex も生きていないロック(runner が SIGKILL された等)は期限内でも無視して掃除する
+dead_pid="$(bash -c 'echo $$')"
+write_lock 60000 "$dead_pid"
+run_case "worker_lock_with_dead_process_is_ignored" silent "$(write_input s13 "$repo/src/ai-workflows/contracts/a.ts")"
+write_lock -1000
+run_case "expired_worker_lock_is_ignored" silent "$(write_input s13 "$repo/src/ai-workflows/contracts/a.ts")"
+
 run_case "silent_on_invalid_json" silent "not json"
 run_case "silent_on_empty_input" silent ""
 

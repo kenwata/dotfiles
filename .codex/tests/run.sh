@@ -32,9 +32,9 @@ printf '%s\n' \
   'enabled = true' \
   > "$fake_codex/config.toml"
 
-HOME="$fake_home" bash "$repo_root/.codex/install.sh" \
+HOME="$fake_home" CODEX_WORKER_HOME= bash "$repo_root/.codex/install.sh" \
   "$repo_root/.codex" "$fake_codex" "$backup"
-HOME="$fake_home" bash "$repo_root/.codex/install.sh" \
+HOME="$fake_home" CODEX_WORKER_HOME= bash "$repo_root/.codex/install.sh" \
   "$repo_root/.codex" "$fake_codex" "$backup"
 
 [[ ! -L "$fake_codex/config.toml" ]]
@@ -42,7 +42,9 @@ HOME="$fake_home" bash "$repo_root/.codex/install.sh" \
 [[ "$(readlink "$fake_codex/hooks.json")" == "$repo_root/.codex/user-hooks.json" ]]
 [[ -f "$backup/config.toml" ]]
 grep -q 'old-model' "$backup/config.toml"
-[[ "$(yq -p=toml -o=json -r '.model' "$fake_codex/config.toml")" == "gpt-5.6-luna" ]]
+# 既に入っているモデルの選択はテンプレートより優先する(install で古い版へ巻き戻さない)
+[[ "$(yq -p=toml -o=json -r '.model' "$fake_codex/config.toml")" == "old-model" ]]
+[[ "$(yq -p=toml -o=json -r '.model_reasoning_effort' "$fake_codex/config.toml")" == "$(yq -p=toml -o=json -r '.model_reasoning_effort' "$repo_root/.codex/user-config.toml")" ]]
 [[ "$(yq -p=toml -o=json -r '.notify[0]' "$fake_codex/config.toml")" == "runtime-notifier" ]]
 [[ "$(yq -p=toml -o=json -r '.hooks.state."runtime-hook".trusted_hash' "$fake_codex/config.toml")" == "sha256:runtime" ]]
 [[ "$(yq -p=toml -o=json -r '.plugins."runtime-plugin".enabled' "$fake_codex/config.toml")" == "true" ]]
@@ -73,12 +75,33 @@ done
 
 fresh_home="$fixture_root/fresh-home"
 fresh_codex="$fresh_home/.codex"
-mkdir -p "$fresh_codex"
-HOME="$fresh_home" bash "$repo_root/.codex/install.sh" \
+mkdir -p "$fresh_codex" "$fixture_root/agents-real"
+# ~/.agents が dotfiles へのリンクである実環境を再現する。writable_roots はリンクを解決した実体パスで書き出される
+ln -s "$fixture_root/agents-real" "$fresh_home/.agents"
+HOME="$fresh_home" CODEX_WORKER_HOME= bash "$repo_root/.codex/install.sh" \
   "$repo_root/.codex" "$fresh_codex" "$fixture_root/fresh-backup"
 [[ -s "$fresh_codex/config.toml" ]]
-[[ "$(yq -p=toml -o=json -r '.model' "$fresh_codex/config.toml")" == "gpt-5.6-luna" ]]
-[[ "$(yq -p=toml -o=json -r '.sandbox_workspace_write.writable_roots[0]' "$fresh_codex/config.toml")" == "$fresh_home/.agents/skills/agmsg/run" ]]
+# 新規インストールではテンプレートの値が既定になる
+[[ "$(yq -p=toml -o=json -r '.model' "$fresh_codex/config.toml")" == "$(yq -p=toml -o=json -r '.model' "$repo_root/.codex/user-config.toml")" ]]
+[[ "$(yq -p=toml -o=json -r '.sandbox_workspace_write.writable_roots[0]' "$fresh_codex/config.toml")" == "$(cd -P "$fixture_root/agents-real" && pwd -P)/skills/agmsg/run" ]]
+
+# worker 用ホーム: 設定は複製、認証は通常ホームへのリンク、AGENTS.md・hooks・skills は置かない
+fresh_worker="$fresh_home/.codex-worker"
+cmp -s "$repo_root/.codex/worker-config.toml" "$fresh_worker/config.toml"
+[[ -L "$fresh_worker/auth.json" && "$(readlink "$fresh_worker/auth.json")" == "$fresh_codex/auth.json" ]]
+[[ ! -e "$fresh_worker/AGENTS.md" && ! -e "$fresh_worker/hooks.json" && ! -e "$fresh_worker/skills" ]]
+[[ "$(yq -p=toml -o=json -r '.project_doc_max_bytes' "$fresh_worker/config.toml")" == "0" ]]
+[[ "$(yq -p=toml -o=json -r '.model // "unset"' "$fresh_worker/config.toml")" == "unset" ]]
+# 再実行しても差分が無ければ何も置き換えない
+reinstall_output="$(HOME="$fresh_home" CODEX_WORKER_HOME= bash "$repo_root/.codex/install.sh" \
+  "$repo_root/.codex" "$fresh_codex" "$fixture_root/fresh-backup2")"
+printf '%s' "$reinstall_output" | grep -q 'worker auth already linked'
+[[ ! -e "$fixture_root/fresh-backup2/worker" ]]
+# Codex が書き足す信頼設定の表は、置き換えの判定から除く
+printf '\n[projects."/tmp/p"]\ntrust_level = "trusted"\n' >> "$fresh_worker/config.toml"
+HOME="$fresh_home" CODEX_WORKER_HOME= bash "$repo_root/.codex/install.sh" \
+  "$repo_root/.codex" "$fresh_codex" "$fixture_root/fresh-backup3" > /dev/null
+[[ ! -e "$fixture_root/fresh-backup3/worker" ]]
 [[ -f "$fresh_codex/agents/proposal-reviewer.toml" ]]
 [[ ! -L "$fresh_codex/agents/proposal-reviewer.toml" ]]
 cmp -s "$repo_root/.codex/agents/proposal-reviewer.toml" "$fresh_codex/agents/proposal-reviewer.toml"
@@ -96,6 +119,8 @@ cmp "$fake_home/herdr-input.expected" "$fake_home/herdr-input.actual"
 
 node --test "$repo_root/.codex/tests/hooks.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/mainline-gauge/test/gauge.test.mjs"
+node --test "$repo_root/.claude/hooks/lib/codex-worker/test/core.test.mjs"
+node --test "$repo_root/.claude/hooks/lib/codex-worker/test/cli.test.mjs"
 
 safe_git_output="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git status"}}' \
   | bash "$repo_root/.codex/hooks/deny-git-write.sh")"

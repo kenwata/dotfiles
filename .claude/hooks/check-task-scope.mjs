@@ -29,6 +29,11 @@
 //   同じ段階の T134 が担当する作業を「T133 の対象に無い」と穴の記録にして /amend を要求し、利用者の
 //   手戻りになった。止める前に他タスクの担当と自分の完了条件の引用範囲を確かめさせる)。
 //
+// - PreToolUse(Codex worker の実行中ロック): Claude Code の /execute-task が実装を Codex worker
+//   (lib/codex-worker/cli.mjs)へ委譲している間、runner がリポジトリのルート単位にロックを置く。ロックが
+//   有効な間、そのリポジトリへの編集を主文脈・子エージェントを問わず拒否する(worker の差分と混ざると、
+//   runner のゲートが監督の編集を worker の違反と区別できない)。ロックは runner が外し、期限で失効する。
+//
 // 既知の限界: Bash 経由(sed / heredoc / mv)の編集は検知しない。対象パスの内側での過剰変更は
 // 止められない(/breakdown の「裁量は対象パスの中で閉じる」規則と Codex スキルの文章に依る)。
 // 状態はセッション ID 単位で、12 時間で失効する。
@@ -189,7 +194,7 @@ function editTargets(input) {
   return [];
 }
 
-function isInside(relative, scopePath, root) {
+export function isInside(relative, scopePath, root) {
   const scope = scopePath.replace(/^\.\//, "");
   if (relative === scope) return true;
   let isDir = scope.endsWith("/");
@@ -202,7 +207,7 @@ function isInside(relative, scopePath, root) {
 
 // 未作成のパスも扱えるよう、実在する最も深い祖先までを実体パスへ解決して残りを付け直す
 // (macOS の /var → /private/var のように、git の返すルートと入力パスの解決状態が違うため)
-function canonical(absolute) {
+export function canonical(absolute) {
   let existing = absolute;
   let tail = "";
   while (!fs.existsSync(existing)) {
@@ -214,17 +219,65 @@ function canonical(absolute) {
   return path.join(fs.realpathSync(existing), tail);
 }
 
-export function checkTargets(targets, scope, root, cwd) {
+// alwaysAllowed を渡すと常時許可の集合を差し替える(worker 実行中ロックの判定は [] を渡し、ルート内の編集先を得る)
+export function checkTargets(targets, scope, root, cwd, alwaysAllowed = ALWAYS_ALLOWED) {
   const violations = [];
   const realRoot = canonical(root);
   for (const target of targets) {
     const absolute = canonical(path.resolve(cwd, target));
     const relative = path.relative(realRoot, absolute).split(path.sep).join("/");
     if (relative.startsWith("..") || path.isAbsolute(relative)) continue; // プロジェクト外は対象外
-    const allowed = [...ALWAYS_ALLOWED, ...scope.paths].some((p) => isInside(relative, p, root));
+    const allowed = [...alwaysAllowed, ...scope.paths].some((p) => isInside(relative, p, root));
     if (!allowed) violations.push(relative);
   }
   return violations;
+}
+
+// Codex worker の実行中ロック。リポジトリのルート単位(監督のセッション ID を runner は知らないため)
+export function workerLockPath(root) {
+  return path.join(stateDir(), `worker-lock-${createHash("sha1").update(canonical(root)).digest("hex").slice(0, 16)}.json`);
+}
+
+function alive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM"; // 存在するが権限が無い
+  }
+}
+
+// ロックファイルの内容を読む。内容は { root, task, step, expiresAt, pid(runner), childPid(codex), ... }。
+// 期限切れ、または runner と codex のどちらも生きていないロックは掃除して null(runner が SIGKILL された等)。
+// 読めない・壊れたファイルはロックとして扱わない
+function readWorkerLock(file) {
+  let lock;
+  try {
+    lock = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+  if (lock.root && Date.now() <= Number(lock.expiresAt || 0) && (alive(lock.pid) || alive(lock.childPid))) return lock;
+  fs.rmSync(file, { force: true });
+  return null;
+}
+
+export function activeWorkerLock(root) {
+  return readWorkerLock(workerLockPath(root));
+}
+
+function activeWorkerLocks() {
+  let names;
+  try { names = fs.readdirSync(stateDir()).filter((name) => name.startsWith("worker-lock-")); } catch { return []; }
+  return names.map((name) => readWorkerLock(path.join(stateDir(), name))).filter(Boolean);
+}
+
+function workerLockMessage(lock) {
+  return (
+    `Codex worker(${lock.task} ステップ ${lock.step})の実行中です。worker が終わり、runner の report が届くまで` +
+    "このリポジトリを編集しないこと(worker の差分と混ざるとゲートが判定できない)"
+  );
 }
 
 function denyMessage(task, scope, violations) {
@@ -283,6 +336,17 @@ function handleToolUse(input) {
   const targets = editTargets(input);
   if (targets.length === 0) return;
 
+  // Codex worker の実行中: そのリポジトリへの Claude 側の編集をすべて止める(worker の差分と混ざるとゲートが
+  // 監督の編集を worker の違反と区別できない)。ロックは runner(lib/codex-worker/cli.mjs)が置いて外す
+  // 編集先がロック中のルートの中にあるかで判定する(セッションの cwd は別リポジトリでありうるため、cwd から
+  // ルートを求めない)。checkTargets を許可集合なしで呼ぶと、ルート内の編集先だけが返る
+  const cwd = input.cwd || process.cwd();
+  const lock = activeWorkerLocks().find((l) => checkTargets(targets, { paths: [] }, l.root, cwd, []).length > 0);
+  if (lock) {
+    emit({ permissionDecision: "deny", permissionDecisionReason: workerLockMessage(lock) });
+    return;
+  }
+
   // レビュー待ち: 主文脈(agent_id 無し)の編集だけを止める。子エージェントの編集は通す
   if (!input.agent_id) {
     const reviews = pendingReviews(input);
@@ -304,7 +368,6 @@ function handleToolUse(input) {
   const scope = readTaskScope(todoText, state.task);
   if (!scope || !scope.open) return;
 
-  const cwd = input.cwd || process.cwd();
   if (checkHoleRecord(input, state, targets, cwd)) return;
   if (!scope.declared) return;
 
