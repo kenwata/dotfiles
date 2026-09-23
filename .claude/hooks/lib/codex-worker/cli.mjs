@@ -4,7 +4,11 @@
 //
 // 呼び出し規約:
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs plan --root <プロジェクトルート> --task T<n> --file <plan.md>
-//   node ~/.claude/hooks/lib/codex-worker/cli.mjs show --root <プロジェクトルート> --task T<n>
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs show --root <プロジェクトルート> --task T<n> [--json]
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs note --root <プロジェクトルート> --task T<n>
+//        --kind <fact|decision|rejected|intent|step|handoff|resume> --text <本文 1 行>
+//        [--step <番号>] [--from <番号>(resume)] [--changed auto | --changed <パス,パス>]
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs resume --root <プロジェクトルート> --task T<n>
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs run --root <プロジェクトルート> --task T<n> --step <番号>
 //        --packet <packet.md> --allow <パス> [--allow <パス> ...(既定で 3 件まで)]
 //        [--model-family <luna|terra|sol ...> | --model <モデル ID>] [--timeout <秒>]
@@ -40,6 +44,11 @@
 // verify は、run の packet の「## 検証」節のコマンドを監督の環境(worker の sandbox の外)で 1 本ずつ別々に打ち、
 // コマンドごとの終了コードを JSON で stdout と <run ディレクトリ>/verify.json に出す。
 //   exit 0 = 全部 0、exit 1 = 0 でないものがある、exit 2 = 記録の誤り・worker の実行中(何も打っていない)
+// 作業記録(worklog.md、書式の正は worklog.mjs): plan / run / verify は結果をタスクの置き場の worklog.md にも 1 行ずつ
+// 追記する(run の記録は 7 日で消えるが、worklog は消えない)。note は監督(Codex ホストでは本人)がステップの境目の
+// 結論を追記する。resume は同じ T の再開の照合を JSON で返す: 計画の各ステップの状態、最後の handoff、
+// 作業記録で説明できない未コミットの変更(unexplained_dirty。空でなければ再開せず止まる)。show は runs/ が
+// 消えたステップを worklog から埋める。--json で同じ内容を JSON で出す。
 
 import fs from "node:fs";
 import os from "node:os";
@@ -48,13 +57,13 @@ import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { StringDecoder } from "node:string_decoder";
-import { activeWorkerLock, isInside, workerLockPath } from "../../check-task-scope.mjs";
+import { ALWAYS_ALLOWED, activeWorkerLock, isInside, workerLockPath } from "../../check-task-scope.mjs";
 import {
   buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, findRollout, packetVerifyCommands, parsePlan, gate, readRollout, resolveModelFamily, restore, selectRules,
-  takeSnapshot, validateResult,
+  takeSnapshot, trackedPaths, validateResult,
 } from "./core.mjs";
 import { lineSplitter, renderEvent, renderSummary } from "./status.mjs";
-import { readPlan, rootSlug, runsDir, stateDir, taskDir } from "./worklog.mjs";
+import { NOTE_KINDS, appendWorklog, normalizeStep, readPlan, readWorklog, rootSlug, runsDir, stateDir, taskDir } from "./worklog.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULTS = { timeout: 1200, maxPacket: 12 * 1024, maxAllow: 3, peakThreshold: 0.6, family: "luna" };
@@ -98,6 +107,16 @@ function statusWriter(root, task, label) {
     try { process.stderr.write(out); } catch { /* 表示のみ */ }
     try { fs.appendFileSync(logFile, out); } catch { /* 表示のみ */ }
   };
+}
+
+// 作業記録への追記は run・verify・plan の成否を左右しない(書けなくても本来の出力は出す)
+function recordWorklog(root, task, entry) {
+  try { appendWorklog(root, task, entry); } catch { /* 記録のみ */ }
+}
+
+// 未コミットの変更(.gitignore 対象を除く)
+function dirtyWorktree(root) {
+  return trackedPaths(root).filter((e) => !e.ignored).map((e) => e.path);
 }
 
 function pruneOldRuns() {
@@ -300,6 +319,10 @@ async function run(args) {
     if (child) killGroup(child, "SIGKILL");
     fs.rmSync(lockFile, { force: true });
     status(`interrupted by ${signal}(作業ツリーは戻していない)`);
+    recordWorklog(root, task, {
+      kind: "run", step, by: "runner", keys: { run: id, accepted: false, stage: "interrupted" },
+      text: `runner が ${signal} で止められた。作業ツリーは戻していない`,
+    });
     emit({ accepted: false, stage: "interrupted", run_dir: runDir, reasons: [`runner が ${signal} で止められた。作業ツリーは戻していない(restore --run で戻す)`] }, runDir, 1);
     process.exit(1);
   };
@@ -389,6 +412,17 @@ async function run(args) {
     rollout: rolloutFile,
   };
   status(renderSummary(report));
+  // 再開の照合の材料を run の記録(7 日で消える)の外に残す。その T で最初の run には、worker の起動前から
+  // 未コミットだったパス(利用者や監督の変更)を baseline として添える
+  const firstRun = !(readWorklog(root, task)?.entries ?? []).some((e) => e.kind === "run");
+  recordWorklog(root, task, {
+    kind: "run", step, by: "runner",
+    keys: {
+      run: id, accepted: report.accepted, worker: result?.status ?? "none", changed: checked.changed,
+      ...(firstRun ? { baseline: Object.entries(snapshot.files).filter(([, f]) => !f.ignored).map(([p]) => p) } : {}),
+    },
+    text: report.accepted ? `accepted: ${plan.steps.find((s) => s.step === step).purpose}` : reasons.join(" / "),
+  });
   emit(report, runDir, report.accepted ? 0 : 1);
 }
 
@@ -487,6 +521,11 @@ async function verifyRun(args) {
   };
   const text = JSON.stringify(report, null, 2);
   try { fs.writeFileSync(path.join(args.run, "verify.json"), text); } catch { /* stdout には出す */ }
+  recordWorklog(root, meta.task, {
+    kind: "verify", step: meta.step, by: "runner",
+    keys: { run: path.basename(args.run), result: failed === 0 ? "ok" : `fail:${failed}` },
+    text: `${results.length - failed}/${results.length} ok`,
+  });
   process.stdout.write(text + "\n");
   process.exitCode = failed === 0 ? 0 : 1;
 }
@@ -515,19 +554,16 @@ function registerPlan(args) {
   const status = statusWriter(root, task, null);
   status(`plan ${revised ? "revised" : "registered"}: ${steps.length} steps (${file})`);
   status(steps.map((s) => `  s${s.step}: ${s.purpose}`).join("\n"));
+  recordWorklog(root, task, {
+    kind: "plan", by: "runner", keys: { steps: steps.length, revised },
+    text: steps.map((s) => `s${s.step} ${s.purpose}`).join(" / "),
+  });
   emit({ task, root, plan_file: file, revised, steps }, null, 0);
 }
 
-// 計画の各ステップについて、最新の run の状態と verify の結果を人向けの表で出す
-function showTask(args) {
-  const root = gitRoot(path.resolve(args.root ?? "."));
-  const task = args.task;
-  const plan = root && /^T\d+$/.test(task ?? "") ? readPlan(root, task) : null;
-  if (!plan) {
-    process.stderr.write(`${task ?? "(--task が無い)"} のステップ計画が無い(${root ?? args.root ?? "."})\n`);
-    process.exitCode = 2;
-    return;
-  }
+// 計画の各ステップの状態。runs/ に run の記録があればそれを(実行中・中断はここでしか分からない)、
+// 7 日を過ぎて消えたステップは worklog の run / verify の行から導く
+function stepStates(root, task, plan) {
   let names = [];
   try { names = fs.readdirSync(runsDir()).filter((n) => n.startsWith(`${task}-s`)); } catch { /* run がまだ無い */ }
   const latest = new Map();
@@ -537,29 +573,124 @@ function showTask(args) {
     try { meta = JSON.parse(fs.readFileSync(path.join(dir, "run.json"), "utf8")); } catch { continue; }
     if (meta.root === root) latest.set(meta.step, { dir, runs: (latest.get(meta.step)?.runs ?? 0) + 1 });
   }
+  const entries = readWorklog(root, task)?.entries ?? [];
   const lock = activeWorkerLock(root);
   const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
-  const rows = plan.steps.map((s, index) => {
+  return plan.steps.map((s, index) => {
+    const row = { index: index + 1, total: plan.steps.length, step: s.step, purpose: s.purpose, state: "未着手", runs: 0, verify: "", source: null };
     const run = latest.get(s.step);
-    let state = "未着手";
-    let verify = "";
     if (run) {
       const report = readJson(path.join(run.dir, "report.json"));
       const verified = readJson(path.join(run.dir, "verify.json"));
-      if (lock?.runDir === run.dir) state = "実行中";
-      else if (report) state = report.accepted ? `accepted(${report.worker?.status ?? "?"})` : "rejected";
-      else state = "中断";
-      if (verified) verify = verified.all_passed ? "verify ok" : `verify ${verified.failed} 件失敗`;
-      if (run.runs > 1) state += ` ×${run.runs}`;
+      if (lock?.runDir === run.dir) row.state = "実行中";
+      else if (report) row.state = report.accepted ? `accepted(${report.worker?.status ?? "?"})` : "rejected";
+      else row.state = "中断";
+      if (verified) row.verify = verified.all_passed ? "verify ok" : `verify ${verified.failed} 件失敗`;
+      Object.assign(row, { runs: run.runs, source: "runs" });
+      return row;
     }
-    return [`${index + 1}/${plan.steps.length} s${s.step}`, state, verify, s.purpose];
+    const logged = entries.filter((e) => e.kind === "run" && e.step === `s${s.step}`);
+    if (logged.length > 0) {
+      const last = logged.at(-1);
+      if (last.keys.stage === "interrupted") row.state = "中断";
+      else row.state = last.keys.accepted === "true" ? `accepted(${last.keys.worker ?? "?"})` : "rejected";
+      const verified = entries.filter((e) => e.kind === "verify" && e.keys.run === last.keys.run).at(-1);
+      if (verified) row.verify = verified.keys.result === "ok" ? "verify ok" : `verify ${verified.keys.result.replace(/^fail:/, "")} 件失敗`;
+      Object.assign(row, { runs: logged.length, source: "worklog" });
+    }
+    return row;
   });
+}
+
+// 計画の各ステップについて、最新の run の状態と verify の結果を人向けの表(--json なら JSON)で出す
+function showTask(args) {
+  const root = gitRoot(path.resolve(args.root ?? "."));
+  const task = args.task;
+  const plan = root && /^T\d+$/.test(task ?? "") ? readPlan(root, task) : null;
+  if (!plan) {
+    if (args.json) emit({ errors: [`${task ?? "(--task が無い)"} のステップ計画が無い(${root ?? args.root ?? "."})`] }, null, 2);
+    else {
+      process.stderr.write(`${task ?? "(--task が無い)"} のステップ計画が無い(${root ?? args.root ?? "."})\n`);
+      process.exitCode = 2;
+    }
+    return;
+  }
+  const states = stepStates(root, task, plan);
+  if (args.json) {
+    emit({ task, root, plan_file: plan.file, steps: states }, null, 0);
+    return;
+  }
+  const rows = states.map((s) => [`${s.index}/${s.total} s${s.step}`, s.runs > 1 ? `${s.state} ×${s.runs}` : s.state, s.verify, s.purpose]);
   const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => [...r[i]].length)));
   const pad = (text, width) => text + " ".repeat(width - [...text].length);
   const lines = [`${task} ${root}`, `計画: ${plan.file}`, ""];
   for (const r of rows) lines.push(`${pad(r[0], widths[0])}  ${pad(r[1], widths[1])}  ${pad(r[2], widths[2])}  ${r[3]}`);
   lines.push("", `packet の写し: ${path.dirname(plan.file)}/s<番号>.packet.md`);
   process.stdout.write(lines.join("\n") + "\n");
+}
+
+// 監督(Codex ホストでは本人)がステップの境目の結論を worklog に 1 行書く
+function noteTask(args) {
+  const root = gitRoot(path.resolve(args.root ?? "."));
+  const task = args.task;
+  const errors = [];
+  if (!root) errors.push(`git のリポジトリではない: ${args.root ?? "."}`);
+  if (!/^T\d+$/.test(task ?? "")) errors.push("--task は T<n>");
+  if (!NOTE_KINDS.includes(args.kind)) errors.push(`--kind は ${NOTE_KINDS.join(" / ")} のどれか`);
+  if (!String(args.text ?? "").trim()) errors.push("--text が空(結論を 1 行で書く)");
+  if (errors.length > 0) {
+    emit({ errors }, null, 2);
+    return;
+  }
+  const keys = {};
+  if (args.from) keys.from = normalizeStep(args.from);
+  if (args.changed === "auto") keys.changed = dirtyWorktree(root);
+  else if (args.changed) keys.changed = args.changed.split(",").map((p) => p.trim().replace(/^\.\//, "")).filter(Boolean);
+  const thread = process.env.CODEX_THREAD_ID;
+  const by = thread ? `codex:${thread.slice(0, 8)}` : "claude";
+  const { file, line } = appendWorklog(root, task, { kind: args.kind, step: args.step, by, keys, text: args.text });
+  emit({ task, root, worklog: file, entry: line }, null, 0);
+}
+
+// 同じ T の再開の照合。未コミットの変更が、作業記録で説明できるもの(最初の run の前から未コミットだったパス・
+// 受け入れた run の変更・Codex ホストが step で記録した変更・状態文書)だけかを確かめる
+function resumeTask(args) {
+  const root = gitRoot(path.resolve(args.root ?? "."));
+  const task = args.task;
+  const errors = [];
+  if (!root) errors.push(`git のリポジトリではない: ${args.root ?? "."}`);
+  if (!/^T\d+$/.test(task ?? "")) errors.push("--task は T<n>");
+  if (errors.length > 0) {
+    emit({ errors }, null, 2);
+    return;
+  }
+  const log = readWorklog(root, task);
+  const entries = log?.entries ?? [];
+  const plan = readPlan(root, task);
+  const explained = [...ALWAYS_ALLOWED];
+  for (const e of entries) {
+    if (e.kind === "run" && e.keys.baseline) explained.push(...e.keys.baseline);
+    if (e.kind === "run" && e.keys.accepted === "true" && e.keys.changed) explained.push(...e.keys.changed);
+    if (e.kind === "step" && e.keys.changed) explained.push(...e.keys.changed);
+  }
+  const dirty = dirtyWorktree(root);
+  const unexplained = dirty.filter((p) => !explained.some((a) => isInside(p, a, root)));
+  const last = (kind) => entries.filter((e) => e.kind === kind).at(-1) ?? null;
+  const lock = activeWorkerLock(root);
+  emit({
+    task, root,
+    exists: entries.length > 0,
+    worklog: log?.file ?? null,
+    plan_file: plan?.file ?? null,
+    steps: plan ? stepStates(root, task, plan) : [],
+    last_handoff: last("handoff"),
+    last_budget: last("budget"),
+    last_resume: last("resume"),
+    compacted: entries.some((e) => e.kind === "compact"),
+    worker_running: lock ? { task: lock.task, step: lock.step } : null,
+    dirty,
+    unexplained_dirty: unexplained,
+  }, null, 0);
 }
 
 let parsed;
@@ -571,7 +702,8 @@ try {
       allow: { type: "string", multiple: true }, model: { type: "string" }, "model-family": { type: "string" },
       timeout: { type: "string" }, "max-packet": { type: "string" }, "max-allow": { type: "string" },
       "peak-threshold": { type: "string" }, run: { type: "string" }, keep: { type: "string", multiple: true },
-      file: { type: "string" },
+      file: { type: "string" }, kind: { type: "string" }, text: { type: "string" }, from: { type: "string" },
+      changed: { type: "string" }, json: { type: "boolean" },
     },
   });
 } catch (error) {
@@ -584,5 +716,7 @@ if (parsed) {
   else if (command === "verify") await verifyRun(parsed.values);
   else if (command === "plan") registerPlan(parsed.values);
   else if (command === "show") showTask(parsed.values);
-  else emit({ errors: ["usage: cli.mjs plan ... | cli.mjs run ... | cli.mjs show ... | cli.mjs restore --run <dir> | cli.mjs verify --run <dir>"] }, null, 2);
+  else if (command === "note") noteTask(parsed.values);
+  else if (command === "resume") resumeTask(parsed.values);
+  else emit({ errors: ["usage: cli.mjs plan ... | cli.mjs run ... | cli.mjs show ... [--json] | cli.mjs note ... | cli.mjs resume ... | cli.mjs restore --run <dir> | cli.mjs verify --run <dir>"] }, null, 2);
 }

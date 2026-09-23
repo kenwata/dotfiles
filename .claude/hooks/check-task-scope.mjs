@@ -52,7 +52,7 @@ const REVIEW_TTL_MS = 30 * 60 * 1000;
 const REVIEW_AGENTS = new Set(["proposal-reviewer", "diff-reviewer", "proposal_reviewer", "diff_reviewer"]);
 // 穴の記録の書式の語(~/.claude/commands/execute-task.md の手順 3)。この語を含む HANDOFF.md への編集を点検する
 const HOLE_RECORD_MARKER = "穴の記録";
-const ALWAYS_ALLOWED = ["TODO.md", "HANDOFF.md", "docs/decisions.md", "docs/architecture.md", "docs/design/"];
+export const ALWAYS_ALLOWED = ["TODO.md", "HANDOFF.md", "docs/decisions.md", "docs/architecture.md", "docs/design/"];
 
 export function stateDir() {
   return path.join(process.env.TMPDIR || os.tmpdir(), "claude-task-scope");
@@ -68,7 +68,7 @@ function statePath(input) {
   return path.join(stateDir(), `${stateKey(input)}.json`);
 }
 
-function gitRoot(dir) {
+export function gitRoot(dir) {
   try {
     return execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
@@ -141,7 +141,9 @@ function reviewDenyMessage(agents) {
   );
 }
 
-function loadState(input) {
+// /execute-task の実行中の T と、そのプロジェクトのルート({ task, root, at })。無い・失効なら null。
+// 予算停止の hook(context-budget.mjs)も「/execute-task の実行中だけ動く」判定にこれを使う
+export function loadState(input) {
   try {
     const state = JSON.parse(fs.readFileSync(statePath(input), "utf8"));
     if (!state.task || !state.root || Date.now() - (state.at || 0) > STATE_TTL_MS) return null;
@@ -151,18 +153,39 @@ function loadState(input) {
   }
 }
 
+// 完了条件ブロックの `依存: T9、T31。` から T を集める。`T26〜T28` の範囲は展開し、括弧の注記は読まない
+export function parseDependencies(block) {
+  const match = String(block ?? "").match(/依存:\s*([^。]*)/);
+  if (!match) return [];
+  let text = match[1].replace(/[（(][^）)]*[)）]/g, "");
+  const open = text.search(/[（(]/);
+  if (open !== -1) text = text.slice(0, open);
+  const deps = [];
+  const add = (n) => { if (!deps.includes(`T${n}`)) deps.push(`T${n}`); };
+  const range = /T(\d+)\s*[〜~～]\s*T(\d+)/g;
+  for (const [, from, to] of text.matchAll(range)) {
+    for (let n = Number(from); n <= Number(to); n += 1) add(n);
+  }
+  for (const [, n] of text.replace(range, "").matchAll(/T(\d+)/g)) add(n);
+  return deps;
+}
+
 // TODO.md から対象 T の状態と `対象:` を読む。
-// 戻り値: { open: boolean, paths: string[], prose: string[] } / T が見つからなければ null
+// 戻り値: { open, state(" " | "x" | "-"), deps(依存の T), replacedBy(廃止時の置き換え先 T か null),
+//          paths, prose, declared } / T が見つからなければ null
 export function readTaskScope(todoText, task) {
   const idPattern = new RegExp(`(^|[^0-9A-Za-z])${task}([^0-9]|$)`);
   const lines = todoText.split(/\r?\n/);
   const row = lines.find((line) => /^\|/.test(line) && idPattern.test(line) && /\|\s*\[( |x|-)\]\s*\|/.test(line));
   if (!row) return null;
-  const open = /\|\s*\[ \]\s*\|/.test(row);
+  const state = row.match(/\|\s*\[( |x|-)\]\s*\|/)[1];
+  const open = state === " ";
+  const replacedBy = state === "-" ? (row.match(/→\s*(T\d+)/)?.[1] ?? null) : null;
 
   const block = lines.find((line) => new RegExp(`^\\*\\*#[^*]*/\\s*${task}\\*\\*`).test(line));
+  const deps = parseDependencies(block);
   const target = block ? block.match(/対象:\s*([^。]*)。/) : null;
-  if (!target) return { open, paths: [], prose: [], declared: false };
+  if (!target) return { open, state, deps, replacedBy, paths: [], prose: [], declared: false };
 
   const paths = [];
   const prose = [];
@@ -174,7 +197,7 @@ export function readTaskScope(todoText, task) {
     if (code) paths.push(code[1]);
     else prose.push(item);
   }
-  return { open, paths, prose, declared: true };
+  return { open, state, deps, replacedBy, paths, prose, declared: true };
 }
 
 function patchTargets(patch) {
