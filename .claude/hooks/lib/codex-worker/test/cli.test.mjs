@@ -7,6 +7,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 
+// 検証節: 1 本目は worker の変更があれば通り、2 本目は必ず落ちる。束ねて打つと 1 本目の成否が分からなくなる組み合わせ
+const VERIFY_SECTION = "## 検証\n- `test -f src/a/impl.ts` (worker の変更がある)\n- `echo checked; exit 3`\n";
+
 const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.mjs");
 
 // 偽の codex: `debug models` は一覧を返す。`exec` は FAKE_MODE に従って作業ツリーを変え、結果と rollout を書く
@@ -67,7 +70,7 @@ function setup() {
   fs.writeFileSync(path.join(base, "auth.json"), "{}");
   fs.symlinkSync(path.join(base, "auth.json"), path.join(home, "auth.json"));
   const packet = path.join(base, "packet.md");
-  fs.writeFileSync(packet, "## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 許可パス内で閉じる試験用の変更\n");
+  fs.writeFileSync(packet, `## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 許可パス内で閉じる試験用の変更\n\n${VERIFY_SECTION}`);
   const tmp = path.join(base, "tmp");
   fs.mkdirSync(tmp);
   const env = {
@@ -150,7 +153,7 @@ test("起動前の拒否は exit 2 で JSON を出し、worker を起動しな�
     result = t.run(["run", "--root", t.base, "--task", "T7", "--step", "1", "--packet", t.packet, "--allow", "x"]);
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /git のリポジトリではない/);
-    fs.writeFileSync(t.packet, "## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 試験用\n");
+    fs.writeFileSync(t.packet, `## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 試験用\n\n${VERIFY_SECTION}`);
     result = t.run([...baseArgs(t.root, t.packet), "--model-family", "nova"]);
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /系統 nova/);
@@ -158,6 +161,7 @@ test("起動前の拒否は exit 2 で JSON を出し、worker を起動しな�
     result = t.run(baseArgs(t.root, t.packet));
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /## 横断の確認/);
+    assert.match(result.json.errors.join(), /## 検証/);
     assert.equal(fs.existsSync(path.join(t.root, "src/a/impl.ts")), false);
   } finally { t.cleanup(); }
 });
@@ -173,5 +177,43 @@ test("restore は run の許可パスの中だけを戻し、記録が無けれ�
     assert.equal(fs.existsSync(path.join(t.root, "src/a/impl.ts")), false);
     assert.match(fs.readFileSync(path.join(t.root, "TODO.md"), "utf8"), /監督の追記/);
     assert.equal(t.run(["restore", "--run", path.join(t.base, "missing")]).code, 2);
+  } finally { t.cleanup(); }
+});
+
+test("verify は packet の検証節のコマンドを 1 本ずつ打ち、コマンドごとの終了コードを返す", () => {
+  const t = setup();
+  try {
+    const { json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    const verified = t.run(["verify", "--run", json.run_dir]);
+    assert.equal(verified.code, 1, "0 でないコマンドがあれば exit 1");
+    assert.equal(verified.json.all_passed, false);
+    assert.deepEqual(verified.json.commands.map((c) => [c.command, c.exit_code]), [
+      ["test -f src/a/impl.ts", 0], ["echo checked; exit 3", 3],
+    ]);
+    assert.equal(verified.json.commands[1].tail, "checked");
+    assert.equal(fs.readFileSync(verified.json.commands[1].log, "utf8"), "checked\n");
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(json.run_dir, "verify.json"), "utf8")), verified.json);
+    for (const line of ["[Codex T7 s1] verify $ test -f src/a/impl.ts", "[Codex T7 s1] verify   ✗ exit 3", "[Codex T7 s1] verify finished: 1/2 ok"]) {
+      assert.ok(verified.stderr.includes(line), `${line} が無い:\n${verified.stderr}`);
+    }
+
+    // 検証を打つ時点の作業ツリーを見る(worker の変更を戻せば 1 本目も落ちる)
+    fs.writeFileSync(path.join(json.run_dir, "packet.md"), "## 検証\n- `test -f src/a/impl.ts`\n");
+    assert.equal(t.run(["verify", "--run", json.run_dir]).code, 0);
+    fs.rmSync(path.join(t.root, "src/a/impl.ts"));
+    assert.equal(t.run(["verify", "--run", json.run_dir]).json.commands[0].exit_code, 1);
+  } finally { t.cleanup(); }
+});
+
+test("verify は記録が無い・検証節が無い run では何も打たず exit 2", () => {
+  const t = setup();
+  try {
+    assert.equal(t.run(["verify", "--run", path.join(t.base, "missing")]).code, 2);
+    const { json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    fs.writeFileSync(path.join(json.run_dir, "packet.md"), "## 検証\nコマンドは後で\n");
+    const result = t.run(["verify", "--run", json.run_dir]);
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join(), /## 検証/);
+    assert.equal(fs.existsSync(path.join(json.run_dir, "verify.json")), false);
   } finally { t.cleanup(); }
 });

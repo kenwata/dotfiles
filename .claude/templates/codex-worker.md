@@ -80,8 +80,14 @@ skill 一覧(名前と説明、約 3KB)は CODEX_HOME に依らず注入され�
 <runner が必須にする。関数名・型・値の置き場を他のファイルが作る/使う時の作り手と呼び出し元、原因の断定の根拠、共有の型・形式。当たらなければ「該当なし: 理由」>
 
 ## 検証
-- <実行するコマンド(このステップの変更に最も近い試験)>
+- `<コマンド>`
 ````
+
+「検証」節は、受け入れの前に監督が `verify` で打つコマンドの一覧である(下の「report の読み方」)。1 項目に
+1 コマンドをバッククォートで囲んで書く(括弧の補足は項目の後ろに書いてよい)。このステップの変更に最も近い試験に加えて、
+プロジェクト規約が変更に求める lint・整形の検査・型検査も入れる — ここに無いものは誰も打たない。runner はコマンドの
+箇条書きが無い packet を起動前に拒否する。worker も同じコマンドを sandbox の中で打つが、その結果(`tests_run`)は
+申告であり、受け入れの根拠にはしない。
 
 ## 起動
 
@@ -117,7 +123,18 @@ sandbox は TMPDIR と /tmp に書けるので、restore の元になる記録�
 runner は report(JSON)を stdout と `<run_dir>/report.json` に出す。バックグラウンドの出力ファイルには
 stderr の状態行も混ざるので、完了通知の後は `sed -n '/^{$/,/^}$/p' <出力ファイル>` で report だけを読む(状態行は
 `[Codex ` で始まる 1 行ずつなので、`{` だけの行と `}` だけの行は report の開始と終わりに限られる)。report は判断材料であり、`worker` 欄は
-worker の主張である。受け入れる前に、監督が `git diff` と試験の再実行で確かめる。
+worker の主張である。受け入れる前に、監督が `git diff` と `verify` で確かめる。
+
+````bash
+node ~/.claude/hooks/lib/codex-worker/cli.mjs verify --run <run_dir> [--timeout <1 本あたりの秒。既定 900>]
+````
+
+`verify` は packet の「検証」節のコマンドを、run のルートで 1 本ずつ別々に打ち、コマンドごとの終了コードと出力の末尾を
+JSON で stdout と `<run_dir>/verify.json` に出す(全文は `<run_dir>/verify-<時刻>/<番号>.log`)。exit 0 は全部 0、
+exit 1 は 0 でないものがある。監督の Bash から起動するので worker の sandbox の制限(loopback の bind など)を受けず、
+worker が `notes` で「sandbox で完走できなかった」と書いた検証もこれで確かめる。結果は stdout を直接読み、
+ファイルへリダイレクトしない(以前の出力ファイルを読み違えないため)。検証を自分で束ねて打ったり一部だけ打ったりしない
+— 束ねると 1 本ごとの成否が分からず、打たなかったものは確かめていない。
 
 - **exit 2**: `errors` を直して起動し直す(worker は起動していない。何も変更していない)。
 - **exit 1(不採用)**: `reasons` を読む。
@@ -126,7 +143,7 @@ worker の主張である。受け入れる前に、監督が `git diff` と試�
   - `restore.unrestorable`(入れ子のリポジトリ・サブモジュールなどのディレクトリ)と `gate.repo_changes`
     (commit・stage など)は自動では戻していないので、状態を確認して手で戻す。
   - `stage: interrupted` は runner が止められた場合で、作業ツリーは戻していない。
-- **exit 0、`worker.status: done`**: 差分と試験を確かめ、`criteria` を完了の基準と一項目ずつ照合する。足りなければ、
+- **exit 0、`worker.status: done`**: 差分を確かめ、`verify` が exit 0(`all_passed: true`)であることを確かめ、`criteria` を完了の基準と一項目ずつ照合する。足りなければ、
   不足を packet に書いて同じステップを再起動する。
 - **exit 0、`worker.status: blocked`**: `holes` と `reference_errors` を観測で裏取りする(下の節)。
 - **exit 0、`worker.status: failed`**: `notes` と `tests_run` から原因を確かめ、ステップを直して再起動するか、

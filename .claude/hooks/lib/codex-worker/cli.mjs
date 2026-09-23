@@ -8,6 +8,7 @@
 //        [--model-family <luna|terra|sol ...> | --model <モデル ID>] [--timeout <秒>]
 //        [--max-packet <バイト>] [--max-allow <件数>] [--peak-threshold <0〜1>]
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs restore --run <run ディレクトリ> [--keep <残すパス> ...]
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs verify --run <run ディレクトリ> [--timeout <1 本あたりの秒>]
 //   worker 用 CODEX_HOME は環境変数 CODEX_WORKER_HOME(既定 ~/.codex-worker、.codex/install.sh が作る)。
 //   モデルは既定で系統 luna(model-routing.md の通常実装)を、`codex debug models` の一覧の最新の版へ解決する。
 //   版番号をどこにも固定しないため。--model は解決を飛ばして ID を直接渡す(一覧に無いモデルを試す時だけ)。
@@ -30,6 +31,9 @@
 //   exit 2 = 起動前に拒否、または引数・記録の誤り(worker を起動していない / 何も変更していない)
 // restore は、監督が accepted の結果を採らないと決めた時に、そのステップの許可パスの中の変更を snapshot 時点へ
 // 戻す(許可パスの外は触らない)。--keep を渡すと、そのパスの中の変更は残す。
+// verify は、run の packet の「## 検証」節のコマンドを監督の環境(worker の sandbox の外)で 1 本ずつ別々に打ち、
+// コマンドごとの終了コードを JSON で stdout と <run ディレクトリ>/verify.json に出す。
+//   exit 0 = 全部 0、exit 1 = 0 でないものがある、exit 2 = 記録の誤り・worker の実行中(何も打っていない)
 
 import fs from "node:fs";
 import os from "node:os";
@@ -40,7 +44,7 @@ import { parseArgs } from "node:util";
 import { StringDecoder } from "node:string_decoder";
 import { activeWorkerLock, isInside, workerLockPath } from "../../check-task-scope.mjs";
 import {
-  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, findRollout, gate, readRollout, resolveModelFamily, restore, selectRules,
+  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, findRollout, packetVerifyCommands, gate, readRollout, resolveModelFamily, restore, selectRules,
   takeSnapshot, validateResult,
 } from "./core.mjs";
 import { lineSplitter, renderEvent, renderSummary } from "./status.mjs";
@@ -49,6 +53,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULTS = { timeout: 1200, maxPacket: 12 * 1024, maxAllow: 3, peakThreshold: 0.6, family: "luna" };
 const RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const STATUS_LOG_MAX = 1024 * 1024;
+const VERIFY_TIMEOUT_SEC = 900;
+const VERIFY_TAIL_LINES = 30;
 
 function emit(report, runDir, code) {
   const text = JSON.stringify(report, null, 2);
@@ -244,7 +250,7 @@ async function run(args) {
   if (packetBytes > maxPacket) {
     errors.push(`packet が ${packetBytes} バイトで上限 ${maxPacket} を超える。ステップを小さく切り、意図の層(背景・兄弟タスク・将来計画)を削る`);
   }
-  if (args.packet && packet !== "") errors.push(...checkPacketCrossCheck(packet));
+  if (args.packet && packet !== "") errors.push(...checkPacketCrossCheck(packet), ...checkPacketVerify(packet));
   errors.push(...workerHomeErrors(home));
   const allowCheck = root && /^T\d+$/.test(task ?? "") ? checkAllow(root, task, allow, maxAllow) : { errors: [], warnings: [] };
   errors.push(...allowCheck.errors);
@@ -264,6 +270,7 @@ async function run(args) {
   fs.mkdirSync(runDir, { recursive: true, mode: 0o700 });
   const snapshot = takeSnapshot(root, runDir);
   fs.writeFileSync(path.join(runDir, "run.json"), JSON.stringify({ task, step, model, allow }, null, 2));
+  fs.writeFileSync(path.join(runDir, "packet.md"), packet); // verify が検証節を読む
   const { rules, conservative } = selectRules(root, allow);
   const contract = fs.readFileSync(path.join(here, "worker-contract.md"), "utf8");
   const prompt = buildPrompt({ contract, allow, packet, rules });
@@ -390,6 +397,87 @@ function restoreRun(args) {
   emit({ restore: restore(snapshot, targets, path.join(args.run, `overwritten-restore-${stamp}`)) }, null, 0);
 }
 
+// コマンド 1 本を sh で打つ。出力は全文をログファイルへ、末尾だけを結果へ。タイムアウトはプロセスグループごと止める
+function runVerifyCommand(command, root, logFile, timeoutSec) {
+  return new Promise((resolve) => {
+    const log = fs.openSync(logFile, "w");
+    const started = Date.now();
+    const child = spawn("/bin/sh", ["-c", command], { cwd: root, stdio: ["ignore", log, log], detached: true });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup(child, "SIGTERM");
+      setTimeout(() => killGroup(child, "SIGKILL"), 10_000).unref();
+    }, timeoutSec * 1000);
+    const finish = (exitCode, signal, spawnError) => {
+      clearTimeout(timer);
+      fs.closeSync(log);
+      const lines = fs.readFileSync(logFile, "utf8").trimEnd().split("\n");
+      resolve({
+        command,
+        exit_code: exitCode,
+        ...(signal ? { signal } : {}),
+        ...(timedOut ? { timed_out: true } : {}),
+        ...(spawnError ? { spawn_error: spawnError } : {}),
+        duration_s: Math.round((Date.now() - started) / 1000),
+        log: logFile,
+        tail: lines.slice(-VERIFY_TAIL_LINES).join("\n"),
+      });
+    };
+    child.on("error", (error) => finish(null, null, error.message));
+    child.on("close", (code, signal) => finish(code, signal, null));
+  });
+}
+
+// 監督が受け入れの前に打つ検証。worker の申告(tests_run)ではなく、この結果を受け入れの根拠にする。
+// 結果はファイル経由でなく stdout で返す(以前の出力ファイルを読み違えないため)
+async function verifyRun(args) {
+  let snapshot;
+  let meta;
+  let packet;
+  try {
+    snapshot = JSON.parse(fs.readFileSync(path.join(args.run, "snapshot.json"), "utf8"));
+    meta = JSON.parse(fs.readFileSync(path.join(args.run, "run.json"), "utf8"));
+    packet = fs.readFileSync(path.join(args.run, "packet.md"), "utf8");
+  } catch (error) {
+    emit({ errors: [`run の記録を読めない: ${args.run ?? "(--run が無い)"}: ${error.message}`] }, null, 2);
+    return;
+  }
+  const root = snapshot.root;
+  const commands = packetVerifyCommands(packet);
+  const errors = [...checkPacketVerify(packet)];
+  const running = activeWorkerLock(root);
+  if (running) errors.push(`worker が実行中: ${running.task} ステップ ${running.step}(終わってから打つ)`);
+  const timeoutSec = Number(args.timeout ?? VERIFY_TIMEOUT_SEC);
+  if (!(timeoutSec > 0)) errors.push("--timeout は正の秒数");
+  if (errors.length > 0) {
+    emit({ run_dir: args.run, errors }, null, 2);
+    return;
+  }
+
+  const stamp = new Date().toISOString().replace(/[-:.]/g, "");
+  const logDir = path.join(args.run, `verify-${stamp}`);
+  fs.mkdirSync(logDir, { recursive: true, mode: 0o700 });
+  const status = statusWriter(root, meta.task, meta.step);
+  const results = [];
+  for (const [index, command] of commands.entries()) {
+    status(`verify $ ${command}`);
+    const result = await runVerifyCommand(command, root, path.join(logDir, `${index + 1}.log`), timeoutSec);
+    status(result.exit_code === 0 ? "verify   ✓" : `verify   ✗ exit ${result.exit_code ?? result.signal ?? "?"}${result.timed_out ? "(タイムアウト)" : ""}`);
+    results.push(result);
+  }
+  const failed = results.filter((r) => r.exit_code !== 0).length;
+  status(`verify finished: ${results.length - failed}/${results.length} ok`);
+  const report = {
+    run_dir: args.run, task: meta.task, step: meta.step, root, verified_at: new Date().toISOString(),
+    all_passed: failed === 0, passed: results.length - failed, failed, commands: results,
+  };
+  const text = JSON.stringify(report, null, 2);
+  try { fs.writeFileSync(path.join(args.run, "verify.json"), text); } catch { /* stdout には出す */ }
+  process.stdout.write(text + "\n");
+  process.exitCode = failed === 0 ? 0 : 1;
+}
+
 let parsed;
 try {
   parsed = parseArgs({
@@ -408,5 +496,6 @@ if (parsed) {
   const command = parsed.positionals[0];
   if (command === "run") await run(parsed.values);
   else if (command === "restore") restoreRun(parsed.values);
-  else emit({ errors: ["usage: cli.mjs run ... | cli.mjs restore --run <dir>"] }, null, 2);
+  else if (command === "verify") await verifyRun(parsed.values);
+  else emit({ errors: ["usage: cli.mjs run ... | cli.mjs restore --run <dir> | cli.mjs verify --run <dir>"] }, null, 2);
 }

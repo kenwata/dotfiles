@@ -219,14 +219,42 @@ const PACKET_CROSS_CHECK_REASON = `packet に「${PACKET_CROSS_CHECK_HEADING}」
 
 // packet の「## 横断の確認」節を検査する。節が無いか、次の同じ深さの見出しまでが空白だけなら理由を 1 件返す
 export function checkPacketCrossCheck(packet) {
-  const lines = packet.split("\n");
-  const start = lines.findIndex((line) => line.trimEnd() === PACKET_CROSS_CHECK_HEADING);
-  if (start === -1) return [PACKET_CROSS_CHECK_REASON];
+  const body = packetSection(packet, PACKET_CROSS_CHECK_HEADING);
+  return body?.some((line) => line.trim() !== "") ? [] : [PACKET_CROSS_CHECK_REASON];
+}
 
+// packet の節の本文(見出しの次の行から、次の同じ深さの見出しの前まで)。節が無ければ null
+function packetSection(packet, heading) {
+  const lines = packet.split("\n");
+  const start = lines.findIndex((line) => line.trimEnd() === heading);
+  if (start === -1) return null;
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((line) => /^## /.test(line));
-  const body = end === -1 ? rest : rest.slice(0, end);
-  return body.some((line) => line.trim() !== "") ? [] : [PACKET_CROSS_CHECK_REASON];
+  return end === -1 ? rest : rest.slice(0, end);
+}
+
+// packet の「## 検証」節のコマンド。監督が受け入れ前に `cli.mjs verify` で 1 本ずつ打つ対象になる
+// (2026-09-23、監督が検証コマンドを束ねて打ち、lint と型検査を省いたまま受け入れていたため)。
+// 1 項目 1 コマンドの箇条書きで、バッククォートがあれば最初の囲みの中身、無ければ項目の全文をコマンドとする
+const PACKET_VERIFY_HEADING = "## 検証";
+
+export function packetVerifyCommands(packet) {
+  const body = packetSection(packet, PACKET_VERIFY_HEADING) ?? [];
+  const commands = [];
+  for (const line of body) {
+    const item = /^\s*[-*]\s+(.*\S)\s*$/.exec(line)?.[1];
+    if (!item) continue;
+    const command = (/`([^`]+)`/.exec(item)?.[1] ?? item).trim();
+    if (command) commands.push(command);
+  }
+  return commands;
+}
+
+export function checkPacketVerify(packet) {
+  return packetVerifyCommands(packet).length > 0 ? [] : [
+    `packet に「${PACKET_VERIFY_HEADING}」節が無いか、コマンドの箇条書きが無い。受け入れ前に監督が \`cli.mjs verify\` で 1 本ずつ打つコマンドを、`
+    + "1 項目 1 コマンドで書く(例: - `uv run pytest tests/x -q`)。試験だけでなく、プロジェクト規約が求める lint・型検査も入れる",
+  ];
 }
 
 // ステップの許可パスを検査する。errors があれば起動しない

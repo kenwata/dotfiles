@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, gate, readRollout, resolveModelFamily, restore, selectRules,
+  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, gate, packetVerifyCommands, readRollout, resolveModelFamily, restore, selectRules,
   takeSnapshot, validateResult,
 } from "../core.mjs";
 
@@ -269,4 +269,17 @@ test("横断の確認の節が空白だけなら拒否し、次の見出しま�
 test("見出しの深さが違う節や本文中の語は横断の確認の節とみなさない", () => {
   assert.equal(checkPacketCrossCheck("### 横断の確認\n該当なし: x\n").length, 1);
   assert.equal(checkPacketCrossCheck("## 目的\n## 横断の確認 は後で書く\n").length, 1);
+});
+
+test("検証節の箇条書きを 1 項目 1 コマンドで読み、バッククォートがあればその中身だけを取る", () => {
+  const packet = "## 検証\n- `uv run pytest tests/x -q`(黒箱の試験を含む)\n* ruff check src\n\n本文の行は読まない\n- \n## 入口\n- `a.ts`\n";
+  assert.deepEqual(packetVerifyCommands(packet), ["uv run pytest tests/x -q", "ruff check src"]);
+  assert.deepEqual(checkPacketVerify(packet), []);
+});
+
+test("検証節が無いか、コマンドの箇条書きが無ければ拒否する", () => {
+  assert.equal(checkPacketVerify("## 目的\nx\n").length, 1);
+  assert.equal(checkPacketVerify("## 検証\n試験を回す\n## 入口\n- a.ts\n").length, 1);
+  assert.equal(checkPacketVerify("### 検証\n- `true`\n").length, 1);
+  assert.match(checkPacketVerify("")[0], /lint・型検査/);
 });
