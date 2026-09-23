@@ -28,6 +28,7 @@
 | 自走できるタスク記述(固定と裁量の境界・共通の前提・分割の規則) | `skeletons/design.md`(「実行者の裁量と停止条件」「段階と分解の指針」「落とし穴」)・`skeletons/todo.md` 冒頭コメント(共通の前提)・`commands/breakdown.md` 手順 3(共通の前提の書き方と分割の規則) | 本書 §6「上下流の分業と自走できるタスク記述」・`commands/{elaborate,execute-task,amend,follow-up}.md`・`README.md`・Codex同名skill・`.codex/AGENTS.md` |
 | 設計書索引の書式・列定義 | `skeletons/design-index.md` 冒頭コメント | 本書 §6(位置づけと更新配線のみ)・`README.md`(列名の列挙のみ) |
 | 設計書の「全体構想」行の書式 | `skeletons/design.md` 冒頭コメント | `commands/elaborate.md` 手順5(生成側)・`commands/follow-up.md` 機械チェック⑨(検査側。書式を検査するため逐語で持つ) |
+| 予算停止・作業記録(worklog)・同じ T の再開・連続実行 | `commands/execute-task.md`(手順1の再開の判定、手順4の作業記録と予算停止)と、閾値・判定の実体 `hooks/context-budget.mjs`・`hooks/lib/task-loop/`・作業記録の書式 `hooks/lib/codex-worker/worklog.mjs` のヘッダ | `templates/codex-worker.md`・`README.md`(設計方針 17・セッションの回し方)・本書 §6 のライフサイクル図・Codex同名skill・`.codex/AGENTS.md`・`.codex/README.md` |
 
 ## 1. 目的と原則
 
@@ -224,6 +225,7 @@ diff で無損失を機械的に検証する。archive は自動ロードされ�
   → /breakdown(TODO へ。入力は設計書だけ。1 回に 1 段階。支線なら本流の計器を通す)→ /execute-task(1タスク=1コミット)
       ├─ 段階の最後のタスクが完了し、設計書に未分解の段階が残る: /breakdown を再実行(追記だけ)
       ├─ 実行中に設計の穴を見つけたら: 穴の記録を HANDOFF.md に残して停止 → /amend(設計書の該当節と未着手タスクを一回で改訂)→ 中断した T<n> へ戻る
+      ├─ コンテキストが閾値に達したら(予算停止): 作業記録と HANDOFF.md を書き、コミットせずに停止 → /clear → 同じ T<n> を作業記録から再開(変更ではないので三段分類の対象外。複数の T は hooks/lib/task-loop/ が T ごとに /clear して送る)
   → 節目で /follow-up(checkpoint間の横断総点検)
   → 次フェーズ: /elaborate へ戻る
         ├─ docs/design/<slug>.md  … 安定文書(フェーズ内の why/what。状態を書かない。plan.md のフェーズへのポインタを持つ)

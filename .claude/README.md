@@ -141,6 +141,17 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     「共通の前提」から名指しする。足りないのが記述ならタスクを割らない)。Claude Code の `/execute-task` は
     Opus が監督と受け入れを担い、実装は Codex worker へ実装ステップごとに委譲する(実装者と受け入れ役を分け、
     worker 1 回の文脈を小さく保つ。worker には設計の意図を渡さず、規約だけを渡す。正は `templates/codex-worker.md`)
+17. **compact の前に区切り、作業記録から再開する** — compact(コンテキストの自動要約)が起きてから止めると、
+    引き継ぎを書く時点で情報が既に失われている。そこで `/execute-task` の実行中は hook
+    (`hooks/context-budget.sh`)が使用率を測り、閾値(既定 Claude 70/80%・Codex 60/70%、設定は
+    `~/.config/claude-task-loop/config.json`)で一段目「新しいステップを始めない」・二段目「作業記録と HANDOFF.md を
+    書いてコミットせずにターンを終える」を差し込む。Thinking の本文は次のセッションに渡らないので、監督は
+    ステップの境目ごとに結論(事実・決定と理由・捨てた仮説・次の意図)をリポジトリ外の作業記録
+    (worklog。runner のタスク単位の置き場)へ書き、次の `/execute-task` が同じ T を照合してから再開する。
+    複数の T は `hooks/lib/task-loop/` のループが、利用者の手動の `/clear` → `/execute-task` を herdr 経由で
+    代行して回す。進む・再送する・止まるは成果物(TODO.md の `[x]`・T を含むコミット・clean)だけで決め、
+    それ以外は止まって人へ渡す(2026-09-23。`claude -p` を使わないのは、最終応答の後にバックグラウンドの
+    Bash が殺され Codex worker の待機と衝突するため)
 
 ## ディレクトリ構成
 
@@ -149,15 +160,18 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 ├── CLAUDE.md                    # グローバル指針(思想レベルのみ、83 行)
 ├── README.md                    # このファイル
 ├── settings.json                # 中核設定 — model / effortLevel / autoMode / qmd プラグイン(github: tobi/qmd)有効化
-├── statusline.sh                # ステータスライン用スクリプト
+├── statusline.sh                # ステータスライン用スクリプト(受け取った使用量を予算停止の hook 用にサイドファイルへ書き出す。設計方針 17)
 ├── hooks/
 │   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md の未コミット変更と、未決の要確認(件数・回収点の無い行)を通知(設計方針 7)
+│   ├── check-stop-question.sh   # Stop hook — 問いかけ・依頼で応答を終えようとしたら 1 回だけ差し戻す自律判断ゲート(task-loop が駆動するセッションは素通し)
+│   ├── context-budget.sh/.mjs   # PostToolUse + Stop + PostCompact + SessionStart hook — /execute-task の実行中、compact の前に作業記録を書かせてターンを終えさせる予算停止(Codex と本体を共有。設計方針 17)
 │   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
 │   ├── check-task-scope.sh/.mjs # UserPromptSubmit + PreToolUse(Write|Edit) + SubagentStart/Stop hook — /execute-task 実行中に TODO.md の対象パス外への編集を拒否し、レビュー役の返答待ち中は主文脈の編集を、Codex worker の実行中はそのリポジトリへの編集を拒否(Codex と本体を共有)
 │   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認の要否・推奨の向き・可読性のゲート(呼び出しごとに1回 deny→取りやめ or 書き直し。設計方針 12)
 │   ├── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
 │   ├── format-markdown.sh       # PostToolUse(Write|Edit) hook — 保存された .md を markdown-format CLI に通す(編集行のみ。全体整形は /markdown-cleanup)
-│   ├── lib/codex-worker/        # /execute-task が実装ステップを Codex worker へ委譲する runner(ステップ計画(plan・show)・起動・範囲のゲート・restore・監督の検証(verify)・規約の添付・実行中の状態行。node。テストは test/)
+│   ├── lib/codex-worker/        # /execute-task が実装ステップを Codex worker へ委譲する runner(ステップ計画(plan・show)・起動・範囲のゲート・restore・監督の検証(verify)・規約の添付・実行中の状態行・タスク単位の作業記録(worklog・note・resume)。node。テストは test/)
+│   ├── lib/task-loop/           # /execute-task の連続実行ループ(herdr 経由で /clear → /execute-task を送り、成果物で進む・再送・停止を決める)と予算停止の計算・セッションの状態(node。テストは test/。設計方針 17)
 │   ├── lib/mainline-gauge/      # 本流の計器(/breakdown が支線の分解の前に呼ぶ。node。テストは test/)
 │   └── lib/markdown-format/     # 上記 hook が呼ぶ formatter/linter 本体(依存ゼロ・ビルドなし。cli/format/lint/scope 等 + test/。詳細は同所の README.md)
 ├── agents/                      # サブエージェント定義(全プロジェクト共通。CLAUDE.md を継承する。設計方針 11)
@@ -205,7 +219,9 @@ dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあ
 (advisor は主プロファイルでも無効化したため読み替えは不要になった。設計方針 14)。
 **hook スクリプトの実体は symlink で共有されるが、その配線は `settings.json` にあり
 bedrock は独自の実体を持つため、hook を足したときは両方の `settings.json` に登録する**
-(片方だけだと、そのプロファイルでは hook が存在するのに発火しない)。
+(片方だけだと、そのプロファイルでは hook が存在するのに発火しない)。予算停止の hook は
+`check-task-scope` が置く「/execute-task の実行中」の状態で発火するので、bedrock にも `check-task-scope` を
+登録している(2026-09-23)。
 
 `projects/`(会話履歴・auto memory の実体)も同じ理由で `../.claude/projects` への
 symlink で共有する。設定(モデル ID・permissions・effort)は分離を維持したまま、
@@ -277,6 +293,9 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
 6. /execute-task T<n> → 1 タスク = 1 コミット。セッション終了時は軽量な引き継ぎ(状態変化かコールドスタート確認の不足がある場合だけ HANDOFF を上書き)
    設計の穴を見つけたら: 穴の記録を HANDOFF に残して停止 → /amend T<n>(設計書の該当節と未着手タスクを改訂)→ 6 へ戻る。
    設計書の目的・スコープが変わる時だけ 4 へ戻る(分類の正は BLUEPRINT §6「変更の三段分類」)
+   コンテキストが閾値に達したら(予算停止): 作業記録と HANDOFF を書いてコミットせずに終える → /clear → /execute-task T<n>(同じ T を作業記録から再開)。
+   複数の T は herdr のペインの端末から `node ~/.claude/hooks/lib/task-loop/cli.mjs run --target <pane_id> --tasks T12..T16` で
+   続けて回せる(T ごとに /clear。穴の記録・関門の質問・依存の未完了・checkpoint 以後 5 件・compact などで止まり、理由を JSON で出す)
 7. 節目で /follow-up → checkpoint以後の複数タスクを横断して総点検し、次フェーズは 4 へ戻る。
    HANDOFF の要確認は、/execute-task の着手前(対象 T を回収点に持つ項目)と /follow-up の冒頭(全項目)で利用者に問い、決着を decisions.md に書く
 ````
