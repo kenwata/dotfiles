@@ -121,6 +121,9 @@ node --test "$repo_root/.codex/tests/hooks.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/mainline-gauge/test/gauge.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/core.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/cli.test.mjs"
+node --test "$repo_root/.claude/hooks/lib/codex-worker/test/worklog.test.mjs"
+node --test "$repo_root/.claude/hooks/lib/task-loop/test/"*.test.mjs
+bash "$repo_root/.claude/hooks/tests/test-context-budget.sh" >/dev/null
 
 safe_git_output="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git status"}}' \
   | bash "$repo_root/.codex/hooks/deny-git-write.sh")"
@@ -211,5 +214,19 @@ printf '%s' "$scope_deny" | jq -e '.hookSpecificOutput.permissionDecision == "de
 scope_allow="$(jq -nc --arg c "$scope_repo" '{hook_event_name:"PreToolUse",session_id:"scope-s",cwd:$c,tool_name:"apply_patch",tool_input:{command:"*** Begin Patch\n*** Update File: src/a/x.ts\n@@\n+y\n*** End Patch"}}' \
   | HOME="$scope_home" TMPDIR="$scope_tmp" bash "$repo_root/.codex/hooks/check-task-scope.sh")"
 [[ -z "$scope_allow" ]]
+
+# 予算停止: インストールした形(HOME の .claude/hooks は symlink)で Codex のラッパーから起動し、
+# $execute-task の実行中に rollout の使用量が一段目(Codex 既定 60%)を超えたら 1 回だけ差し込む
+budget_rollout="$fixture_root/rollout.jsonl"
+jq -nc '{type:"event_msg",payload:{type:"token_count",info:{last_token_usage:{total_tokens:170000},model_context_window:258400}}}' \
+  > "$budget_rollout"
+budget_input="$(jq -nc --arg c "$scope_repo" --arg t "$budget_rollout" \
+  '{hook_event_name:"PostToolUse",session_id:"scope-s",turn_id:"u1",cwd:$c,transcript_path:$t,tool_name:"exec_command",tool_response:"ok"}')"
+run_budget() {
+  printf '%s' "$budget_input" | HOME="$scope_home" TMPDIR="$scope_tmp" XDG_STATE_HOME="$fixture_root/budget-state" \
+    XDG_CONFIG_HOME="$fixture_root/budget-config" bash "$repo_root/.codex/hooks/context-budget.sh"
+}
+run_budget | jq -e '.hookSpecificOutput.additionalContext | contains("context-budget 1/2")' >/dev/null
+[[ -z "$(run_budget)" ]]
 
 printf 'Codex migration tests passed\n'

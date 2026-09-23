@@ -24,6 +24,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "command": "bash ~/.codex/hooks/context-budget.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -84,6 +94,15 @@
             "type": "command",
             "command": "if [ -f \"$HOME/.orca/agent-hooks/codex-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/codex-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/codex-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/codex-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash ~/.codex/hooks/context-budget.sh",
+            "timeout": 10,
+            "type": "command"
           }
         ]
       }
@@ -166,6 +185,15 @@
             "type": "command",
             "command": "if [ -f \"$HOME/.orca/agent-hooks/codex-hook.sh\" ] && [ -r \"$HOME/.orca/agent-hooks/codex-hook.sh\" ] && [ -x \"$HOME/.orca/agent-hooks/codex-hook.sh\" ]; then /bin/sh \"$HOME/.orca/agent-hooks/codex-hook.sh\"; else { command -p cat 2>/dev/null || cat; } >/dev/null 2>&1 || :; fi",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash ~/.codex/hooks/context-budget.sh",
+            "timeout": 10,
+            "type": "command"
           }
         ]
       }
