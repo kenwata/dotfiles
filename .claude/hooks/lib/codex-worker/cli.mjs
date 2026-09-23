@@ -40,7 +40,7 @@ import { parseArgs } from "node:util";
 import { StringDecoder } from "node:string_decoder";
 import { activeWorkerLock, isInside, workerLockPath } from "../../check-task-scope.mjs";
 import {
-  buildPrompt, changedSince, checkAllow, findRollout, gate, readRollout, resolveModelFamily, restore, selectRules,
+  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, findRollout, gate, readRollout, resolveModelFamily, restore, selectRules,
   takeSnapshot, validateResult,
 } from "./core.mjs";
 import { lineSplitter, renderEvent, renderSummary } from "./status.mjs";
@@ -244,6 +244,7 @@ async function run(args) {
   if (packetBytes > maxPacket) {
     errors.push(`packet が ${packetBytes} バイトで上限 ${maxPacket} を超える。ステップを小さく切り、意図の層(背景・兄弟タスク・将来計画)を削る`);
   }
+  if (args.packet && packet !== "") errors.push(...checkPacketCrossCheck(packet));
   errors.push(...workerHomeErrors(home));
   const allowCheck = root && /^T\d+$/.test(task ?? "") ? checkAllow(root, task, allow, maxAllow) : { errors: [], warnings: [] };
   errors.push(...allowCheck.errors);

@@ -208,6 +208,27 @@ export function restore(snapshot, paths, backupDir) {
   return { restored, unrestorable, backups };
 }
 
+// packet の必須の節。監督がステップをまたぐ決定を現物で確かめたかを、worker を起動する前に機械で問う
+// (2026-09-23 の T55 で、確かめていない決定を packet に書いて手戻りを 4 回生んだため。/ruleize)
+const PACKET_CROSS_CHECK_HEADING = "## 横断の確認";
+
+const PACKET_CROSS_CHECK_REASON = `packet に「${PACKET_CROSS_CHECK_HEADING}」節が無いか空。次に当たる項目だけ中身を書き、どれにも当たらなければ「該当なし: <理由1文>」と書く。
+1. packet が関数名・型・値の置き場・戻り値の種類を指定し、それを許可パスの外のファイルが作る・使う → 書く前に作り手と呼び出し元を検索し、「<識別子>: 作り手 <path:行> / 呼び出し元 <path:行>」と、呼び出し元の扱いをどのステップで指示するかを書く。
+2. packet が不具合・遅さの原因を断定している → 根拠(計測の結果、または仮説3つ以上と棄却の理由)を書く。観測から直接読めないなら、先に「測って報告するだけ」のステップを起動する。
+3. 複数ステップが共有する型・データ形式に触れる → 共有の一覧のどれに当たるかを書く。設計書が決めていない大きな共有形式を新たに固める時は、裁量で固めず穴の記録の経路へ戻す。`;
+
+// packet の「## 横断の確認」節を検査する。節が無いか、次の同じ深さの見出しまでが空白だけなら理由を 1 件返す
+export function checkPacketCrossCheck(packet) {
+  const lines = packet.split("\n");
+  const start = lines.findIndex((line) => line.trimEnd() === PACKET_CROSS_CHECK_HEADING);
+  if (start === -1) return [PACKET_CROSS_CHECK_REASON];
+
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^## /.test(line));
+  const body = end === -1 ? rest : rest.slice(0, end);
+  return body.some((line) => line.trim() !== "") ? [] : [PACKET_CROSS_CHECK_REASON];
+}
+
 // ステップの許可パスを検査する。errors があれば起動しない
 // maxAllow: 1 ステップの許可パスの上限。対象パスをまとめて渡すと 1 回の起動の文脈量を抑えられないため、機械で制限する
 export function checkAllow(root, task, allow, maxAllow = 3) {

@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  buildPrompt, changedSince, checkAllow, gate, readRollout, resolveModelFamily, restore, selectRules, takeSnapshot,
-  validateResult,
+  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, gate, readRollout, resolveModelFamily, restore, selectRules,
+  takeSnapshot, validateResult,
 } from "../core.mjs";
 
 function git(root, ...args) {
@@ -248,4 +248,25 @@ test("モデルの系統名を一覧の最新の版の ID へ解決する(版番
   assert.equal(resolveModelFamily("Sol", catalog), "gpt-6-sol", "5.10 より 6 が新しい(数値で比べる)");
   assert.equal(resolveModelFamily("nova", catalog), null);
   assert.equal(resolveModelFamily("luna", [{ slug: "gpt-7-luna" }, { slug: "gpt-6-luna" }]), "gpt-7-luna");
+});
+
+test("packet に横断の確認の節が無ければ、点検リストを理由にして拒否する", () => {
+  const errors = checkPacketCrossCheck("## 目的\nimpl を書く\n");
+
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /## 横断の確認/);
+  assert.match(errors[0], /作り手と呼び出し元を検索/);
+  assert.match(errors[0], /測って報告するだけ/);
+  assert.match(errors[0], /穴の記録の経路/);
+});
+
+test("横断の確認の節が空白だけなら拒否し、次の見出しまでに中身があれば通す", () => {
+  assert.equal(checkPacketCrossCheck("## 横断の確認\n  \n\n## 入口\n- a.ts\n").length, 1);
+  assert.deepEqual(checkPacketCrossCheck("## 横断の確認\n該当なし: 許可パス内で閉じる変更\n## 入口\n- a.ts\n"), []);
+  assert.deepEqual(checkPacketCrossCheck("## 目的\nx\n\n## 横断の確認\n- f: 作り手 a.ts:1 / 呼び出し元 b.ts:2\n"), []);
+});
+
+test("見出しの深さが違う節や本文中の語は横断の確認の節とみなさない", () => {
+  assert.equal(checkPacketCrossCheck("### 横断の確認\n該当なし: x\n").length, 1);
+  assert.equal(checkPacketCrossCheck("## 目的\n## 横断の確認 は後で書く\n").length, 1);
 });

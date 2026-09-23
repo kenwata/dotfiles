@@ -67,7 +67,7 @@ function setup() {
   fs.writeFileSync(path.join(base, "auth.json"), "{}");
   fs.symlinkSync(path.join(base, "auth.json"), path.join(home, "auth.json"));
   const packet = path.join(base, "packet.md");
-  fs.writeFileSync(packet, "## 目的\nimpl を書く\n");
+  fs.writeFileSync(packet, "## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 許可パス内で閉じる試験用の変更\n");
   const tmp = path.join(base, "tmp");
   fs.mkdirSync(tmp);
   const env = {
@@ -150,9 +150,14 @@ test("起動前の拒否は exit 2 で JSON を出し、worker を起動しな�
     result = t.run(["run", "--root", t.base, "--task", "T7", "--step", "1", "--packet", t.packet, "--allow", "x"]);
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /git のリポジトリではない/);
+    fs.writeFileSync(t.packet, "## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 試験用\n");
     result = t.run([...baseArgs(t.root, t.packet), "--model-family", "nova"]);
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /系統 nova/);
+    fs.writeFileSync(t.packet, "## 目的\nimpl を書く\n");
+    result = t.run(baseArgs(t.root, t.packet));
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join(), /## 横断の確認/);
     assert.equal(fs.existsSync(path.join(t.root, "src/a/impl.ts")), false);
   } finally { t.cleanup(); }
 });
