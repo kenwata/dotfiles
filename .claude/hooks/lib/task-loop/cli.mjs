@@ -13,6 +13,9 @@
 //   checkpoint 以後の完了が 5 件に達したら、次の T を送る前に新しいセッションで /follow-up を送る(既定)。checkpoint の
 //   コミット(trailer Follow-Up-Checkpoint: true)が増えたら続け、/follow-up が利用者への問いで止まれば(blocked)そこで止まる。
 //   --no-follow-up なら 5 件で follow_up_required として止まる
+//   Claude のセッションには名前を付ける(窓の題名と /resume の一覧に出る)。自動起動は `claude --name "<計画> loop"`、
+//   /clear の後は毎回 `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`)。<計画> は T が属する TODO.md の
+//   `## #<n> <slug>` の slug で、無ければリポジトリのディレクトリ名
 //
 // 経緯(2026-09-23): 利用者はタスクの間で /clear を打ち、compact(自動要約)による情報消失を避けてきた。複数の T を
 // 続けて回したいが、1 つのセッションで続けるとコンテキストが積み上がる。そこで T ごとに /clear した新しい
@@ -37,9 +40,9 @@ import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { activeWorkerLock, gitRoot } from "../../check-task-scope.mjs";
 import {
-  checkpointSince, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, openTasks, parseTaskList,
+  checkpointSince, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, openTasks, parseTaskList, planSlug,
 } from "./decide.mjs";
-import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, agentWait, available, paneSplit } from "./herdr.mjs";
+import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, agentWait, available, paneSplit, paneTitle } from "./herdr.mjs";
 import { loopStateDir, readConfig, readSession, sweep, updateSession } from "./session-state.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -61,6 +64,9 @@ function finish(result, code) {
   process.exitCode = code;
 }
 
+// 窓がどの計画のどの段を回しているかを名前だけで分かるようにする(2026-09-24、利用者の要望)
+const sessionName = (root, task, label = task) => `${planSlug(root, task) ?? path.basename(root)} ${label}`;
+
 // 同じ T の再開の照合は runner の resume(正は codex-worker/cli.mjs)を呼ぶ
 function resumeCheck(root, task) {
   const result = spawnSync(process.execPath, [WORKER_CLI, "resume", "--root", root, "--task", task], { encoding: "utf8" });
@@ -69,8 +75,8 @@ function resumeCheck(root, task) {
 
 // --target が無い時に送る先を決める。同じプロジェクト(git ルート)で入力待ちの Claude / Codex のペインを、
 // 呼び出し元と同じタブを優先して 1 つ選ぶ。無ければ隣にペインを作って起動する(このターンの利用者の
-// 手作業を無くすため)。候補が複数なら選ばず止まる
-function pickAgent(root, args) {
+// 手作業を無くすため)。起動する Claude には launchName を付ける。候補が複数なら選ばず止まる
+function pickAgent(root, args, launchName) {
   let agents;
   try { agents = agentList(); } catch (error) { return { errors: [`herdr agent list に失敗: ${error.message}`] }; }
   const inRoot = agents.filter((a) => (a.agent === "claude" || a.agent === "codex") && a.pane_id !== process.env.HERDR_PANE_ID
@@ -89,7 +95,9 @@ function pickAgent(root, args) {
   const name = `task-loop-${Date.now().toString(36)}`;
   try {
     const pane = paneSplit({ cwd: root });
-    const started = agentStart(name, { kind, pane, args: args.model ? ["--model", args.model] : [] });
+    // Codex には起動時に名前を付ける引数が無い
+    const agentArgs = [...(kind === "claude" ? ["--name", launchName] : []), ...(args.model ? ["--model", args.model] : [])];
+    const started = agentStart(name, { kind, pane, args: agentArgs });
     const agent = { ...(started ?? agentGet(pane)), pane_id: pane };
     return { agent, started: { pane, name, kind } };
   } catch (error) {
@@ -100,6 +108,14 @@ function pickAgent(root, args) {
   }
 }
 
+function agentErrors(target, agent) {
+  const errors = [];
+  if (agent.agent !== "claude" && agent.agent !== "codex") errors.push(`${target} は claude / codex ではない(${agent.agent})`);
+  if (!["idle", "done"].includes(agent.agent_status)) errors.push(`${target} が入力を受け付ける状態ではない(${agent.agent_status})`);
+  return errors;
+}
+
+// 送る先のペインの自動起動は最後に回す。起動時の名前に最初の T が要り、前提検査で止まる時にペインを残さないため
 function preflight(args, positionalTasks) {
   if (!available()) return { errors: ["herdr の中で実行していない(HERDR_ENV=1 と herdr が要る)"] };
   const errors = [];
@@ -110,18 +126,11 @@ function preflight(args, positionalTasks) {
     try { agent = agentGet(args.target); } catch (error) { return { errors: [`${args.target} を herdr で見つけられない: ${error.message}`] }; }
     root ??= gitRoot(path.resolve(agent.foreground_cwd ?? agent.cwd ?? "."));
     if (!root) return { errors: [`git のリポジトリではない: ${args.root ?? agent.cwd}`] };
+    errors.push(...agentErrors(args.target, agent));
   } else {
     root ??= gitRoot(process.cwd());
     if (!root) return { errors: ["--target も --root も無く、カレントディレクトリが git のリポジトリでもない"] };
-    const picked = pickAgent(root, args);
-    if (picked.errors) return picked;
-    agent = picked.agent;
-    started = picked.started ?? null;
   }
-  const target = args.target ?? agent.pane_id;
-  const host = agent.agent;
-  if (host !== "claude" && host !== "codex") errors.push(`${target} は claude / codex ではない(${host})`);
-  if (!["idle", "done"].includes(agent.agent_status)) errors.push(`${target} が入力を受け付ける状態ではない(${agent.agent_status})`);
   if (!fs.existsSync(path.join(root, "TODO.md"))) errors.push(`TODO.md が無い: ${root}`);
   if (errors.length > 0) return { errors };
 
@@ -139,7 +148,17 @@ function preflight(args, positionalTasks) {
       errors.push(`作業ツリーに未コミットの変更がある(${tasks[0]} の作業記録で説明できない): ${(resume?.unexplained_dirty ?? dirty).join(", ")}`);
     }
   }
-  return { errors, tasks, host, root, target, started, tasksFrom: spec ? "args" : "TODO.md" };
+  if (errors.length > 0) return { errors };
+
+  if (!agent) {
+    const picked = pickAgent(root, args, sessionName(root, tasks[0], "loop"));
+    if (picked.errors) return picked;
+    agent = picked.agent;
+    started = picked.started ?? null;
+    errors.push(...agentErrors(agent.pane_id, agent));
+  }
+  const target = args.target ?? agent.pane_id;
+  return { errors, tasks, host: agent.agent, root, target, pane: agent.pane_id, started, tasksFrom: spec ? "args" : "TODO.md" };
 }
 
 // 送った後、成果物の判定に進んでよいところまで待つ。Codex worker の実行中(ロック)と working の間は待ち、
@@ -171,8 +190,28 @@ function settle(ctx, deadline, isComplete) {
   }
 }
 
-// /clear(Codex は /new)を送り、session_id が変わるのを待つ。新しい session_id を返す
-function clearSession(ctx) {
+// 新しいセッションに名前を付ける。/clear の後のセッションは前の名前を引き継ぐので、T ごとに付け直す
+// (2026-09-24 実測: --name の名前は /clear の後も残り、/rename は確認の画面を出さず 1 秒ほどで端末の題名に出る)。
+// 引き継いだ名前が既に同じ(同じ T の再送)なら送らない。
+// 名前は表示のためだけなので、題名に出なくても止めずに stderr へ書いて進む(続く /execute-task が届かなければ判定が止める)。
+// Codex には送らない。/rename が herdr の 1 回の送信では確定せず、入力欄に残る(同日実測)
+function nameSession(ctx, name, logTask) {
+  if (ctx.host !== "claude") return;
+  try {
+    if (paneTitle(ctx.pane) === name) return;
+    agentPrompt(ctx.target, `/rename ${name}`);
+    const deadline = Date.now() + ctx.clearTimeoutMs;
+    while (paneTitle(ctx.pane) !== name) {
+      if (Date.now() > deadline) { log(logTask, `rename: ${ctx.clearTimeoutMs}ms 待っても端末の題名が "${name}" にならない`); return; }
+      sleep(250);
+    }
+  } catch (error) {
+    log(logTask, `rename: 失敗 ${error.message}`);
+  }
+}
+
+// /clear(Codex は /new)を送り、session_id が変わるのを待ってから名前を付ける。新しい session_id を返す
+function clearSession(ctx, name, logTask) {
   const before = agentGet(ctx.target).agent_session?.value ?? null;
   agentPrompt(ctx.target, ctx.host === "codex" ? "/new" : "/clear");
   const deadline = Date.now() + ctx.clearTimeoutMs;
@@ -182,6 +221,7 @@ function clearSession(ctx) {
     if (now && now !== before) {
       const settled = agentWait(ctx.target, { timeoutMs: 30_000 });
       if (settled?.agent_status === "blocked") throw new HerdrError("blocked_after_clear", "新しいセッションが承認・質問の画面で止まっている");
+      nameSession(ctx, name, logTask);
       return now;
     }
     if (Date.now() > deadline) throw new HerdrError("clear_not_detected", `${ctx.clearTimeoutMs}ms 待っても session_id が変わらない`);
@@ -191,11 +231,11 @@ function clearSession(ctx) {
 
 // checkpoint 以後の完了が上限に達した時、次の T の前に /follow-up を新しいセッションで送る。成果物(checkpoint の
 // コミットが増えたか)で判定する。/follow-up が利用者への問い(要確認の回収など)で止まれば blocked として人へ渡す
-function runFollowUp(ctx) {
+function runFollowUp(ctx, nextTask) {
   let session;
   try {
     log("follow-up", "clear");
-    session = clearSession(ctx);
+    session = clearSession(ctx, sessionName(ctx.root, nextTask, "follow-up"), "follow-up");
   } catch (error) {
     return { action: "stop", reason: error.code === "blocked_after_clear" || error.code === "clear_not_detected" ? error.code : "clear_failed", details: { error: error.message } };
   }
@@ -233,7 +273,7 @@ function runTask(ctx, task, attempt) {
   if (since && since.count >= CHECKPOINT_LIMIT) {
     if (!ctx.followUp || ctx.followUpBefore.has(task)) return { action: "stop", reason: "follow_up_required", details: since };
     ctx.followUpBefore.add(task); // 同じ T の前で /follow-up を繰り返さない
-    const outcome = runFollowUp(ctx);
+    const outcome = runFollowUp(ctx, task);
     log("follow-up", `${outcome.action}: ${outcome.reason ?? "checkpoint"}`);
     if (outcome.action !== "continue") return outcome;
     since = completedSinceCheckpoint(ctx.root);
@@ -243,7 +283,7 @@ function runTask(ctx, task, attempt) {
   let session;
   try {
     log(task, `clear (attempt ${attempt})`);
-    session = clearSession(ctx);
+    session = clearSession(ctx, sessionName(ctx.root, task), task);
   } catch (error) {
     return { action: "stop", reason: error.code === "blocked_after_clear" || error.code === "clear_not_detected" ? error.code : "clear_failed", details: { error: error.message } };
   }
@@ -314,7 +354,7 @@ function main() {
   }
   const config = readConfig();
   const ctx = {
-    target: checked.target, host: checked.host, root: checked.root,
+    target: checked.target, pane: checked.pane, host: checked.host, root: checked.root,
     retryMax: Number(values["retry-max"] ?? config.retry_max),
     taskTimeoutMs: Number(values["task-timeout-min"] ?? 180) * 60_000,
     clearTimeoutMs: Number(values["clear-timeout-ms"] ?? 30_000),

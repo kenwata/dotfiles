@@ -7,7 +7,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseDependencies, readTaskScope } from "../../../check-task-scope.mjs";
 import {
-  committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, openTasks, parseTaskList,
+  committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, openTasks, parseTaskList, planSlug,
 } from "../decide.mjs";
 
 const TODO = `| # | T | タスク | 実 | 状態 |
@@ -145,5 +145,27 @@ test("openTasks は TODO.md のタスク表で [ ] の T を上から順に返�
     assert.deepEqual(openTasks(t.root), ["T5", "T6", "T7", "T8", "T70"]);
     fs.writeFileSync(path.join(t.root, "TODO.md"), "| #1 | 計画 | docs/design/x.md | [ ] |\n");
     assert.deepEqual(openTasks(t.root), []);
+  } finally { t.cleanup(); }
+});
+
+test("planSlug は T の行の直前の `## #<n> <slug>` 見出しを返し、見出しの無い T・別の見出しの下の T・無い T は null", () => {
+  const t = fixture();
+  try {
+    assert.equal(planSlug(t.root, "T5"), null, "計画の見出しが無い TODO.md");
+    fs.writeFileSync(path.join(t.root, "TODO.md"), [
+      "## 計画", "| #1 | alpha-plan | docs/design/alpha-plan.md | [ ] |", "",
+      "## #1 alpha-plan", "| #1-1 | T5 | 一つ目 | — | [ ] |", "",
+      "## #2 beta-plan", "| #2-1 | T6 | 二つ目 | — | [ ] |", "",
+      "## §9 その他", "| x | T7 | 計画の外 | — | [ ] |", "",
+    ].join("\n"));
+    fs.writeFileSync(path.join(t.root, ".claude/archive/TODO.md"), [
+      "# TODO アーカイブ", "", "## Rotated 2026-09-17 (計画 #0 の全タスクが完了)", "", "### 計画", "| #0 | old-plan | — | [x] |", "",
+      "### #0 old-plan", "", "| #0-1 | T0 | 古い | — | [x] |", "",
+    ].join("\n"));
+    assert.equal(planSlug(t.root, "T5"), "alpha-plan");
+    assert.equal(planSlug(t.root, "T6"), "beta-plan");
+    assert.equal(planSlug(t.root, "T7"), null, "計画ではない見出しの下");
+    assert.equal(planSlug(t.root, "T0"), "old-plan", "archive へ移った T も引ける");
+    assert.equal(planSlug(t.root, "T99"), null);
   } finally { t.cleanup(); }
 });

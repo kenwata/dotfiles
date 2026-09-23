@@ -16,6 +16,8 @@ const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.m
 //   blocked: 質問の画面で止まる / stalled: 送信後に動かない / newsession: /clear なしに session が変わる /
 //   unknown: 状態を分類できない / working: 送信後の get で 2 回 working を返してから complete する(監督のターンが
 //   worker の完了通知で再開する間を再現)/ nothing: 何もしない
+// 端末の題名(pane get の terminal_title_stripped)は起動時の --name と /rename で変わり、/clear では変わらない
+// (本物の Claude と同じく前の名前を引き継ぐ)。ignoreRename なら /rename を受けても変えない
 const FAKE_HERDR = `#!/usr/bin/env node
 const fs = require("node:fs");
 const path = require("node:path");
@@ -40,6 +42,9 @@ if (args[0] === "pane" && args[1] === "split") {
   s.splits = (s.splits || 0) + 1; save();
   process.stdout.write(JSON.stringify({ id: "x", result: { pane: { pane_id: "w1:p" + (1 + s.splits), cwd: args[args.indexOf("--cwd") + 1] } } })); process.exit(0);
 }
+if (args[0] === "pane" && args[1] === "get") {
+  process.stdout.write(JSON.stringify({ id: "x", result: { pane: { pane_id: args[2], terminal_title_stripped: s.title ?? null } } })); process.exit(0);
+}
 if (args[0] !== "agent") fail("bad_args");
 if (args[1] === "list") {
   const agents = s.agents === "none" ? [] : s.agents === "many" ? [agent("w1:p1"), agent("w1:p9")] : s.agents === "busy" ? [{ ...agent(), agent_status: "working" }] : [agent()];
@@ -47,6 +52,7 @@ if (args[1] === "list") {
 }
 if (args[1] === "start") {
   s.started = { name: args[2], kind: args[args.indexOf("--kind") + 1], pane: args[args.indexOf("--pane") + 1], extra: args.includes("--") ? args.slice(args.indexOf("--") + 1) : [] };
+  if (s.started.extra.includes("--name")) s.title = s.started.extra[s.started.extra.indexOf("--name") + 1];
   s.status = "idle"; save();
   ok(agent(s.started.pane));
 }
@@ -65,6 +71,11 @@ if (args[1] === "prompt") {
   if (text === "/clear" || text === "/new") {
     if (!s.ignoreClear) { s.n += 1; s.session = "sess-" + s.n; }
     if (s.blockOnClear) s.status = "blocked";
+    save();
+    ok(agent());
+  }
+  if (text.startsWith("/rename ")) {
+    if (!s.ignoreRename) s.title = text.slice("/rename ".length);
     save();
     ok(agent());
   }
@@ -106,7 +117,7 @@ function git(root, ...args) {
   return execFileSync("git", ["-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", ...args], { encoding: "utf8" });
 }
 
-function setup({ host = "claude", status = "idle", scenario = {}, todo, ignoreClear = false, blockOnClear = false, agents = "one" } = {}) {
+function setup({ host = "claude", status = "idle", scenario = {}, todo, ignoreClear = false, blockOnClear = false, ignoreRename = false, agents = "one" } = {}) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "task-loop-cli-")));
   const root = path.join(base, "repo");
   fs.mkdirSync(root);
@@ -121,7 +132,7 @@ function setup({ host = "claude", status = "idle", scenario = {}, todo, ignoreCl
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "herdr"), FAKE_HERDR, { mode: 0o755 });
   const stateFile = path.join(base, "herdr.json");
-  fs.writeFileSync(stateFile, JSON.stringify({ host, status, session: "sess-0", n: 0, root, scenario, ignoreClear, blockOnClear, workingLeft: 0, agents }));
+  fs.writeFileSync(stateFile, JSON.stringify({ host, status, session: "sess-0", n: 0, root, scenario, ignoreClear, blockOnClear, ignoreRename, workingLeft: 0, agents }));
   const logFile = path.join(base, "herdr.log");
   fs.writeFileSync(logFile, "");
   fs.mkdirSync(path.join(base, "tmp"));
@@ -153,7 +164,7 @@ test("T ごとに /clear してから /execute-task を送り、完了を成果�
     assert.equal(code, 0, JSON.stringify(json));
     assert.equal(json.reason, "all_done");
     assert.deepEqual(json.tasks_done, ["T1", "T2"]);
-    assert.deepEqual(t.prompts(), ["/clear", "/execute-task T1", "/clear", "/execute-task T2"]);
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo T1", "/execute-task T1", "/clear", "/rename repo T2", "/execute-task T2"]);
     assert.deepEqual({ task: t.session("sess-2").loop.task, attempt: t.session("sess-2").loop.attempt }, { task: "T2", attempt: 1 });
     assert.ok(fs.existsSync(path.join(t.base, "state", "claude-task-loop", "last-run.json")));
   } finally { t.cleanup(); }
@@ -164,7 +175,7 @@ test("予算停止なら同じ T を新しいセッションで再送し、上�
   try {
     const { code, json } = t.run("--tasks", "T1");
     assert.equal(code, 0, JSON.stringify(json));
-    assert.deepEqual(t.prompts(), ["/clear", "/execute-task T1", "/clear", "/execute-task T1"]);
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo T1", "/execute-task T1", "/clear", "/execute-task T1"], "再送のセッションは同じ名前を引き継ぐので付け直さない");
     assert.equal(t.session("sess-2").loop.attempt, 2);
     assert.equal(t.session("sess-2").budget, undefined, "新しいセッションの予算は空から始まる");
   } finally { t.cleanup(); }
@@ -194,7 +205,7 @@ test("穴の記録・依存の未完了・質問の画面・送信後に動か�
     const { json } = t.run("--tasks", "T1,T3");
     assert.equal(json.reason, "dependency_open");
     assert.deepEqual(json.details.open, ["T9 が見つからない"]);
-    assert.deepEqual(t.prompts(), ["/clear", "/execute-task T1"], "依存が締まっていない T には何も送らない");
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo T1", "/execute-task T1"], "依存が締まっていない T には何も送らない");
   } finally { t.cleanup(); }
 
   t = setup({ scenario: { T1: ["blocked"] } });
@@ -206,7 +217,7 @@ test("穴の記録・依存の未完了・質問の画面・送信後に動か�
   try {
     const { json } = t.run("--tasks", "T1");
     assert.equal(json.reason, "stalled");
-    assert.deepEqual(t.prompts(), ["/clear", "/execute-task T1"]);
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo T1", "/execute-task T1"]);
   } finally { t.cleanup(); }
 });
 
@@ -352,7 +363,7 @@ test("--target を省略すると同じプロジェクトで入力待ちのペ�
     assert.equal(json.target, "w1:p1");
     assert.deepEqual(json.tasks_done, ["T1", "T2"]);
     assert.equal(json.reason, "dependency_open", "T3 は依存が締まらず止まる");
-    assert.deepEqual(t.prompts(), ["/clear", "/execute-task T1", "/clear", "/execute-task T2"]);
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo T1", "/execute-task T1", "/clear", "/rename repo T2", "/execute-task T2"]);
     const dry = t.runAuto("T2..T3", "--dry-run");
     assert.deepEqual([dry.json.tasks, dry.json.tasks_from], [["T2", "T3"], "args"], "位置引数の T も受け付ける");
   } finally { t.cleanup(); }
@@ -367,7 +378,7 @@ test("同じプロジェクトにペインが無ければ隣に作って起動�
     const started = t.state().started;
     assert.equal(started.kind, "claude");
     assert.equal(started.pane, "w1:p2");
-    assert.deepEqual(started.extra, ["--model", "claude-opus-5-5"]);
+    assert.deepEqual(started.extra, ["--name", "repo loop", "--model", "claude-opus-5-5"]);
   } finally { t.cleanup(); }
   t = setup({ agents: "many" });
   try {
@@ -399,7 +410,7 @@ test("完了が 5 件に達したら /follow-up を送り、checkpoint が増え
   try {
     const { code, json } = t.runAuto("T6");
     assert.equal(code, 0, JSON.stringify(json));
-    assert.deepEqual(t.prompts(), ["/clear", "/follow-up", "/clear", "/execute-task T6"]);
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo follow-up", "/follow-up", "/clear", "/rename repo T6", "/execute-task T6"]);
     assert.equal(t.session("sess-1").loop.task, "follow-up");
   } finally { t.cleanup(); }
 
@@ -416,11 +427,54 @@ test("/follow-up が利用者への問いで止まれば人へ渡し、checkpoin
   try {
     const { json } = t.runAuto("T6");
     assert.equal(json.reason, "follow_up_question");
-    assert.deepEqual(t.prompts(), ["/clear", "/follow-up"]);
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo follow-up", "/follow-up"]);
   } finally { t.cleanup(); }
   t = fiveDone({ "follow-up": ["nothing"] });
   try {
     const { json } = t.runAuto("T6");
     assert.equal(json.reason, "follow_up_incomplete");
+  } finally { t.cleanup(); }
+});
+
+test("セッション名は T の計画の slug と T(/follow-up の前は follow-up、自動起動は loop)で、/clear の後に毎回付け直す", () => {
+  const todo = [
+    "## #2 alpha-plan", "| #2-1 | T1 | 一つ目 | — | [ ] |", "| #2-2 | T2 | 二つ目 | — | [ ] |", "",
+    "**#2-1 / T1** — 完了条件: 対象: `src/`。", "**#2-2 / T2** — 完了条件: 対象: `src/`。依存: T1。", "",
+  ].join("\n");
+  const t = setup({ agents: "none", todo, scenario: { T1: ["complete"], T2: ["complete"] } });
+  try {
+    const { code, json } = t.runAuto();
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(t.state().started.extra, ["--name", "alpha-plan loop"], "起動時の名前は最初の T の計画");
+    assert.deepEqual(t.prompts(), ["/clear", "/rename alpha-plan T1", "/execute-task T1", "/clear", "/rename alpha-plan T2", "/execute-task T2"]);
+    assert.equal(t.state().title, "alpha-plan T2", "窓の題名は最後に送った T");
+  } finally { t.cleanup(); }
+});
+
+test("Codex のペインを起動する時は名前を付けず、前提検査で止まる時はペインを起動しない", () => {
+  let t = setup({ host: "codex", agents: "none", scenario: { T1: ["complete"] } });
+  try {
+    const { code, json } = t.runAuto("T1", "--kind", "codex");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(t.state().started.extra, []);
+    assert.deepEqual(t.prompts(), ["/new", "$execute-task T1"]);
+  } finally { t.cleanup(); }
+  t = setup({ agents: "none" });
+  try {
+    fs.writeFileSync(path.join(t.root, "stray.txt"), "x");
+    const { code, json } = t.runAuto("T1");
+    assert.equal(code, 2);
+    assert.match(json.errors.join(), /stray.txt/);
+    assert.equal(t.state().splits, undefined, "ペインを作っていない");
+  } finally { t.cleanup(); }
+});
+
+test("名前が題名に反映されなくても止めずに次へ進み、stderr に書く", () => {
+  const t = setup({ ignoreRename: true, scenario: { T1: ["complete"] } });
+  try {
+    const { code, json, stderr } = t.run("--tasks", "T1", "--clear-timeout-ms", "1200");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo T1", "/execute-task T1"]);
+    assert.match(stderr, /\[loop T1\] rename: .*"repo T1"/);
   } finally { t.cleanup(); }
 });

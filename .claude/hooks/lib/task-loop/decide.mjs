@@ -54,6 +54,20 @@ export function findTask(root, task) {
   return null;
 }
 
+// T が属する計画の slug。/breakdown は計画ごとに `## #<n> <slug>` の節を作り、その T の行を節の中に置く。archive は
+// `## Rotated <日付>` の下に `### #<n> <slug>` を置く(growing-docs.md の移動の手順)ので、深さ 2〜3 の見出しを読む。
+// T の行の直前にある見出しが計画の見出しでなければ(`## §0 …`・`### 計画` など)、または T が無ければ null
+export function planSlug(root, task) {
+  for (const rel of ["TODO.md", ...ARCHIVES]) {
+    let slug = null;
+    for (const line of (readText(path.join(root, rel)) ?? "").split(/\r?\n/)) {
+      if (/^###? /.test(line)) { slug = /^###? #\d+\s+(\S+)/.exec(line)?.[1] ?? null; continue; }
+      if (/^\|/.test(line) && line.split("|").some((cell) => cell.trim() === task)) return slug;
+    }
+  }
+  return null;
+}
+
 // 依存がすべて締まっているか。[-] は置き換え先(→T<n>)で読み替え、置き換え先が無ければ締まっていない扱い
 // (execute-task も同じ場合に推測せず止まる)。戻り値: 締まっていない依存の説明の配列
 export function openDependencies(root, task) {

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HerdrError, agentGet, agentPrompt, agentRead, agentWait, available } from "../herdr.mjs";
+import { HerdrError, agentGet, agentPrompt, agentRead, agentWait, available, paneTitle } from "../herdr.mjs";
 
 // 偽の herdr: FAKE_HERDR_MODE で応答を切り替え、受け取った引数を FAKE_HERDR_LOG に残す
 const FAKE = `#!/usr/bin/env node
@@ -16,6 +16,7 @@ if (mode === "error") { process.stdout.write(JSON.stringify({ error: { code: "ag
 if (mode === "crash") { process.stderr.write("boom"); process.exit(3); }
 if (mode === "noagent") { process.stdout.write(JSON.stringify({ id: "x", result: {} })); process.exit(0); }
 if (process.argv[3] === "read") { process.stdout.write("line1\\nline2\\n"); process.exit(0); }
+if (process.argv[2] === "pane") { process.stdout.write(JSON.stringify({ id: "x", result: { pane: { pane_id: process.argv[4], terminal_title: "✳ alpha T1", terminal_title_stripped: "alpha T1" } } })); process.exit(0); }
 process.stdout.write(JSON.stringify({ id: "x", result: { agent: { agent: "claude", agent_status: "idle", agent_session: { value: "s1" } } } }));
 `;
 
@@ -74,4 +75,13 @@ test("失敗は種別付きの HerdrError: error.code / 非 0 終了 / 起動失
     process.env.HERDR_BIN = "/nonexistent/herdr";
     assert.throws(() => agentGet("x"), (e) => e.code === "spawn_failed");
   });
+});
+
+test("paneTitle は pane get の装飾を除いた端末の題名を返し、無ければ null", () => {
+  withFake("ok", (calls) => {
+    assert.equal(paneTitle("w1:p1"), "alpha T1");
+    assert.deepEqual(calls(), [["pane", "get", "w1:p1"]]);
+  });
+  withFake("noagent", () => assert.equal(paneTitle("w1:p1"), null));
+  withFake("error", () => assert.throws(() => paneTitle("w1:p1"), (e) => e.code === "agent_not_found"));
 });

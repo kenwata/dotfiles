@@ -62,6 +62,11 @@ export function agentRead(target, lines = 80) {
   try { return call(["agent", "read", target, "--source", "recent-unwrapped", "--lines", String(lines)]).text; } catch { return ""; }
 }
 
+// ペインの端末の題名から装飾の記号を除いたもの。Claude は --name・/rename で付けたセッション名をここへ出す
+export function paneTitle(pane) {
+  return call(["pane", "get", pane]).json?.result?.pane?.terminal_title_stripped ?? null;
+}
+
 // このサーバーの全エージェント({ agent, agent_status, agent_session, cwd, foreground_cwd, pane_id, tab_id, ... })
 export function agentList() {
   return call(["agent", "list"]).json?.result?.agents ?? [];
