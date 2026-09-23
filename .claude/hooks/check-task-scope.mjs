@@ -174,9 +174,10 @@ export function parseDependencies(block) {
 // 戻り値: { open, state(" " | "x" | "-"), deps(依存の T), replacedBy(廃止時の置き換え先 T か null),
 //          paths, prose, declared } / T が見つからなければ null
 export function readTaskScope(todoText, task) {
-  const idPattern = new RegExp(`(^|[^0-9A-Za-z])${task}([^0-9]|$)`);
   const lines = todoText.split(/\r?\n/);
-  const row = lines.find((line) => /^\|/.test(line) && idPattern.test(line) && /\|\s*\[( |x|-)\]\s*\|/.test(line));
+  // T の列(セル)が対象の T と一致する行。行のどこかに T が現れるかで探すと、廃止の行の注記「→T<n>」が
+  // 置き換え先の T の行として当たってしまう(2026-09-23、置き換え先の T で対象パスの検査が効かなくなっていた)
+  const row = lines.find((line) => /^\|/.test(line) && line.split("|").some((cell) => cell.trim() === task) && /\|\s*\[( |x|-)\]\s*\|/.test(line));
   if (!row) return null;
   const state = row.match(/\|\s*\[( |x|-)\]\s*\|/)[1];
   const open = state === " ";
