@@ -11,6 +11,10 @@
 //   worker 用 CODEX_HOME は環境変数 CODEX_WORKER_HOME(既定 ~/.codex-worker、.codex/install.sh が作る)。
 //   モデルは既定で系統 luna(model-routing.md の通常実装)を、`codex debug models` の一覧の最新の版へ解決する。
 //   版番号をどこにも固定しないため。--model は解決を飛ばして ID を直接渡す(一覧に無いモデルを試す時だけ)。
+//   実行中の状態行(コマンド・編集したファイル・進捗・トークン・判定)は stderr と
+//   ${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/status/<ルートのパスの記号を - にした名前>.log に出す
+//   (人が追うためのもの。report ではない。プロジェクトごとに分けるのは、同じリポジトリでは worker が同時に 1 つなので
+//   混ざらないため)。
 //   run の記録は ${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/runs/ に置く(worker の sandbox は
 //   TMPDIR と /tmp に書けるので、restore の元になる退避コピーをそこに置かない)。7 日より古い記録は run の度に消す。
 //
@@ -33,15 +37,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
+import { StringDecoder } from "node:string_decoder";
 import { activeWorkerLock, isInside, workerLockPath } from "../../check-task-scope.mjs";
 import {
   buildPrompt, changedSince, checkAllow, findRollout, gate, readRollout, resolveModelFamily, restore, selectRules,
   takeSnapshot, validateResult,
 } from "./core.mjs";
+import { lineSplitter, renderEvent, renderSummary } from "./status.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULTS = { timeout: 1200, maxPacket: 12 * 1024, maxAllow: 3, peakThreshold: 0.6, family: "luna" };
 const RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const STATUS_LOG_MAX = 1024 * 1024;
 
 function emit(report, runDir, code) {
   const text = JSON.stringify(report, null, 2);
@@ -52,9 +59,35 @@ function emit(report, runDir, code) {
   process.exitCode = code;
 }
 
-function runsDir() {
+function stateDir() {
   const base = process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local", "state");
-  return path.join(base, "claude-codex-worker", "runs");
+  return path.join(base, "claude-codex-worker");
+}
+
+function runsDir() {
+  return path.join(stateDir(), "runs");
+}
+
+// 状態行のプロジェクトごとのログ。名前は ~/.claude/projects/ と同じく、ルートのパスの記号を - にしたもの
+function statusLogPath(root) {
+  return path.join(stateDir(), "status", `${root.replace(/[^A-Za-z0-9]/g, "-")}.log`);
+}
+
+// 状態行の出力先。stderr(Claude Code のバックグラウンドタスクの表示・手で起動した端末)と、
+// 別の端末から `tail -F` で追えるプロジェクトごとのログ。表示の失敗で run を止めない
+function statusWriter(root, task, step) {
+  const logFile = statusLogPath(root);
+  try { fs.mkdirSync(path.dirname(logFile), { recursive: true, mode: 0o700 }); } catch { /* 表示のみ */ }
+  try {
+    if (fs.statSync(logFile).size > STATUS_LOG_MAX) fs.truncateSync(logFile, 0);
+  } catch { /* 初回 */ }
+  const prefix = `[Codex ${task} s${step}]`;
+  return (text) => {
+    if (!text) return;
+    const out = text.split("\n").map((line) => `${prefix} ${line}\n`).join("");
+    try { process.stderr.write(out); } catch { /* 表示のみ */ }
+    try { fs.appendFileSync(logFile, out); } catch { /* 表示のみ */ }
+  };
 }
 
 function pruneOldRuns() {
@@ -114,15 +147,32 @@ function killGroup(child, signal) {
   try { process.kill(-child.pid, signal); } catch { /* 既に終了 */ }
 }
 
-function execWorker({ home, model, root, prompt, runDir, timeoutSec, onStart }) {
+// 生のイベントは events.jsonl にそのまま保存し、状態行は status.mjs が選んだものだけを出す
+function execWorker({ home, model, root, prompt, runDir, timeoutSec, onStart, status }) {
   return new Promise((resolve) => {
     const events = fs.openSync(path.join(runDir, "events.jsonl"), "w");
     const stderr = fs.openSync(path.join(runDir, "stderr.txt"), "w");
+    const splitter = lineSplitter((line) => {
+      let event;
+      try { event = JSON.parse(line); } catch { return; }
+      status(renderEvent(event, { root }));
+    });
     const child = spawn("codex", [
       "exec", "--json", "-s", "workspace-write", "-m", model, "-C", root,
       "--output-schema", path.join(here, "worker-result.schema.json"),
       "-o", path.join(runDir, "result.json"), "-",
-    ], { env: { ...process.env, CODEX_HOME: home }, stdio: ["pipe", events, stderr], detached: true });
+    ], { env: { ...process.env, CODEX_HOME: home }, stdio: ["pipe", "pipe", stderr], detached: true });
+    const decoder = new StringDecoder("utf8"); // チャンク境界で割れた多バイト文字を持ち越す
+    child.stdout.on("data", (chunk) => {
+      fs.writeSync(events, chunk);
+      splitter.push(decoder.write(chunk));
+    });
+    child.stdout.on("end", () => {
+      splitter.push(decoder.end());
+      splitter.end();
+    });
+    // stdout は pipe なので、codex の終了後に孫が pipe を握っていると close が来ない。exit でグループを止める
+    child.on("exit", () => killGroup(child, "SIGKILL"));
     onStart(child);
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -218,6 +268,8 @@ async function run(args) {
   const prompt = buildPrompt({ contract, allow, packet, rules });
   fs.writeFileSync(path.join(runDir, "prompt.md"), prompt);
 
+  const status = statusWriter(root, task, step);
+
   // ロックとシグナル: runner が止められても codex を孤児にせず、ロックを残さない
   const lockFile = workerLockPath(root);
   const lock = { root, task, step, runDir, pid: process.pid, expiresAt: Date.now() + (timeoutSec + 60) * 1000 };
@@ -227,17 +279,19 @@ async function run(args) {
   const onSignal = (signal) => {
     if (child) killGroup(child, "SIGKILL");
     fs.rmSync(lockFile, { force: true });
+    status(`interrupted by ${signal}(作業ツリーは戻していない)`);
     emit({ accepted: false, stage: "interrupted", run_dir: runDir, reasons: [`runner が ${signal} で止められた。作業ツリーは戻していない(restore --run で戻す)`] }, runDir, 1);
     process.exit(1);
   };
   const signals = ["SIGTERM", "SIGINT", "SIGHUP"];
   for (const signal of signals) process.on(signal, onSignal);
 
+  status(`started model=${model} allow=${allow.join(",")} run=${runDir}`);
   const started = Date.now();
   let exec;
   try {
     exec = await execWorker({
-      home, model, root, prompt, runDir, timeoutSec,
+      home, model, root, prompt, runDir, timeoutSec, status,
       onStart: (c) => {
         child = c;
         fs.writeFileSync(lockFile, JSON.stringify({ ...lock, childPid: c.pid }));
@@ -313,6 +367,7 @@ async function run(args) {
     },
     rollout: rolloutFile,
   };
+  status(renderSummary(report));
   emit(report, runDir, report.accepted ? 0 : 1);
 }
 

@@ -86,7 +86,8 @@ node ~/.claude/hooks/lib/codex-worker/cli.mjs run --root <プロジェクトル�
 ````
 
 Bash ツールの `run_in_background` で起動し、完了通知を待つ(Bash の 10 分上限を超え得るため。runner 自身が
-既定 20 分で worker をプロセスグループごと止める)。実行中は runner がロックを置き、`check-task-scope.mjs` が
+既定 20 分で worker をプロセスグループごと止める)。出力をファイルへリダイレクト(`> file 2>&1` など)しない —
+下の状態行がバックグラウンドタスクの出力に出なくなり、利用者から実行中の様子が見えなくなる。実行中は runner がロックを置き、`check-task-scope.mjs` が
 そのリポジトリへの Claude 側の編集を拒否する(IDE や Bash 経由の編集は止められない。run 中に作業ツリーを
 触らない)。packet は scratchpad など作業ツリーの外に置く。
 
@@ -95,13 +96,22 @@ worker のモデルは系統名で指定する(既定 `luna`。上げる時は `
 書く。版番号を記憶や文書から書かない — モデルは更新されるので、一覧にある値だけが事実である。`--model` で ID を
 直接渡すのは、一覧に無いモデルを試す時だけ。
 
-run の記録(snapshot と退避コピー、プロンプト、worker の出力、report)は
+実行中の様子は、runner が状態行として stderr とプロジェクトごとのログ
+`${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/status/<ルートのパスの / などを - にした名前>.log` に出す(`codex exec --json` のイベントから、実行したコマンドと終了コード・編集したファイル・worker の進捗の一言・
+トークン数・最後の判定を選んだもの。形式は `hooks/lib/codex-worker/status.mjs`)。利用者はバックグラウンドタスクの
+出力か、別の端末の `tail -F` でそのプロジェクトのログを追う(同じリポジトリでは worker が同時に 1 つなので、1 つのログの中で
+別の run と混ざらない)。状態行は人のためのもので、監督は読まない(判断は report と
+差分で行う)。生のイベントは run ディレクトリの `events.jsonl` に残るが、監督は全文を読まない。
+
+run の記録(snapshot と退避コピー、プロンプト、生のイベント、worker の出力、report)は
 `${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/runs/<run_id>/` に置かれ、7 日で消える。worker の
 sandbox は TMPDIR と /tmp に書けるので、restore の元になる記録をそこに置かない。
 
 ## report の読み方
 
-runner は report(JSON)を stdout と `<run_dir>/report.json` に出す。report は判断材料であり、`worker` 欄は
+runner は report(JSON)を stdout と `<run_dir>/report.json` に出す。バックグラウンドの出力ファイルには
+stderr の状態行も混ざるので、完了通知の後は `sed -n '/^{$/,/^}$/p' <出力ファイル>` で report だけを読む(状態行は
+`[Codex ` で始まる 1 行ずつなので、`{` だけの行と `}` だけの行は report の開始と終わりに限られる)。report は判断材料であり、`worker` 欄は
 worker の主張である。受け入れる前に、監督が `git diff` と試験の再実行で確かめる。
 
 - **exit 2**: `errors` を直して起動し直す(worker は起動していない。何も変更していない)。

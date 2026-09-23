@@ -34,7 +34,10 @@ if (mode === "sleep") {
   setTimeout(() => {}, 60000);
   return;
 }
+console.log(JSON.stringify({ type: "item.started", item: { type: "command_execution", command: "/bin/zsh -lc 'npm test'" } }));
+console.log(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "/bin/zsh -lc 'npm test'", exit_code: 0 } }));
 fs.writeFileSync(path.join(root, "src/a/impl.ts"), "impl\\n");
+console.log(JSON.stringify({ type: "item.completed", item: { type: "file_change", changes: [{ path: path.join(root, "src/a/impl.ts"), kind: "add" }] } }));
 if (mode === "violate") fs.writeFileSync(path.join(root, "other/y.ts"), "changed by worker\\n");
 fs.writeFileSync(out, JSON.stringify({ status: "done", changed_files: ["src/a/impl.ts"], tests_run: [], criteria: [], holes: [], reference_errors: [], notes: "" }));
 console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5 } }));
@@ -73,11 +76,12 @@ function setup() {
   };
   const run = (args, extraEnv = {}) => {
     const result = spawnSync("node", [cli, ...args], { env: { ...env, ...extraEnv }, encoding: "utf8", timeout: 60000 });
-    return { code: result.status, json: JSON.parse(result.stdout) };
+    return { code: result.status, json: JSON.parse(result.stdout), stderr: result.stderr };
   };
   const lockDir = path.join(tmp, "claude-task-scope");
   const locks = () => (fs.existsSync(lockDir) ? fs.readdirSync(lockDir).filter((n) => n.startsWith("worker-lock-")) : []);
-  return { base, root, packet, run, locks, cleanup: () => fs.rmSync(base, { recursive: true, force: true }) };
+  const statusLog = path.join(base, "state", "claude-codex-worker", "status", `${root.replace(/[^A-Za-z0-9]/g, "-")}.log`);
+  return { base, root, packet, run, locks, statusLog, cleanup: () => fs.rmSync(base, { recursive: true, force: true }) };
 }
 
 const baseArgs = (root, packet) => ["run", "--root", root, "--task", "T7", "--step", "1", "--packet", packet, "--allow", "src/a/impl.ts"];
@@ -85,7 +89,7 @@ const baseArgs = (root, packet) => ["run", "--root", root, "--task", "T7", "--st
 test("正常な run は exit 0 で、系統名から最新のモデルを解決し、ロックを外す", () => {
   const t = setup();
   try {
-    const { code, json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    const { code, json, stderr } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
     assert.equal(code, 0, JSON.stringify(json));
     assert.equal(json.accepted, true);
     assert.equal(json.model, "gpt-6-luna");
@@ -94,6 +98,15 @@ test("正常な run は exit 0 で、系統名から最新のモデルを解決�
     assert.equal(json.metrics.peak_ratio, 0.1);
     assert.deepEqual(t.locks(), []);
     assert.ok(json.run_dir.startsWith(path.join(t.base, "state")), "run の記録は worker が書ける TMPDIR の外に置く");
+    // 状態行は stderr と共有ログにだけ出る(stdout は report の JSON だけ。上の JSON.parse が通ることで確かめている)
+    const expected = [
+      "[Codex T7 s1] $ npm test", "[Codex T7 s1]   ✓ npm test", "[Codex T7 s1] edit: src/a/impl.ts (add)",
+      "[Codex T7 s1] tokens: input=10 cached=0 output=5", "[Codex T7 s1] finished: accepted worker=done changed=1",
+    ];
+    for (const out of [stderr, fs.readFileSync(t.statusLog, "utf8")]) {
+      for (const line of expected) assert.ok(out.includes(line), `${line} が無い:\n${out}`);
+      assert.match(out, /^\[Codex T7 s1\] started model=gpt-6-luna /m);
+    }
   } finally { t.cleanup(); }
 });
 
