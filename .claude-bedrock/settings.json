@@ -77,6 +77,15 @@
           }
         ],
         "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/check-task-scope.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
       }
     ],
     "SessionStart": [
@@ -119,6 +128,39 @@
             "type": "command"
           }
         ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/check-task-scope.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/check-task-scope.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/check-task-scope.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
       }
     ]
   },
