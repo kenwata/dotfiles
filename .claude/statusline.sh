@@ -21,6 +21,11 @@ SESSION_ID=$(echo "$input" | jq -r '.session_id // "unknown"')
   side_key=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_')
   side_dir="${XDG_STATE_HOME:-$HOME/.local/state}/claude-task-loop/statusline"
   if [ "$SESSION_ID" != "unknown" ] && mkdir -p "$side_dir"; then
+    # セッションごとの最初の書き出しの時だけ、2 日より古い状態を掃除する(session_id ごとにファイルが増えるため。
+    # hook は /execute-task の実行中のセッションでしか起動しないので、掃除はここで持つ)
+    if [ ! -f "$side_dir/${side_key}.json" ]; then
+      find "$side_dir" "${side_dir%/statusline}/sessions" -maxdepth 1 -name '*.json' -mtime +2 -delete
+    fi
     side_tmp="$side_dir/.${side_key}.$$"
     echo "$input" | jq -c '{
       session_id, at: (now * 1000 | floor),

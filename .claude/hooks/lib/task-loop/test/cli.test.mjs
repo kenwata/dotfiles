@@ -198,7 +198,9 @@ test("前提検査: 入力を受け付けない状態・説明できない未コ
     assert.equal(result.code, 0);
     assert.deepEqual(result.json.prompts, ["/execute-task T1", "/execute-task T2"]);
     assert.deepEqual(t.prompts(), []);
-    const outside = spawnSync("node", [cli, "run", "--target", "w1:p1", "--tasks", "T1"], { env: { ...process.env, HERDR_ENV: "" }, encoding: "utf8" });
+    const outside = spawnSync("node", [cli, "run", "--target", "w1:p1", "--tasks", "T1"], {
+      env: { ...process.env, HERDR_ENV: "", XDG_STATE_HOME: path.join(t.base, "state") }, encoding: "utf8",
+    });
     assert.equal(outside.status, 2);
     assert.match(JSON.parse(outside.stdout).errors.join(), /herdr の中で実行していない/);
   } finally { t.cleanup(); }
