@@ -71,7 +71,20 @@ node ~/.claude/hooks/lib/codex-worker/cli.mjs plan --root <プロジェクトル
 verify の結果を表で見られる。利用者に進み具合を聞かれたら、これの出力で答える。
 
 ````bash
-node ~/.claude/hooks/lib/codex-worker/cli.mjs show --root <プロジェクトルート> --task T<n>
+node ~/.claude/hooks/lib/codex-worker/cli.mjs show --root <プロジェクトルート> --task T<n> [--json]
+````
+
+同じ置き場の `worklog.md` がタスクの作業記録である(書式の正は `hooks/lib/codex-worker/worklog.mjs`。追記専用で消さない)。
+runner は `plan`・`run`・`verify` の結果を 1 行ずつ自動で書く。監督は各ステップの受け入れ(または差し戻し)を決めた
+直後に、確かめた事実・決めたことと理由・捨てた仮説と理由・次にやることを `note` で 1 行ずつ書く。会話の Thinking は
+次のセッションに引き継げないので、再開はこの記録だけを頼りに行う。`show` は run の記録が消えたステップを
+作業記録から埋め、`resume` は同じ T を再開する時の照合(未コミットの変更が作業記録で説明できるか)を JSON で返す
+(使い方の正は `commands/execute-task.md` 手順1の再開の判定)。
+
+````bash
+node ~/.claude/hooks/lib/codex-worker/cli.mjs note --root <プロジェクトルート> --task T<n> --step <番号> \
+  --kind <fact|decision|rejected|intent|handoff|resume|step> --text "<1 行>"
+node ~/.claude/hooks/lib/codex-worker/cli.mjs resume --root <プロジェクトルート> --task T<n>
 ````
 
 ## packet
@@ -140,7 +153,8 @@ worker のモデルは系統名で指定する(既定 `luna`。上げる時は `
 
 run の記録(snapshot と退避コピー、プロンプト、生のイベント、worker の出力、report)は
 `${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/runs/<run_id>/` に置かれ、7 日で消える。worker の
-sandbox は TMPDIR と /tmp に書けるので、restore の元になる記録をそこに置かない。
+sandbox は TMPDIR と /tmp に書けるので、restore の元になる記録をそこに置かない。run の採否・変更したパス・
+その T で最初の run の前から未コミットだったパスは作業記録にも残るので、再開の照合は run の記録に依らない。
 
 ## report の読み方
 
@@ -168,7 +182,7 @@ worker が `notes` で「sandbox で完走できなかった」と書いた検�
     (commit・stage など)は自動では戻していないので、状態を確認して手で戻す。
   - `stage: interrupted` は runner が止められた場合で、作業ツリーは戻していない。
 - **exit 0、`worker.status: done`**: 差分を確かめ、`verify` が exit 0(`all_passed: true`)であることを確かめ、`criteria` を完了の基準と一項目ずつ照合する。足りなければ、
-  不足を packet に書いて同じステップを再起動する。
+  不足を packet に書いて同じステップを再起動する。受け入れを決めたら、ステップの境目の `note` を書いてから次のステップへ進む。
 - **exit 0、`worker.status: blocked`**: `holes` と `reference_errors` を観測で裏取りする(下の節)。
 - **exit 0、`worker.status: failed`**: `notes` と `tests_run` から原因を確かめ、ステップを直して再起動するか、
   下のエスカレーションへ。
@@ -187,6 +201,10 @@ run の後に監督が書いた状態文書には触れない)。
   ステップを締める)。確かめてなお穴なら、`execute-task.md` 手順3の穴の記録の経路へ。
 - `reference_errors` は、`execute-task.md` 手順3の参照の訂正に当たるか監督が判定し、当たれば監督が直して
   再起動する。当たらなければ穴の記録の経路へ。
+- 予算停止(監督のコンテキスト使用率の hook `hooks/context-budget.mjs`): `[context-budget 1/2]` が届いたら次の
+  worker を起動しない。実行中の run は止めず、report を受け取って今のステップの採否を決め、`note` を書く。
+  `[context-budget 2/2]` が届いたら handoff を書いて、コミットせずにターンを終える(手順の正は `execute-task.md` 手順4の
+  予算停止)。worker の compaction(上の `slice_too_large` と不採用)とは別物で、こちらは監督の文脈の区切り。
 
 ## ゲートが見るもの・見ないもの
 
@@ -206,3 +224,5 @@ run の後に監督が書いた状態文書には触れない)。
 - report の `metrics`(ピーク使用率・compaction・トークン・所要時間・packet の大きさ)は、
   `model-routing.md` とこの文書の既定値(packet 上限、ピークの閾値、許可パスの件数)を見直す材料にする。
   run ディレクトリは上の「起動」の節の置き場所に 7 日残る。
+- 作業記録の `kind=budget`(予算停止が発火した使用率)と `kind=compact`(閾値をすり抜けて compact が起きた)は、
+  予算停止の閾値(`~/.config/claude-task-loop/config.json`、既定 Claude 70/80%・Codex 60/70%)を見直す材料にする。
