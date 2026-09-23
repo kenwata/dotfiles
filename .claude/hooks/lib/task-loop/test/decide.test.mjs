@@ -129,3 +129,12 @@ test("判定表: 完了・再送・停止の理由", () => {
   assert.equal(reason({ state: "-" }).reason, "task_closed");
   assert.equal(reason({}).reason, "not_completed");
 });
+
+test("HANDOFF の /elaborate docs/design/… は再計画への差し戻しとして読む", () => {
+  const t = fixture();
+  try {
+    fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "- 次の一手: /elaborate docs/design/x.md(穴の記録: 目的が変わる)\n");
+    assert.equal(handoffSignals(t.root, "T5").elaborate, true);
+    assert.equal(judge({ state: " ", committed: false, dirty: [], sessionChanged: false, compacted: false, budgetStage: 2, handoff: handoffSignals(t.root, "T5"), retries: 0, retryMax: 2 }).reason, "hole_recorded");
+  } finally { t.cleanup(); }
+});

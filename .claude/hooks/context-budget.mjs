@@ -16,8 +16,10 @@
 //   kind=budget を残す。二段目の後も作業が続いて使用率が 5 ポイント伸びるたびに、二段目の文を差し込み直す
 // - Stop: 二段目が立っているのに、その後の worklog に kind=handoff が無ければ 1 回だけ差し戻す
 //   (stop_hook_active の再入は通す。T が [x] なら締め切ったので通す)
-// - PostCompact / SessionStart(source=compact): compact を sessions/<id>.json と worklog に残す(ループはこれを見て止まる)。
-//   SessionStart では 48 時間より古いセッションの状態を掃除する
+// - compact の記録: Claude は PostCompact、Codex は SessionStart(source=compact)で、sessions/<id>.json と worklog に残す
+//   (ループはこれを見て止まる)。Claude の SessionStart(source=compact)では記録しない(PostCompact と二重になる)。
+//   SessionStart では 48 時間より古いセッションの状態も掃除する(通常の掃除は statusline.sh が持つ。起動ラッパーは
+//   /execute-task の実行中のセッションでしか node を起動しないため)
 // ホストは起動ラッパーの引数(claude / codex)で決める。無ければ turn_id の有無(Codex の入力だけが持つ)で決める。
 //
 // 既知の限界: ターンを強制終了する手段は無い。二段目で止まるのはエージェント自身で、Stop の差し戻しは「記録を

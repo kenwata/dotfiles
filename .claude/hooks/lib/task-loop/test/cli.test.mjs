@@ -9,9 +9,13 @@ import { execFileSync, spawnSync } from "node:child_process";
 
 const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.mjs");
 
-// 偽の herdr: 状態を FAKE_HERDR_STATE の JSON に持つ。/clear・/new で session を変え、/execute-task T<n> には
-// scenario[T<n>] の先頭の動きで応える(complete: TODO.md を [x] にしてコミット / budget: hook と同じく予算停止を
-// 記録 / hole: HANDOFF.md に /amend を書く / blocked: 質問の画面で止まる / stalled: 送信後に動かない)
+// 偽の herdr: 状態を FAKE_HERDR_STATE の JSON に持つ。/clear・/new で session を変え(ignoreClear なら変えず、
+// blockOnClear なら変えた後に blocked)、/execute-task T<n> には scenario[T<n>] の先頭の動きで応える:
+//   complete: TODO.md を [x] にしてコミット / mark_only: [x] にするだけ / dirty: complete + untracked を残す /
+//   budget: hook と同じく予算停止を記録 / compact: 予算停止に加えて compact を記録(閾値をすり抜けた形)/ hole: HANDOFF.md に /amend を書く /
+//   blocked: 質問の画面で止まる / stalled: 送信後に動かない / newsession: /clear なしに session が変わる /
+//   unknown: 状態を分類できない / working: 送信後の get で 2 回 working を返してから complete する(監督のターンが
+//   worker の完了通知で再開する間を再現)/ nothing: 何もしない
 const FAKE_HERDR = `#!/usr/bin/env node
 const fs = require("node:fs");
 const path = require("node:path");
@@ -25,31 +29,54 @@ const agent = () => ({ agent: s.host, agent_status: s.status, agent_session: { v
 const ok = (a) => { process.stdout.write(JSON.stringify({ id: "x", result: { agent: a } })); process.exit(0); };
 const fail = (code) => { process.stdout.write(JSON.stringify({ error: { code, message: code }, id: "x" })); process.exit(1); };
 const git = (...a) => execFileSync("git", ["-C", s.root, "-c", "user.email=t@example.com", "-c", "user.name=t", ...a]);
+const sessionFile = () => path.join(process.env.XDG_STATE_HOME, "claude-task-loop", "sessions", s.session + ".json");
+const complete = (task) => {
+  const todo = path.join(s.root, "TODO.md");
+  fs.writeFileSync(todo, fs.readFileSync(todo, "utf8").replace(new RegExp("(\\\\| " + task + " \\\\|[^\\\\n]*)\\\\[ \\\\]"), "$1[x]"));
+  git("commit", "-qam", "feat: " + task + " 完了");
+};
 if (args[0] === "--version") { console.log("herdr 0.9.1"); process.exit(0); }
 if (args[0] !== "agent") fail("bad_args");
-if (args[1] === "get" || args[1] === "wait") ok(agent());
+if (args[1] === "get" || args[1] === "wait") {
+  if (s.workingLeft > 0) {
+    s.workingLeft -= 1;
+    if (s.workingLeft === 0) { s.status = "idle"; complete(s.pending); } else s.status = "working";
+    save();
+  }
+  ok(agent());
+}
 if (args[1] === "read") { console.log("screen tail"); process.exit(0); }
 if (args[1] === "prompt") {
   const text = args[3];
   if (s.status === "blocked") fail("agent_blocked");
-  if (text === "/clear" || text === "/new") { s.n += 1; s.session = "sess-" + s.n; save(); ok(agent()); }
+  if (text === "/clear" || text === "/new") {
+    if (!s.ignoreClear) { s.n += 1; s.session = "sess-" + s.n; }
+    if (s.blockOnClear) s.status = "blocked";
+    save();
+    ok(agent());
+  }
   const task = (text.match(/execute-task (T\\d+)/) || [])[1];
   const action = (s.scenario[task] || []).shift() || "nothing";
   save();
   if (action === "stalled") fail("agent_prompt_stalled");
-  if (action === "complete") {
+  if (action === "complete" || action === "dirty") complete(task);
+  if (action === "dirty") fs.writeFileSync(path.join(s.root, "stray.txt"), "x");
+  if (action === "mark_only") {
     const todo = path.join(s.root, "TODO.md");
     fs.writeFileSync(todo, fs.readFileSync(todo, "utf8").replace(new RegExp("(\\\\| " + task + " \\\\|[^\\\\n]*)\\\\[ \\\\]"), "$1[x]"));
-    git("commit", "-qam", "feat: " + task + " 完了");
   }
-  if (action === "budget") {
-    const f = path.join(process.env.XDG_STATE_HOME, "claude-task-loop", "sessions", s.session + ".json");
-    const cur = JSON.parse(fs.readFileSync(f, "utf8"));
-    cur.budget = { task, root: s.root, stage: 2, pct: 81 };
-    fs.writeFileSync(f, JSON.stringify(cur));
+  if (action === "budget" || action === "compact") {
+    const cur = JSON.parse(fs.readFileSync(sessionFile(), "utf8"));
+    cur.budget = { task, root: s.root, stage: 2, pct: 81 }; // compact の場面でも予算停止は立っている(閾値をすり抜けた形)
+    if (action === "compact") cur.compact = { at: Date.now(), trigger: "auto" };
+    fs.writeFileSync(sessionFile(), JSON.stringify(cur));
   }
   if (action === "hole") fs.writeFileSync(path.join(s.root, "HANDOFF.md"), "- 次の一手: /amend " + task + "\\n");
-  if (action === "blocked") { s.status = "blocked"; save(); }
+  if (action === "blocked") s.status = "blocked";
+  if (action === "unknown") s.status = "unknown";
+  if (action === "newsession") s.session = "sess-x-" + s.n;
+  if (action === "working") { s.workingLeft = 2; s.pending = task; }
+  save();
   ok(agent());
 }
 fail("bad_args");
@@ -59,7 +86,7 @@ function git(root, ...args) {
   return execFileSync("git", ["-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", ...args], { encoding: "utf8" });
 }
 
-function setup({ host = "claude", status = "idle", scenario = {}, todo } = {}) {
+function setup({ host = "claude", status = "idle", scenario = {}, todo, ignoreClear = false, blockOnClear = false } = {}) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "task-loop-cli-")));
   const root = path.join(base, "repo");
   fs.mkdirSync(root);
@@ -74,7 +101,7 @@ function setup({ host = "claude", status = "idle", scenario = {}, todo } = {}) {
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "herdr"), FAKE_HERDR, { mode: 0o755 });
   const stateFile = path.join(base, "herdr.json");
-  fs.writeFileSync(stateFile, JSON.stringify({ host, status, session: "sess-0", n: 0, root, scenario }));
+  fs.writeFileSync(stateFile, JSON.stringify({ host, status, session: "sess-0", n: 0, root, scenario, ignoreClear, blockOnClear, workingLeft: 0 }));
   const logFile = path.join(base, "herdr.log");
   fs.writeFileSync(logFile, "");
   fs.mkdirSync(path.join(base, "tmp"));
@@ -89,7 +116,8 @@ function setup({ host = "claude", status = "idle", scenario = {}, todo } = {}) {
   const prompts = () => fs.readFileSync(logFile, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l))
     .filter((a) => a[1] === "prompt").map((a) => a[3]);
   const session = (id) => JSON.parse(fs.readFileSync(path.join(base, "state", "claude-task-loop", "sessions", `${id}.json`), "utf8"));
-  return { base, root, run, prompts, session, cleanup: () => fs.rmSync(base, { recursive: true, force: true }) };
+  const calls = () => fs.readFileSync(logFile, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  return { base, root, run, prompts, calls, session, cleanup: () => fs.rmSync(base, { recursive: true, force: true }) };
 }
 
 test("T ごとに /clear してから /execute-task を送り、完了を成果物で確かめて次へ進む", () => {
@@ -203,5 +231,89 @@ test("前提検査: 入力を受け付けない状態・説明できない未コ
     });
     assert.equal(outside.status, 2);
     assert.match(JSON.parse(outside.stdout).errors.join(), /herdr の中で実行していない/);
+  } finally { t.cleanup(); }
+});
+
+test("成果物が無い・コミットが無い・作業ツリーが汚れている時は止まり、理由を分ける", () => {
+  for (const [action, reason] of [["nothing", "not_completed"], ["mark_only", "not_committed"], ["dirty", "dirty_after_commit"]]) {
+    const t = setup({ scenario: { T1: [action] } });
+    try {
+      const { code, json } = t.run("--tasks", "T1..T2");
+      assert.equal(code, 1, action);
+      assert.equal(json.reason, reason, action);
+      assert.deepEqual(json.tasks_remaining, ["T1", "T2"], action);
+    } finally { t.cleanup(); }
+  }
+});
+
+test("compact・session の変化・分類できない状態は止まる(予算停止より優先)", () => {
+  for (const [action, reason] of [["compact", "compacted"], ["newsession", "session_changed"], ["unknown", "unknown"]]) {
+    const t = setup({ scenario: { T1: [action] } });
+    try {
+      assert.equal(t.run("--tasks", "T1").json.reason, reason, action);
+    } finally { t.cleanup(); }
+  }
+});
+
+test("/clear で session が変わらない・/clear の後に blocked なら送らずに止まる", () => {
+  let t = setup({ ignoreClear: true });
+  try {
+    const { json } = t.run("--tasks", "T1", "--clear-timeout-ms", "1200");
+    assert.equal(json.reason, "clear_not_detected");
+    assert.deepEqual(t.prompts(), ["/clear"]);
+  } finally { t.cleanup(); }
+  t = setup({ blockOnClear: true });
+  try {
+    assert.equal(t.run("--tasks", "T1").json.reason, "blocked_after_clear");
+    assert.deepEqual(t.prompts(), ["/clear"]);
+  } finally { t.cleanup(); }
+});
+
+test("廃止した T・無い T・関門の質問が残る T では止まる", () => {
+  let t = setup({ todo: "| #1-1 | T1 | x(廃止: 不要) | — | [-] |\n" });
+  try {
+    assert.equal(t.run("--tasks", "T1").json.reason, "task_closed");
+    assert.equal(t.run("--tasks", "T99").json.reason, "task_not_found");
+    assert.deepEqual(t.prompts(), [], "どちらも送らない");
+  } finally { t.cleanup(); }
+  t = setup({ scenario: { T1: ["nothing"] } });
+  try {
+    fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "## 要確認\n- [回収: T1 着手前] どちらの案にするか\n");
+    git(t.root, "add", "-A");
+    git(t.root, "commit", "-qm", "handoff");
+    assert.equal(t.run("--tasks", "T1").json.reason, "gate_question");
+  } finally { t.cleanup(); }
+});
+
+test("送った後に working へ戻る間は待ってから判定し、worker のロックがある間も待つ", async () => {
+  let t = setup({ scenario: { T1: ["working"] } });
+  try {
+    const { code, json } = t.run("--tasks", "T1");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.ok(t.calls().filter((a) => a[1] === "wait").length >= 1, "working を見たら agent wait で待つ");
+  } finally { t.cleanup(); }
+
+  t = setup({ scenario: { T1: ["nothing"] } });
+  try {
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = path.join(t.base, "tmp");
+    const { workerLockPath } = await import("../../../check-task-scope.mjs");
+    const lock = workerLockPath(t.root);
+    process.env.TMPDIR = saved;
+    fs.mkdirSync(path.dirname(lock), { recursive: true });
+    fs.writeFileSync(lock, JSON.stringify({ root: t.root, task: "T9", step: "1", pid: process.pid, expiresAt: Date.now() + 6000 }));
+    const started = Date.now();
+    const { json } = t.run("--tasks", "T1");
+    assert.equal(json.reason, "not_completed");
+    assert.ok(Date.now() - started >= 4000, "ロックが失効するまで待った");
+    assert.equal(fs.existsSync(lock), false, "失効したロックは掃除される");
+  } finally { t.cleanup(); }
+});
+
+test("タスクの制限時間を過ぎたら timeout で止まる", () => {
+  const t = setup({ scenario: { T1: ["nothing"] } });
+  try {
+    const { json } = t.run("--tasks", "T1", "--task-timeout-min", "0.05", "--settle-sec", "30");
+    assert.equal(json.reason, "timeout");
   } finally { t.cleanup(); }
 });

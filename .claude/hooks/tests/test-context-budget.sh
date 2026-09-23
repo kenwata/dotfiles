@@ -107,6 +107,21 @@ usage s3 950
 run_case "stage2_for_closed_task" stage2 "$(tool_use s3)"
 run_case "stop_passes_when_task_is_done" pass "$(stop s3)"
 
+# statusline.sh が実際に書くサイドファイルを hook が読む(手で組み立てた fixture ではなく実物の書き出しで契約を確かめる)。
+# 最初の書き出しの時に 2 日より古い状態を掃除することも見る
+statusline="$hooks_dir/../statusline.sh"
+start_task s5 "/execute-task T7"
+mkdir -p "$XDG_STATE_HOME/claude-task-loop/statusline" "$sessions"
+echo '{}' > "$XDG_STATE_HOME/claude-task-loop/statusline/stale.json"
+echo '{}' > "$sessions/stale.json"
+touch -t 202001010000 "$XDG_STATE_HOME/claude-task-loop/statusline/stale.json" "$sessions/stale.json"
+jq -nc '{session_id:"s5",model:{display_name:"x"},context_window:{used_percentage:85,context_window_size:1000,current_usage:{input_tokens:800,cache_creation_input_tokens:50,cache_read_input_tokens:0,output_tokens:9}},rate_limits:{five_hour:{used_percentage:12}}}' \
+  | (cd "$repo" && bash "$statusline" >/dev/null 2>&1)
+rm -f "/tmp/claude-statusline-git-s5"
+check "statusline_writes_side_file" jq -e '.session_id == "s5" and .context_window_size == 1000 and .current_usage.input_tokens == 800 and .five_hour_pct == 12' "$XDG_STATE_HOME/claude-task-loop/statusline/s5.json"
+check "statusline_prunes_stale_state" test ! -e "$XDG_STATE_HOME/claude-task-loop/statusline/stale.json" -a ! -e "$sessions/stale.json"
+run_case "stage2_from_real_statusline_output" stage2 "$(tool_use s5)"
+
 mkdir -p "$XDG_CONFIG_HOME/claude-task-loop"
 echo '{"claude":{"stage1":40,"stage2":90}}' > "$XDG_CONFIG_HOME/claude-task-loop/config.json"
 start_task s4 "/execute-task T7"

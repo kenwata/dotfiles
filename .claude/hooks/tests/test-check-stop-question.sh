@@ -5,6 +5,8 @@
 hook="$(cd "$(dirname "$0")/.." && pwd)/check-stop-question.sh"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
+# hook はループの状態(${XDG_STATE_HOME}/claude-task-loop/sessions/)を読むので、実環境ではなく試験用の置き場を見せる
+export XDG_STATE_HOME="$work_dir/state"
 failures=0
 
 # 引数: テスト名 / 期待する終了コード / stderr に含まれるべき文字列(空なら stderr も空を期待) / 入力 JSON
@@ -61,7 +63,6 @@ run_case "blocks_with_realistic_input_having_path_but_no_agent_id" 2 "自動ゲ�
   "$(jq -n --arg p "$transcript" '{hook_event_name: "Stop", session_id: "s1", transcript_path: $p, cwd: "/tmp", stop_hook_active: false, last_assistant_message: "どちらにしますか？"}')"
 
 # 連続実行ループが駆動するセッション(sessions/<id>.json に loop がある)は差し戻さない。無いセッションは従来どおり
-export XDG_STATE_HOME="$work_dir/state"
 mkdir -p "$XDG_STATE_HOME/claude-task-loop/sessions"
 echo '{"session_id":"loop1","loop":{"task":"T7"}}' > "$XDG_STATE_HOME/claude-task-loop/sessions/loop1.json"
 echo '{"session_id":"s2","budget":{"stage":1}}' > "$XDG_STATE_HOME/claude-task-loop/sessions/s2.json"

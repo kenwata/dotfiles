@@ -3,7 +3,9 @@
 # Codex の hook JSON は Claude と同じ形(session_id / transcript_path / tool_response / cwd)なので、共有実装
 # ~/.claude/hooks/context-budget.mjs を引数 codex で起動する(使用量は transcript_path の rollout の末尾から読む)。
 # このセッションの $execute-task の実行中の状態(check-task-scope.mjs が ${TMPDIR}/claude-task-scope/<session_id>.json に
-# 置き、12 時間で失効する)が無ければ、node を起動せずに抜ける。
+# 置き、12 時間で失効する)が無ければ、node を起動せずに抜ける(Stop / SessionStart も同じ判定。$execute-task の外では
+# compact の記録を読む相手が無い)。古い状態の掃除は Claude の statusline.sh(セッションごとの最初の書き出し時)と
+# task-loop の起動時が持つ。Codex だけのマシンでは 48 時間の掃除がループの起動時にしか走らない。
 set -u
 
 input="$(cat)"

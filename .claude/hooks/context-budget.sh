@@ -4,7 +4,9 @@
 #
 # PostToolUse は全ツール呼び出しで発火する。このセッションの /execute-task の実行中の状態(check-task-scope.mjs が
 # ${TMPDIR}/claude-task-scope/<session_id>.json に置き、12 時間で失効する)が無ければ、
-# node を起動せずに抜ける(通常の対話に起動の遅延を持ち込まない)
+# node を起動せずに抜ける(通常の対話に起動の遅延を持ち込まない)。Stop / PostCompact / SessionStart も同じ判定で
+# 抜ける — /execute-task の外では compact の記録を読む相手(ループ・作業記録)が無く、古い状態の掃除は
+# statusline.sh が持つ
 set -u
 
 input="$(cat)"
