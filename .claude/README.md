@@ -151,7 +151,9 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     複数の T は `hooks/lib/task-loop/` のループが、利用者の手動の `/clear` → `/execute-task` を herdr 経由で
     代行して回す。進む・再送する・止まるは成果物(TODO.md の `[x]`・T を含むコミット・clean)だけで決め、
     それ以外は止まって人へ渡す(2026-09-23。`claude -p` を使わないのは、最終応答の後にバックグラウンドの
-    Bash が殺され Codex worker の待機と衝突するため)
+    Bash が殺され Codex worker の待機と衝突するため)。穴の記録で止まった T には `/amend T<n>` を、次の一手が
+    次の段階の分解なら `/breakdown` を同じループが送り、着地を成果物で確かめて続ける。`/elaborate` は送らない。
+    問いの画面(blocked)では止まらず答えを待つ(2026-09-24)
 
 ## ディレクトリ構成
 
@@ -297,9 +299,11 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
    複数の T は、herdr のペインの端末でプロジェクトのディレクトリから `task-loop`(zsh の alias。引数なしで TODO.md の未着手の T を
    上から順に、`task-loop T12..T16` で範囲)と打てば続けて回せる。送る先は同じプロジェクトで入力待ちのペインを自動で選び、無ければ
    隣に作って起動する(T ごとに /clear。checkpoint 以後の完了が 5 件に達したら /follow-up を送り、checkpoint が増えたら続ける。
-   穴の記録・関門の質問・依存の未完了・/follow-up の問い・compact などで止まり、理由を JSON で出す)。
+   穴の記録なら /amend T<n> を送って同じ T へ戻り、T が尽きて次の一手が /breakdown なら送って増えた T で続ける(引数なしの時だけ)。
+   承認・関門・要確認の問いは答えるまで待つ。次の一手が /elaborate・同じ T で 2 回目の穴・依存の未完了・compact などで止まり、
+   理由と次の一手を JSON で出す)。
    Claude のペインは窓の題名で何をしているか分かるよう、起動時に `--name "<計画> loop"`、/clear の後に毎回
-   `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`)で名前を付け直す。<計画> は T が属する TODO.md の
+   `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`、/amend は `<計画> T<n> amend`、/breakdown は `<設計書の slug> breakdown`)で名前を付け直す。<計画> は T が属する TODO.md の
    `## #<n> <slug>` の slug で、無ければリポジトリのディレクトリ名。Codex のペインには名前を付けない
 7. 節目で /follow-up → checkpoint以後の複数タスクを横断して総点検し、次フェーズは 4 へ戻る。
    HANDOFF の要確認は、/execute-task の着手前(対象 T を回収点に持つ項目)と /follow-up の冒頭(全項目)で利用者に問い、決着を decisions.md に書く

@@ -7,7 +7,8 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseDependencies, readTaskScope } from "../../../check-task-scope.mjs";
 import {
-  committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, openTasks, parseTaskList, planSlug,
+  amendCount, amendOutcome, breakdownOutcome, breakdownTarget, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, nextStep,
+  openDependencies, openTasks, parseTaskList, planSlug,
 } from "../decide.mjs";
 
 const TODO = `| # | T | タスク | 実 | 状態 |
@@ -100,6 +101,8 @@ test("コミットの有無は head 以後の要約を境界付きで見る。�
     const head = headOf(t.root);
     t.commit("feat: T70 桁違い");
     assert.equal(committedSince(t.root, head, "T7"), false);
+    t.commit("amend: plan の設計を改訂(T7 由来)");
+    assert.equal(committedSince(t.root, head, "T7"), false, "amend のコミットは T の実装ではない");
     t.commit("feat: T7 実装");
     assert.equal(committedSince(t.root, head, "T7"), true);
     assert.deepEqual(dirtyPaths(t.root), []);
@@ -123,7 +126,9 @@ test("判定表: 完了・再送・停止の理由", () => {
   assert.deepEqual(reason({ budgetStage: 2 }), { action: "retry", reason: "budget_stop" });
   assert.equal(reason({ budgetStage: 1, retries: 2 }).reason, "budget_retry_exhausted");
   assert.equal(reason({ budgetStage: 2, compacted: true }).reason, "compacted", "compact は予算停止より先に止める");
-  assert.equal(reason({ budgetStage: 2, handoff: { ...base.handoff, amend: true } }).reason, "hole_recorded");
+  assert.deepEqual(reason({ budgetStage: 2, handoff: { ...base.handoff, amend: true } }), { action: "amend", reason: "hole_recorded" }, "穴は予算停止より先に /amend へ");
+  assert.equal(reason({ handoff: { ...base.handoff, amend: true }, amended: true }).reason, "amend_repeated");
+  assert.deepEqual(reason({ handoff: { ...base.handoff, amend: true, elaborate: true } }), { action: "stop", reason: "hole_recorded" }, "/elaborate はループに入れない");
   assert.equal(reason({ handoff: { ...base.handoff, gateQuestion: true } }).reason, "gate_question");
   assert.equal(reason({ sessionChanged: true }).reason, "session_changed");
   assert.equal(reason({ state: "-" }).reason, "task_closed");
@@ -133,7 +138,7 @@ test("判定表: 完了・再送・停止の理由", () => {
 test("HANDOFF の /elaborate docs/design/… は再計画への差し戻しとして読む", () => {
   const t = fixture();
   try {
-    fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "- 次の一手: /elaborate docs/design/x.md(穴の記録: 目的が変わる)\n");
+    fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "## 次セッションの最初の一手\n- /elaborate docs/design/x.md(穴の記録: 目的が変わる)\n");
     assert.equal(handoffSignals(t.root, "T5").elaborate, true);
     assert.equal(judge({ state: " ", committed: false, dirty: [], sessionChanged: false, compacted: false, budgetStage: 2, handoff: handoffSignals(t.root, "T5"), retries: 0, retryMax: 2 }).reason, "hole_recorded");
   } finally { t.cleanup(); }
@@ -167,5 +172,105 @@ test("planSlug は T の行の直前の `## #<n> <slug>` 見出しを返し、�
     assert.equal(planSlug(t.root, "T7"), null, "計画ではない見出しの下");
     assert.equal(planSlug(t.root, "T0"), "old-plan", "archive へ移った T も引ける");
     assert.equal(planSlug(t.root, "T99"), null);
+  } finally { t.cleanup(); }
+});
+
+test("nextStep は「次セッションの最初の一手」節の最初のコマンドだけを読み、説明の続く書き方でも引数を取る", () => {
+  const t = fixture();
+  const write = (text) => fs.writeFileSync(path.join(t.root, "HANDOFF.md"), text);
+  try {
+    assert.equal(nextStep(t.root), null, "HANDOFF.md が無い");
+    write("## 仕掛かり中\n\n- 穴の記録。次の一手は /amend T5\n\n## 次セッションの最初の一手\n\n- `/execute-task T59`(ワーカーの 2 段記録)。T56〜T58 は後で\n\n## 要確認\n\n- /breakdown docs/design/y.md は別\n");
+    assert.deepEqual(nextStep(t.root), { command: "execute-task", arg: "T59" }, "仕掛かり中の /amend も要確認の /breakdown も読まない");
+    assert.equal(handoffSignals(t.root, "T5").amend, false, "穴の判定も次の一手の節だけで見る");
+    write("## 最後に完了したタスク\n\n- `/amend T54`: T54 の是正タスク T59 を足した\n\n## 次セッションの最初の一手\n\n- `/execute-task T59`(説明)\n");
+    assert.equal(handoffSignals(t.root, "T54").amend, false, "済んだ amend の記録を穴と読まない(VC_Analysis の実例)");
+    for (const [line, step] of [
+      ["- /execute-task T12で再開する", { command: "execute-task", arg: "T12" }],
+      ["- /execute-task T12.", { command: "execute-task", arg: "T12" }],
+      ["- **/execute-task T12**", { command: "execute-task", arg: "T12" }],
+      ["- 「/execute-task　T12」", { command: "execute-task", arg: "T12" }],
+      ["- /breakdown docs/design/foo.mdの段階 2", { command: "breakdown", arg: "docs/design/foo.md" }],
+    ]) {
+      write("## 次セッションの最初の一手\n" + line + "\n");
+      assert.deepEqual(nextStep(t.root), step, line);
+    }
+    write("## 次セッションの最初の一手\n- `/execute-task T20`。未分解の段階が 1 つ残る。T25 の後に `/breakdown docs/design/a.md` を再実行する\n- /breakdown docs/design/a.md\n");
+    assert.deepEqual(nextStep(t.root), { command: "execute-task", arg: "T20" }, "最初の行の最初のコマンドを取る(breakdown.md 手順 3 の書き添え)");
+    write("## 次セッションの最初の一手\n- /breakdown docs/design/alpha.md(段階 2 の分解)\n");
+    assert.deepEqual(nextStep(t.root), { command: "breakdown", arg: "docs/design/alpha.md" });
+    assert.equal(breakdownTarget(t.root), "docs/design/alpha.md");
+    write("## 次セッションの最初の一手\n- `$amend T7`\n");
+    assert.deepEqual(nextStep(t.root), { command: "amend", arg: "T7" }, "Codex の $ も読む");
+    assert.equal(breakdownTarget(t.root), null);
+    write("## 次セッションの最初の一手\n- TODO.md の T147 に着手する\n");
+    assert.equal(nextStep(t.root), null, "コマンドの形で書かれていなければ読まない");
+    write("## 次セッションの最初の一手\n- `/breakdown`(引数なし)\n");
+    assert.equal(breakdownTarget(t.root), null, "設計書のパスが無い /breakdown は送らない");
+  } finally { t.cleanup(); }
+});
+
+test("amendOutcome: コミット・計画工程のファイルの着地・次の一手が未着手の T の /execute-task、がそろって done", () => {
+  const t = fixture();
+  const write = (text) => fs.writeFileSync(path.join(t.root, "HANDOFF.md"), text);
+  try {
+    write("## 仕掛かり中\n- T5 の穴の記録\n## 次セッションの最初の一手\n- `/amend T5`\n");
+    git(t.root, "add", "-A");
+    git(t.root, "commit", "-qm", "chore: T5 の穴の記録");
+    const head = headOf(t.root);
+    fs.writeFileSync(path.join(t.root, "src.txt"), "途中成果物"); // 穴で止まった execute-task の未コミットは妨げない
+    fs.mkdirSync(path.join(t.root, "docs/guide"), { recursive: true });
+    fs.writeFileSync(path.join(t.root, "docs/guide/x.md"), "書きかけの成果物の文書");
+    assert.equal(amendOutcome(t.root, head), "incomplete", "何も起きていない");
+    write("## 仕掛かり中\n- なし\n## 次セッションの最初の一手\n- `/execute-task T5`\n");
+    assert.equal(amendOutcome(t.root, head), "incomplete", "HANDOFF.md が未コミット");
+    git(t.root, "add", "HANDOFF.md");
+    git(t.root, "commit", "-qm", "amend: plan の設計を改訂(T5 由来)");
+    assert.equal(amendOutcome(t.root, head), "done", "docs/guide/ の書きかけは計画工程のファイルではない");
+    fs.mkdirSync(path.join(t.root, "docs/design"), { recursive: true });
+    fs.writeFileSync(path.join(t.root, "docs/design/plan.md"), "書きかけ");
+    assert.equal(amendOutcome(t.root, head), "incomplete", "設計書が未コミット");
+    fs.rmSync(path.join(t.root, "docs/design"), { recursive: true });
+    write("## 仕掛かり中\n- T5 の穴の記録\n## 次セッションの最初の一手\n- `/elaborate docs/design/plan.md`\n");
+    assert.equal(amendOutcome(t.root, head), "elaborate");
+    for (const [step, expected, why] of [
+      ["/execute-task T6", "done", "足した是正タスク・次の未着手へ戻るのも着地(VC_Analysis の amend T54 → T59)"],
+      ["/execute-task T4", "incomplete", "完了済みの T は戻り先にならない"],
+      ["/execute-task T99", "incomplete", "無い T"],
+      ["/amend T5", "incomplete", "次の一手がまだ amend"],
+    ]) {
+      write("## 次セッションの最初の一手\n- `" + step + "`\n");
+      git(t.root, "add", "HANDOFF.md");
+      git(t.root, "commit", "-qm", "amend: plan の設計を改訂(T5 由来)");
+      assert.equal(amendOutcome(t.root, head), expected, why);
+    }
+  } finally { t.cleanup(); }
+});
+
+test("amendCount は T 由来の amend だけを履歴全体から数え、取り下げ・回送と桁違いは数えない", () => {
+  const t = fixture();
+  try {
+    t.commit("amend: plan の設計を改訂(T5 由来)");
+    t.commit("amend: T5 の穴の記録を取り下げ(参照の誤りのみ)");
+    t.commit("amend: plan の設計を改訂(T50 由来)");
+    t.commit("feat: T5 由来の説明を含む別のコミット");
+    t.commit("amend: plan の設計を改訂(T5 由来)");
+    assert.equal(amendCount(t.root, "T5"), 2);
+    assert.equal(amendCount(t.root, "T50"), 1);
+  } finally { t.cleanup(); }
+});
+
+test("breakdownOutcome: コミットと新しい [ ] の T がそろって done、次の一手が /elaborate なら elaborate", () => {
+  const t = fixture();
+  try {
+    const head = headOf(t.root);
+    const before = openTasks(t.root);
+    assert.equal(breakdownOutcome(t.root, head, before), "incomplete");
+    fs.writeFileSync(path.join(t.root, "TODO.md"), TODO + "| #2-1 | T90 | 次の段階 | — | [ ] |\n");
+    assert.equal(breakdownOutcome(t.root, head, before), "incomplete", "TODO.md が未コミット");
+    git(t.root, "commit", "-qam", "plan: x の実行計画を策定(T90)");
+    assert.equal(breakdownOutcome(t.root, head, before), "done");
+    fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "## 次セッションの最初の一手\n- /elaborate docs/design/x.md\n");
+    assert.equal(breakdownOutcome(t.root, head, before), "elaborate");
   } finally { t.cleanup(); }
 });

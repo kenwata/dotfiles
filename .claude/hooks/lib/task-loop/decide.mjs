@@ -103,11 +103,12 @@ export function headOf(root) {
 
 const taskPattern = (task) => new RegExp(`(^|[^0-9A-Za-z])${task}([^0-9]|$)`);
 
-// head 以後の first-parent のコミットに、要約が T を境界付きで含むものがあるか
+// head 以後の first-parent のコミットに、要約が T を境界付きで含むものがあるか。amend のコミットは除く
+// (要約 `amend: <slug> の設計を改訂(T<n> 由来)` が由来の T に一致するが、T の実装ではない。completedSinceCheckpoint と同じ扱い)
 export function committedSince(root, head, task) {
   let subjects;
   try { subjects = git(root, ["log", "--first-parent", "--format=%s", head ? `${head}..HEAD` : "HEAD"]); } catch { return false; }
-  return subjects.split("\n").some((s) => taskPattern(task).test(s));
+  return subjects.split("\n").some((s) => !/^amend\b/.test(s) && taskPattern(task).test(s));
 }
 
 // head 以後の first-parent に、Follow-Up-Checkpoint: true の trailer を持つコミット(/follow-up の checkpoint)が増えたか
@@ -141,24 +142,87 @@ export function dirtyPaths(root) {
   return trackedPaths(root).filter((e) => !e.ignored).map((e) => e.path);
 }
 
-// HANDOFF.md から、エージェントが T をどこへ回したかを読む
+// HANDOFF.md から、エージェントが T をどこへ回したかを読む。穴(/amend T<n>)と /elaborate は「次セッションの最初の一手」節
+// だけで見る(本文全体を見ると、「最後に完了したタスク」に残る `/amend T54`: … のような済んだ工程の記録に当たる。
+// 2026-09-24 VC_Analysis の HANDOFF.md で実例)。関門の問いは「要確認」節に書かれるので本文全体で見る
 export function handoffSignals(root, task) {
   const text = readText(path.join(root, "HANDOFF.md")) ?? "";
-  const t = `${task}(?![0-9])`;
+  const step = nextStep(root);
   return {
-    amend: new RegExp(`[/$]amend\\s+${t}`).test(text),
-    elaborate: /[/$]elaborate\s+docs\/design\//.test(text),
-    gateQuestion: new RegExp(`\\[回収: ${t} 着手前\\]`).test(text),
+    amend: step?.command === "amend" && step.arg === task,
+    elaborate: step?.command === "elaborate",
+    gateQuestion: new RegExp(`\\[回収: ${task}(?![0-9]) 着手前\\]`).test(text),
   };
 }
 
-// /execute-task のターンが落ち着いた後の判定。action: next(次の T へ)/ retry(同じ T を新しいセッションで再送)/ stop
+// HANDOFF.md の「## 次セッションの最初の一手」節の最初の行に書かれた工程のコマンド。{ command, arg } か、節もコマンドも
+// 無ければ null。実際の書き方は `` - `/execute-task T59`(説明…) `` のように説明が続き、同じ行の後ろや次の行に後の工程
+// (`/breakdown …` の再実行など。breakdown.md 手順 3)を書き添えることがあるので、最初の行の最初のコマンドだけを取る。
+// 引数は英数字と . / _ - だけを取り、後ろに続く日本語や句点は含めない(`/execute-task T12で再開` → T12)
+const STEP_COMMANDS = ["execute-task", "amend", "breakdown", "elaborate", "follow-up"];
+export function nextStep(root) {
+  const text = readText(path.join(root, "HANDOFF.md")) ?? "";
+  const section = /^## 次セッションの最初の一手[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(text)?.[1];
+  const line = section?.split("\n").find((l) => l.trim() !== "");
+  if (!line) return null;
+  const match = new RegExp(`(?:^|[^\\w/$.])[/$](${STEP_COMMANDS.join("|")})(?![\\w-])(?:[ \\t\\u3000]+([\\w./-]+))?`).exec(line);
+  return match ? { command: match[1], arg: match[2]?.replace(/\.+$/, "") || null } : null;
+}
+
+// 次の一手が /breakdown なら、その設計書の相対パス。無ければ null
+export function breakdownTarget(root) {
+  const step = nextStep(root);
+  return step?.command === "breakdown" && /^docs\/design\/\S+\.md$/.test(step.arg ?? "") ? step.arg : null;
+}
+
+// T を由来にした設計の改訂(要約 `amend: … (T<n> 由来)`)の件数。履歴全体から数えるので、ループを打ち直しても揃う。
+// 穴の記録の取り下げ・/elaborate への回送(amend.md 手順 2)は「由来」を書かないので数えない
+export function amendCount(root, task) {
+  let subjects;
+  try { subjects = git(root, ["log", "--first-parent", "--format=%s"]); } catch { return 0; }
+  const origin = new RegExp(`${task}(?![0-9])\\s*由来`);
+  return subjects.split("\n").filter((s) => /^amend\b/.test(s) && origin.test(s)).length;
+}
+
+// 計画工程(/amend・/breakdown)が書くファイル。これらに未コミットが残れば、その工程は着地していない。
+// 作業ツリー全体を見ないのは、穴で止まった /execute-task の途中成果物(docs/ 配下の成果物の文書を含む)が
+// 未コミットで残りうるため(execute-task.md 手順 4 の ④)
+const PLANNING_PATHS = (p) => p === "HANDOFF.md" || p === "TODO.md" || p === "docs/decisions.md" || p.startsWith("docs/design/");
+
+// /amend T<n> の後の判定。成果物(コミット・HANDOFF.md・計画工程のファイル)だけで決める
+//   done       : HEAD が進み、計画工程のファイルに未コミットが無く、次の一手が未着手([ ])の T の /execute-task に
+//                なった。戻る先は元の T に限らない(置き換え先・次の未着手・amend が足した是正タスク。amend.md 手順 6。
+//                2026-09-24 VC_Analysis の amend T54 は是正タスク T59 を足して次の一手を T59 にした)
+//   elaborate  : 次の一手が /elaborate(amend の段の判定で部分改訂の範囲を超えた)
+//   incomplete : それ以外(承認されなかった・途中で止まった)
+export function amendOutcome(root, headBefore) {
+  const step = nextStep(root);
+  if (step?.command === "elaborate") return "elaborate";
+  const moved = headOf(root) !== headBefore;
+  const landed = !dirtyPaths(root).some(PLANNING_PATHS);
+  const back = step?.command === "execute-task" && /^T\d+$/.test(step.arg ?? "") && findTask(root, step.arg)?.state === " ";
+  return moved && landed && back ? "done" : "incomplete";
+}
+
+// /breakdown の後の判定。done: HEAD が進み、計画工程のファイルに未コミットが無く、openBefore に無い [ ] の T が増えた /
+// elaborate: 次の一手が /elaborate(設計書の不足で差し戻した)/ incomplete: それ以外
+export function breakdownOutcome(root, headBefore, openBefore) {
+  if (nextStep(root)?.command === "elaborate") return "elaborate";
+  const moved = headOf(root) !== headBefore;
+  const landed = !dirtyPaths(root).some(PLANNING_PATHS);
+  const added = openTasks(root).some((t) => !openBefore.includes(t));
+  return moved && landed && added ? "done" : "incomplete";
+}
+
+// /execute-task のターンが落ち着いた後の判定。action: next(次の T へ)/ retry(同じ T を新しいセッションで再送)/
+// amend(/amend T<n> を送る。同じ T で 2 回目の穴なら止まる)/ stop
 export function judge(f) {
   if (f.state === "x" && f.committed && f.dirty.length === 0) return { action: "next", reason: "completed" };
   if (f.sessionChanged) return { action: "stop", reason: "session_changed" };
   if (f.compacted) return { action: "stop", reason: "compacted" };
   if (f.state === "-") return { action: "stop", reason: "task_closed" };
-  if (f.handoff.amend || f.handoff.elaborate) return { action: "stop", reason: "hole_recorded" };
+  if (f.handoff.elaborate) return { action: "stop", reason: "hole_recorded" }; // /elaborate は対話で詰める工程なのでループに入れない
+  if (f.handoff.amend) return f.amended ? { action: "stop", reason: "amend_repeated" } : { action: "amend", reason: "hole_recorded" };
   if (f.handoff.gateQuestion) return { action: "stop", reason: "gate_question" };
   if (f.state === "x") return { action: "stop", reason: f.committed ? "dirty_after_commit" : "not_committed" };
   if (f.budgetStage >= 1) {
