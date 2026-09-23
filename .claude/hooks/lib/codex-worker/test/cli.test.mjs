@@ -14,12 +14,27 @@ const PLAN = "# T7 のステップ\n\n- s1: impl を書く\n- s2: 呼び出し�
 
 const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.mjs");
 
-// 偽の codex: `debug models` は一覧を返す。`exec` は FAKE_MODE に従って作業ツリーを変え、結果と rollout を書く
+// 偽の codex: `debug models` は一覧を返す。`exec` は FAKE_MODE に従って作業ツリーを変え、結果と rollout を書く。
+// `sandbox` は呼ばれ方を記録し、疎通の検査には FAKE_SANDBOX に従った判定を返し、それ以外のコマンドはそのまま打つ
 const FAKE_CODEX = `#!/usr/bin/env node
 const fs = require("node:fs");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const args = process.argv.slice(2);
+if (args[0] === "sandbox") {
+  const rest = args.slice(args.indexOf("--") + 1);
+  fs.appendFileSync(path.join(process.env.CODEX_HOME, "sandbox-calls.jsonl"), JSON.stringify({
+    args, cwd: process.cwd(), uv: process.env.UV_CACHE_DIR ?? null, uvExists: !!process.env.UV_CACHE_DIR && fs.existsSync(process.env.UV_CACHE_DIR),
+  }) + "\\n");
+  if (rest.join(" ").includes("CODEX_WORKER_SANDBOX_PROBE")) {
+    const mode = process.env.FAKE_SANDBOX ?? "ok";
+    console.log(mode === "closed" ? "LOOPBACK=denied EPERM" : "LOOPBACK=ok");
+    console.log(mode === "open" ? "EXTERNAL=reached" : "EXTERNAL=blocked EPERM");
+    process.exit(0);
+  }
+  const r = spawnSync(rest[0], rest.slice(1), { stdio: "inherit" });
+  process.exit(r.status ?? 1);
+}
 if (args[0] === "debug" && args[1] === "models") {
   process.stdout.write(JSON.stringify({ models: [{ slug: "gpt-5.6-luna" }, { slug: "gpt-6-luna" }, { slug: "gpt-6-sol" }] }));
   process.exit(0);
@@ -27,6 +42,8 @@ if (args[0] === "debug" && args[1] === "models") {
 const root = args[args.indexOf("-C") + 1];
 const out = args[args.indexOf("-o") + 1];
 const mode = process.env.FAKE_MODE;
+const uv = process.env.UV_CACHE_DIR ?? null;
+fs.writeFileSync(path.join(process.env.CODEX_HOME, "exec-env.json"), JSON.stringify({ uv, uvExists: !!uv && fs.existsSync(uv) }));
 const id = "0000-" + process.pid;
 console.log(JSON.stringify({ type: "thread.started", thread_id: id }));
 const d = new Date();
@@ -94,8 +111,16 @@ function setup() {
   };
   const show = () => spawnSync("node", [cli, "show", "--root", root, "--task", "T7"], { env, encoding: "utf8" });
   registerPlan(PLAN);
+  const sandboxCalls = () => {
+    const file = path.join(home, "sandbox-calls.jsonl");
+    return fs.existsSync(file) ? fs.readFileSync(file, "utf8").trimEnd().split("\n").map((l) => JSON.parse(l)) : [];
+  };
+  const execEnv = () => {
+    const file = path.join(home, "exec-env.json");
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
+  };
   return {
-    base, root, packet, run, locks, statusLog, taskDir, registerPlan, show,
+    base, root, packet, run, locks, statusLog, taskDir, registerPlan, show, tmp, sandboxCalls, execEnv,
     cleanup: () => fs.rmSync(base, { recursive: true, force: true }),
   };
 }
@@ -215,6 +240,63 @@ test("verify は packet の検証節のコマンドを 1 本ずつ打ち、コ�
     assert.equal(t.run(["verify", "--run", json.run_dir]).code, 0);
     fs.rmSync(path.join(t.root, "src/a/impl.ts"));
     assert.equal(t.run(["verify", "--run", json.run_dir]).json.commands[0].exit_code, 1);
+  } finally { t.cleanup(); }
+});
+
+test("run は worker の sandbox が loopback だけを通すと確かめられない時、worker を起動せず exit 2", () => {
+  for (const [mode, pattern] of [["closed", /loopback/], ["open", /外部/]]) {
+    const t = setup();
+    try {
+      const { code, json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok", FAKE_SANDBOX: mode });
+      assert.equal(code, 2, `${mode}: ${JSON.stringify(json)}`);
+      assert.equal(json.stage, "preflight");
+      assert.match(json.errors.join(), pattern);
+      assert.equal(t.execEnv(), null, `${mode}: worker を起動していない`);
+    } finally { t.cleanup(); }
+  }
+});
+
+test("run は worker に TMPDIR の下の run 専用の uv キャッシュを渡し、終わったら消す", () => {
+  const t = setup();
+  try {
+    const { code, json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    assert.equal(code, 0, JSON.stringify(json));
+    const env = t.execEnv();
+    assert.ok(env.uv?.startsWith(t.tmp + path.sep), `TMPDIR の下: ${env.uv}`);
+    assert.ok(env.uv.includes(json.run_id), `run ごとに分かれる: ${env.uv}`);
+    assert.equal(env.uvExists, true, "worker の起動時には在る");
+    assert.equal(fs.existsSync(env.uv), false, "run の後は消えている");
+  } finally { t.cleanup(); }
+});
+
+test("verify は各コマンドを worker と同じ sandbox(codex sandbox)の中で、専用の uv キャッシュで打つ", () => {
+  const t = setup();
+  try {
+    const { json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    const before = t.sandboxCalls().length;
+    const verified = t.run(["verify", "--run", json.run_dir]);
+    assert.equal(verified.code, 1, JSON.stringify(verified.json));
+    const calls = t.sandboxCalls().slice(before).filter((c) => !c.args.join(" ").includes("CODEX_WORKER_SANDBOX_PROBE"));
+    assert.deepEqual(calls.map((c) => c.args.slice(c.args.indexOf("--") + 1)), [
+      ["/bin/sh", "-c", "test -f src/a/impl.ts"], ["/bin/sh", "-c", "echo checked; exit 3"],
+    ]);
+    for (const call of calls) {
+      assert.deepEqual(call.args.slice(0, call.args.indexOf("--")), ["sandbox", "-c", 'sandbox_mode="workspace-write"']);
+      assert.equal(call.cwd, t.root);
+      assert.ok(call.uv?.startsWith(t.tmp + path.sep) && call.uvExists, `専用の uv キャッシュ: ${call.uv}`);
+      assert.equal(fs.existsSync(call.uv), false, "verify の後は消えている");
+    }
+  } finally { t.cleanup(); }
+});
+
+test("verify は sandbox が loopback だけを通すと確かめられない時、何も打たず exit 2", () => {
+  const t = setup();
+  try {
+    const { json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    const result = t.run(["verify", "--run", json.run_dir], { FAKE_SANDBOX: "open" });
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join(), /外部/);
+    assert.equal(fs.existsSync(path.join(json.run_dir, "verify.json")), false);
   } finally { t.cleanup(); }
 });
 

@@ -439,6 +439,49 @@ export function resolveModelFamily(family, catalog) {
   return best;
 }
 
+// worker と verify のコマンドを包む `codex sandbox` の前半。`codex sandbox` は設定の sandbox_mode を読まず既定で
+// read-only になるので明示する(ネットワークの設定は CODEX_HOME の config.toml から読む。2026-09-23 に codex-cli
+// 0.156.0 で実測)。-C を付けると権限プロファイルの指定を求められるので、作業ディレクトリはプロセスの cwd で渡す
+export const SANDBOX_PREFIX = ["sandbox", "-c", 'sandbox_mode="workspace-write"', "--"];
+
+// sandbox の疎通の検査(node -e で打つ)。loopback で待ち受けて接続できるか、外部の IP へ直接つなげないかを 1 行ずつ出す。
+// 外部は名前解決を経ない IP にし、プロキシを経ない直接の接続を見る(プロキシの環境変数に従わないプログラムの経路)。
+// 先頭のコメントは、試験の偽の codex がこの検査を見分けるための印
+export const SANDBOX_PROBE_SCRIPT = `// CODEX_WORKER_SANDBOX_PROBE
+const net = require("node:net");
+const external = () => {
+  const socket = net.connect({ host: "1.1.1.1", port: 443 });
+  socket.setTimeout(5000);
+  socket.on("connect", () => { console.log("EXTERNAL=reached"); socket.destroy(); });
+  socket.on("timeout", () => { console.log("EXTERNAL=blocked timeout"); socket.destroy(); });
+  socket.on("error", (e) => console.log("EXTERNAL=blocked " + e.code));
+};
+const server = net.createServer();
+server.on("error", (e) => { console.log("LOOPBACK=denied " + e.code); external(); });
+server.listen(0, "127.0.0.1", () => {
+  const client = net.connect(server.address().port, "127.0.0.1", () => {
+    console.log("LOOPBACK=ok"); client.destroy(); server.close(); external();
+  });
+  client.on("error", (e) => { console.log("LOOPBACK=denied " + e.code); server.close(); external(); });
+});
+`;
+
+// 疎通の検査の出力を判定する。worker の sandbox は「loopback は通る・外部は拒否」でなければならない
+// (試験が 127.0.0.1 で待ち受け、.env に本物の API キーがあるため)。満たせば空配列、満たさなければ理由を返す
+export function sandboxProbeErrors(output) {
+  const loopback = output.match(/^LOOPBACK=(\S+)/m)?.[1];
+  const external = output.match(/^EXTERNAL=(\S+)/m)?.[1];
+  if (!loopback || !external) return [`worker の sandbox の疎通を判定できない(検査の出力: ${JSON.stringify(output.slice(0, 200))})`];
+  const errors = [];
+  if (loopback !== "ok") {
+    errors.push("worker の sandbox で loopback(127.0.0.1)の待ち受けが拒否された。worker 用の config.toml の network_access と [features.network_proxy] を .codex/worker-config.toml と照らし、.codex/install.sh で入れ直す");
+  }
+  if (external !== "blocked") {
+    errors.push("worker の sandbox から外部(1.1.1.1:443)へ直接つながった。外部の通信を止める [features.network_proxy] が効いていない。worker を起動しない");
+  }
+  return errors;
+}
+
 // worker の最終応答の最低限の形の検査(--output-schema は Codex 側で課すが、欠落・途中終了に備える)
 export function validateResult(result) {
   const keys = ["status", "changed_files", "tests_run", "criteria", "holes", "reference_errors", "notes"];

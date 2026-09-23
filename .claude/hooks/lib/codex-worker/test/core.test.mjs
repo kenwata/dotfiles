@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, gate, packetVerifyCommands, parsePlan, readRollout, resolveModelFamily, restore, selectRules,
+  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, gate, packetVerifyCommands, parsePlan, readRollout, resolveModelFamily, restore, sandboxProbeErrors, selectRules,
   takeSnapshot, validateResult,
 } from "../core.mjs";
 
@@ -291,4 +291,13 @@ test("ステップ計画は「- s<番号>: <目的>」の行だけを読み、�
   assert.match(parsePlan("- s1: a\n- s1: b\n").errors.join(), /2 回/);
   assert.match(parsePlan("- s1:\n").errors.join(), /目的が空/);
   assert.match(parsePlan("計画は後で\n").errors.join(), /1 つも無い/);
+});
+
+test("sandboxProbeErrors は loopback が通り外部が拒否された時だけ空を返す", () => {
+  assert.deepEqual(sandboxProbeErrors("LOOPBACK=ok\nEXTERNAL=blocked EPERM\n"), []);
+  assert.deepEqual(sandboxProbeErrors("LOOPBACK=ok\nEXTERNAL=blocked timeout\n"), []);
+  assert.match(sandboxProbeErrors("LOOPBACK=denied EPERM\nEXTERNAL=blocked EPERM\n").join(), /loopback/);
+  assert.match(sandboxProbeErrors("LOOPBACK=ok\nEXTERNAL=reached\n").join(), /外部/);
+  assert.match(sandboxProbeErrors("").join(), /判定できない/);
+  assert.match(sandboxProbeErrors("LOOPBACK=ok\n").join(), /判定できない/);
 });

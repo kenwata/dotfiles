@@ -26,8 +26,9 @@
 //   TMPDIR と /tmp に書けるので、restore の元になる退避コピーをそこに置かない)。7 日より古い記録は run の度に消す。
 //
 // run の流れ: 起動前検査(許可パス ⊆ T の対象、件数の上限、状態文書を含まない、packet の大きさ、worker 環境、
-// 実行中の別 worker、モデルの解決)→ snapshot → ロック(check-task-scope.mjs が Claude 側の編集を止める)→
-// codex exec(独立したプロセスグループ。タイムアウトとシグナルでグループごと止める)→ ロック解除 →
+// 実行中の別 worker、sandbox の疎通 = loopback は通り外部は拒否、モデルの解決)→ snapshot → ロック
+// (check-task-scope.mjs が Claude 側の編集を止める)→ codex exec(独立したプロセスグループ。タイムアウトとシグナルで
+// グループごと止める。UV_CACHE_DIR は TMPDIR の下の run 専用のディレクトリで、終わったら消す)→ ロック解除 →
 // rollout からピーク使用率と compaction → ゲート → 必要なら restore(上書き前に現在の内容を退避)→ report。
 //
 // 出力規約: どの経路でも JSON を 1 つ stdout に出す(run は <run ディレクトリ>/report.json にも保存)。
@@ -41,9 +42,11 @@
 // ${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/tasks/<ルートのパスの記号を - にした名前>/T<n>/plan.md に登録する。
 // 登録し直すと前の計画は plan-<時刻>.md に残る。run は計画に無いステップを起動せず、packet を同じ場所の
 // s<番号>.packet.md にも写す。show は計画の各ステップの最新の run の状態と verify の結果を人向けの表で出す。
-// verify は、run の packet の「## 検証」節のコマンドを監督の環境(worker の sandbox の外)で 1 本ずつ別々に打ち、
-// コマンドごとの終了コードを JSON で stdout と <run ディレクトリ>/verify.json に出す。
-//   exit 0 = 全部 0、exit 1 = 0 でないものがある、exit 2 = 記録の誤り・worker の実行中(何も打っていない)
+// verify は、run の packet の「## 検証」節のコマンドを worker と同じ sandbox(`codex sandbox`、worker 用 CODEX_HOME の
+// 設定)の中で 1 本ずつ別々に打ち、コマンドごとの終了コードを JSON で stdout と <run ディレクトリ>/verify.json に出す。
+// worker が書いたコードを、API キーとネットワークのある sandbox の外で走らせないため。UV_CACHE_DIR は verify 専用。
+//   exit 0 = 全部 0、exit 1 = 0 でないものがある、exit 2 = 記録の誤り・worker の実行中・sandbox の疎通の不一致
+//   (何も打っていない)
 // 作業記録(worklog.md、書式の正は worklog.mjs): plan / run / verify は結果をタスクの置き場の worklog.md にも 1 行ずつ
 // 追記する(run の記録は 7 日で消えるが、worklog は消えない)。note は監督(Codex ホストでは本人)がステップの境目の
 // 結論を追記する。resume は同じ T の再開の照合を JSON で返す: 計画の各ステップの状態、最後の handoff、
@@ -59,8 +62,8 @@ import { parseArgs } from "node:util";
 import { StringDecoder } from "node:string_decoder";
 import { ALWAYS_ALLOWED, activeWorkerLock, isInside, workerLockPath } from "../../check-task-scope.mjs";
 import {
-  buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, findRollout, packetVerifyCommands, parsePlan, gate, readRollout, resolveModelFamily, restore, selectRules,
-  takeSnapshot, trackedPaths, validateResult,
+  SANDBOX_PREFIX, SANDBOX_PROBE_SCRIPT, buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, findRollout, packetVerifyCommands, parsePlan, gate,
+  readRollout, resolveModelFamily, restore, sandboxProbeErrors, selectRules, takeSnapshot, trackedPaths, validateResult,
 } from "./core.mjs";
 import { lineSplitter, renderEvent, renderSummary } from "./status.mjs";
 import { NOTE_KINDS, appendWorklog, normalizeStep, readPlan, readWorklog, rootSlug, runsDir, stateDir, taskDir } from "./worklog.mjs";
@@ -71,6 +74,7 @@ const RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const STATUS_LOG_MAX = 1024 * 1024;
 const VERIFY_TIMEOUT_SEC = 900;
 const VERIFY_TAIL_LINES = 30;
+const PROBE_TIMEOUT_MS = 30_000;
 
 function emit(report, runDir, code) {
   const text = JSON.stringify(report, null, 2);
@@ -151,6 +155,32 @@ function workerHomeErrors(home) {
   return errors;
 }
 
+function workerHome() {
+  return process.env.CODEX_WORKER_HOME || path.join(os.homedir(), ".codex-worker");
+}
+
+// worker と verify が打つ sandbox で疎通を実測する。設定の読み違いや Codex の更新で loopback が塞がる・外部が開くと、
+// 試験が必ず落ちる・本物の API に届くので、その状態では worker も verify も起動しない
+function sandboxErrors(home, root) {
+  let output;
+  try {
+    output = execFileSync("codex", [...SANDBOX_PREFIX, process.execPath, "-e", SANDBOX_PROBE_SCRIPT], {
+      cwd: root, encoding: "utf8", env: { ...process.env, CODEX_HOME: home }, stdio: ["ignore", "pipe", "pipe"], timeout: PROBE_TIMEOUT_MS,
+    });
+  } catch (error) {
+    return [`worker の sandbox の疎通を検査できない(codex sandbox): ${error.message.split("\n")[0]}`];
+  }
+  return sandboxProbeErrors(output);
+}
+
+// uv のキャッシュは run(または verify)ごとに TMPDIR の下へ分ける。既定の ~/.cache/uv は sandbox から書けず、
+// 書けるようにすると worker が汚した共有キャッシュを sandbox の外の uv が使うことになる
+function privateUvCache(name) {
+  const dir = path.join(os.tmpdir(), "claude-codex-worker-uv", name);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
 function resolveModel(args, home) {
   if (args.model) return { model: args.model };
   const family = args["model-family"] ?? DEFAULTS.family;
@@ -177,7 +207,7 @@ function killGroup(child, signal) {
 }
 
 // 生のイベントは events.jsonl にそのまま保存し、状態行は status.mjs が選んだものだけを出す
-function execWorker({ home, model, root, prompt, runDir, timeoutSec, onStart, status }) {
+function execWorker({ home, model, root, prompt, runDir, timeoutSec, uvCache, onStart, status }) {
   return new Promise((resolve) => {
     const events = fs.openSync(path.join(runDir, "events.jsonl"), "w");
     const stderr = fs.openSync(path.join(runDir, "stderr.txt"), "w");
@@ -190,7 +220,7 @@ function execWorker({ home, model, root, prompt, runDir, timeoutSec, onStart, st
       "exec", "--json", "-s", "workspace-write", "-m", model, "-C", root,
       "--output-schema", path.join(here, "worker-result.schema.json"),
       "-o", path.join(runDir, "result.json"), "-",
-    ], { env: { ...process.env, CODEX_HOME: home }, stdio: ["pipe", "pipe", stderr], detached: true });
+    ], { env: { ...process.env, CODEX_HOME: home, UV_CACHE_DIR: uvCache }, stdio: ["pipe", "pipe", stderr], detached: true });
     const decoder = new StringDecoder("utf8"); // チャンク境界で割れた多バイト文字を持ち越す
     child.stdout.on("data", (chunk) => {
       fs.writeSync(events, chunk);
@@ -254,7 +284,7 @@ async function run(args) {
   const task = args.task;
   const step = args.step;
   const allow = (args.allow ?? []).map((a) => a.replace(/^\.\//, ""));
-  const home = process.env.CODEX_WORKER_HOME || path.join(os.homedir(), ".codex-worker");
+  const home = workerHome();
   const timeoutSec = Number(args.timeout ?? DEFAULTS.timeout);
   const maxPacket = Number(args["max-packet"] ?? DEFAULTS.maxPacket);
   const maxAllow = Number(args["max-allow"] ?? DEFAULTS.maxAllow);
@@ -286,6 +316,7 @@ async function run(args) {
   }
   const running = root ? activeWorkerLock(root) : null;
   if (running) errors.push(`別の worker が実行中: ${running.task} ステップ ${running.step}`);
+  if (errors.length === 0) errors.push(...sandboxErrors(home, root));
   const resolved = errors.length === 0 ? resolveModel(args, home) : { model: null };
   if (resolved.error) errors.push(resolved.error);
   if (errors.length > 0) {
@@ -308,6 +339,7 @@ async function run(args) {
   fs.writeFileSync(path.join(runDir, "prompt.md"), prompt);
 
   const status = statusWriter(root, task, stepLabel(plan, step));
+  const uvCache = privateUvCache(id);
 
   // ロックとシグナル: runner が止められても codex を孤児にせず、ロックを残さない
   const lockFile = workerLockPath(root);
@@ -318,6 +350,7 @@ async function run(args) {
   const onSignal = (signal) => {
     if (child) killGroup(child, "SIGKILL");
     fs.rmSync(lockFile, { force: true });
+    fs.rmSync(uvCache, { recursive: true, force: true });
     status(`interrupted by ${signal}(作業ツリーは戻していない)`);
     recordWorklog(root, task, {
       kind: "run", step, by: "runner", keys: { run: id, accepted: false, stage: "interrupted" },
@@ -335,7 +368,7 @@ async function run(args) {
   let exec;
   try {
     exec = await execWorker({
-      home, model, root, prompt, runDir, timeoutSec, status,
+      home, model, root, prompt, runDir, timeoutSec, uvCache, status,
       onStart: (c) => {
         child = c;
         fs.writeFileSync(lockFile, JSON.stringify({ ...lock, childPid: c.pid }));
@@ -343,6 +376,7 @@ async function run(args) {
     });
   } finally {
     fs.rmSync(lockFile, { force: true });
+    fs.rmSync(uvCache, { recursive: true, force: true });
     for (const signal of signals) process.off(signal, onSignal);
   }
   const durationSec = Math.round((Date.now() - started) / 1000);
@@ -444,12 +478,15 @@ function restoreRun(args) {
   emit({ restore: restore(snapshot, targets, path.join(args.run, `overwritten-restore-${stamp}`)) }, null, 0);
 }
 
-// コマンド 1 本を sh で打つ。出力は全文をログファイルへ、末尾だけを結果へ。タイムアウトはプロセスグループごと止める
-function runVerifyCommand(command, root, logFile, timeoutSec) {
+// コマンド 1 本を worker と同じ sandbox の中の sh で打つ。出力は全文をログファイルへ、末尾だけを結果へ。
+// タイムアウトはプロセスグループごと止める
+function runVerifyCommand(command, { root, home, uvCache, logFile, timeoutSec }) {
   return new Promise((resolve) => {
     const log = fs.openSync(logFile, "w");
     const started = Date.now();
-    const child = spawn("/bin/sh", ["-c", command], { cwd: root, stdio: ["ignore", log, log], detached: true });
+    const child = spawn("codex", [...SANDBOX_PREFIX, "/bin/sh", "-c", command], {
+      cwd: root, env: { ...process.env, CODEX_HOME: home, UV_CACHE_DIR: uvCache }, stdio: ["ignore", log, log], detached: true,
+    });
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -497,6 +534,8 @@ async function verifyRun(args) {
   if (running) errors.push(`worker が実行中: ${running.task} ステップ ${running.step}(終わってから打つ)`);
   const timeoutSec = Number(args.timeout ?? VERIFY_TIMEOUT_SEC);
   if (!(timeoutSec > 0)) errors.push("--timeout は正の秒数");
+  const home = workerHome();
+  if (errors.length === 0) errors.push(...sandboxErrors(home, root));
   if (errors.length > 0) {
     emit({ run_dir: args.run, errors }, null, 2);
     return;
@@ -507,11 +546,16 @@ async function verifyRun(args) {
   fs.mkdirSync(logDir, { recursive: true, mode: 0o700 });
   const status = statusWriter(root, meta.task, stepLabel(readPlan(root, meta.task), meta.step));
   const results = [];
-  for (const [index, command] of commands.entries()) {
-    status(`verify $ ${command}`);
-    const result = await runVerifyCommand(command, root, path.join(logDir, `${index + 1}.log`), timeoutSec);
-    status(result.exit_code === 0 ? "verify   ✓" : `verify   ✗ exit ${result.exit_code ?? result.signal ?? "?"}${result.timed_out ? "(タイムアウト)" : ""}`);
-    results.push(result);
+  const uvCache = privateUvCache(`${path.basename(args.run)}-verify-${stamp}`);
+  try {
+    for (const [index, command] of commands.entries()) {
+      status(`verify $ ${command}`);
+      const result = await runVerifyCommand(command, { root, home, uvCache, logFile: path.join(logDir, `${index + 1}.log`), timeoutSec });
+      status(result.exit_code === 0 ? "verify   ✓" : `verify   ✗ exit ${result.exit_code ?? result.signal ?? "?"}${result.timed_out ? "(タイムアウト)" : ""}`);
+      results.push(result);
+    }
+  } finally {
+    fs.rmSync(uvCache, { recursive: true, force: true });
   }
   const failed = results.filter((r) => r.exit_code !== 0).length;
   status(`verify finished: ${results.length - failed}/${results.length} ok`);

@@ -123,7 +123,9 @@ node ~/.claude/hooks/lib/codex-worker/cli.mjs resume --root <プロジェクト�
 1 コマンドをバッククォートで囲んで書く(括弧の補足は項目の後ろに書いてよい)。このステップの変更に最も近い試験に加えて、
 プロジェクト規約が変更に求める lint・整形の検査・型検査も入れる — ここに無いものは誰も打たない。runner はコマンドの
 箇条書きが無い packet を起動前に拒否する。worker も同じコマンドを sandbox の中で打つが、その結果(`tests_run`)は
-申告であり、受け入れの根拠にはしない。
+申告であり、受け入れの根拠にはしない。`verify` も worker と同じ sandbox の中で打つ(下の「report の読み方」)ので、
+外部への通信を要するコマンドは検証節に書けない。コミット前に全体の試験が要るなら、それも最後のステップの検証節に
+書いて `verify` で打つ。
 
 ## 起動
 
@@ -137,6 +139,14 @@ Bash ツールの `run_in_background` で起動し、完了通知を待つ(Bash 
 下の状態行がバックグラウンドタスクの出力に出なくなり、利用者から実行中の様子が見えなくなる。実行中は runner がロックを置き、`check-task-scope.mjs` が
 そのリポジトリへの Claude 側の編集を拒否する(IDE や Bash 経由の編集は止められない。run 中に作業ツリーを
 触らない)。packet は scratchpad など作業ツリーの外に置く。
+
+worker の sandbox は、作業ツリーと TMPDIR・/tmp にだけ書け、ネットワークは loopback(127.0.0.1)だけを通して
+外部を拒否する(設定の正は `.codex/worker-config.toml` のコメント)。試験がローカルのサーバや番兵のポートを
+127.0.0.1 で待ち受けるので loopback は要り、`.env` の本物の API キーで課金される API に届かないよう外部は止める。
+runner は起動のたびに `codex sandbox` でこの疎通を実測し、外れていれば worker を起動せず exit 2 を返す(Codex の
+更新や設定の入れ忘れで変わりうるため。`errors` に従って `.codex/install.sh` で入れ直す)。uv のキャッシュは
+`UV_CACHE_DIR` に run 専用のディレクトリ(TMPDIR の下。run の後に消す)を渡す。既定の `~/.cache/uv` は sandbox から
+書けず、書けるようにすると worker が汚したキャッシュを sandbox の外の uv が使うことになるためである。
 
 worker のモデルは系統名で指定する(既定 `luna`。上げる時は `--model-family terra` など、`model-routing.md` の
 表の名前)。runner が `codex debug models` の一覧から、その系統の最新の版の ID に解決して report の `model` に
@@ -169,9 +179,12 @@ node ~/.claude/hooks/lib/codex-worker/cli.mjs verify --run <run_dir> [--timeout 
 
 `verify` は packet の「検証」節のコマンドを、run のルートで 1 本ずつ別々に打ち、コマンドごとの終了コードと出力の末尾を
 JSON で stdout と `<run_dir>/verify.json` に出す(全文は `<run_dir>/verify-<時刻>/<番号>.log`)。exit 0 は全部 0、
-exit 1 は 0 でないものがある。監督の Bash から起動するので worker の sandbox の制限(loopback の bind など)を受けず、
-worker が `notes` で「sandbox で完走できなかった」と書いた検証もこれで確かめる。結果は stdout を直接読み、
-ファイルへリダイレクトしない(以前の出力ファイルを読み違えないため)。検証を自分で束ねて打ったり一部だけ打ったりしない
+exit 1 は 0 でないものがある。コマンドは worker と同じ sandbox(`codex sandbox`、worker 用 CODEX_HOME の設定、
+専用の `UV_CACHE_DIR`)の中で打つ。worker が書いたコード(ゲートが見ない `.venv/` などの中身を含む)を、API キーと
+ネットワークのある監督の環境で走らせないためである。打つ前に runner の起動時と同じ疎通の実測を行い、外れていれば
+何も打たず exit 2 を返す。worker が `notes` で「実行環境の制限で失敗」と書いた検証も、これで確かめる。
+worker の変更が載った作業ツリーの試験を、監督の Bash で直接打たない(同じ理由。要る試験は検証節に書いて `verify` で
+打つ)。結果は stdout を直接読み、ファイルへリダイレクトしない(以前の出力ファイルを読み違えないため)。検証を自分で束ねて打ったり一部だけ打ったりしない
 — 束ねると 1 本ごとの成否が分からず、打たなかったものは確かめていない。
 
 - **exit 2**: `errors` を直して起動し直す(worker は起動していない。何も変更していない)。

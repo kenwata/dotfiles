@@ -91,6 +91,11 @@ cmp -s "$repo_root/.codex/worker-config.toml" "$fresh_worker/config.toml"
 [[ -L "$fresh_worker/auth.json" && "$(readlink "$fresh_worker/auth.json")" == "$fresh_codex/auth.json" ]]
 [[ ! -e "$fresh_worker/AGENTS.md" && ! -e "$fresh_worker/hooks.json" && ! -e "$fresh_worker/skills" ]]
 [[ "$(yq -p=toml -o=json -r '.project_doc_max_bytes' "$fresh_worker/config.toml")" == "0" ]]
+# ネットワークは loopback だけ: 外への口は管理プロキシに通し、許可するドメインを持たない
+[[ "$(yq -p=toml -o=json -r '.sandbox_workspace_write.network_access' "$fresh_worker/config.toml")" == "true" ]]
+[[ "$(yq -p=toml -o=json -r '.features.network_proxy.enabled' "$fresh_worker/config.toml")" == "true" ]]
+[[ "$(yq -p=toml -o=json -r '.features.network_proxy.allow_local_binding' "$fresh_worker/config.toml")" == "true" ]]
+[[ "$(yq -p=toml -o=json -r '[.. | select(has("allowed_domains") or has("domains"))] | length' "$fresh_worker/config.toml")" == "0" ]]
 [[ "$(yq -p=toml -o=json -r '.model // "unset"' "$fresh_worker/config.toml")" == "unset" ]]
 # 再実行しても差分が無ければ何も置き換えない
 reinstall_output="$(HOME="$fresh_home" CODEX_WORKER_HOME= bash "$repo_root/.codex/install.sh" \
