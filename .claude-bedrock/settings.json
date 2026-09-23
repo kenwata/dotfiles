@@ -18,6 +18,17 @@
     }
   },
   "hooks": {
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/context-budget.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "hooks": [
@@ -27,6 +38,16 @@
           }
         ],
         "matcher": "Write|Edit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/context-budget.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
       }
     ],
     "PreToolUse": [
@@ -77,6 +98,27 @@
           }
         ],
         "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/context-budget.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/context-budget.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
       }
     ]
   },

@@ -1,4 +1,7 @@
 #!/bin/bash
+# ステータスライン。描画のついでに、受け取ったコンテキスト使用量を
+# ${XDG_STATE_HOME:-~/.local/state}/claude-task-loop/statusline/<session_id>.json へ書き出す。
+# 読み手は予算停止の hook(hooks/context-budget.mjs)。hook の入力には使用率が無いため。
 
 input=$(cat)
 
@@ -12,6 +15,23 @@ CTX=$(echo "$input" | jq -r '.context_window.used_percentage // 0')
 FIVE_H=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
 WEEK=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
 SESSION_ID=$(echo "$input" | jq -r '.session_id // "unknown"')
+
+# 予算停止の hook へ渡すサイドファイル(失敗しても描画は続ける)
+{
+  side_key=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_')
+  side_dir="${XDG_STATE_HOME:-$HOME/.local/state}/claude-task-loop/statusline"
+  if [ "$SESSION_ID" != "unknown" ] && mkdir -p "$side_dir"; then
+    side_tmp="$side_dir/.${side_key}.$$"
+    echo "$input" | jq -c '{
+      session_id, at: (now * 1000 | floor),
+      used_percentage: .context_window.used_percentage,
+      context_window_size: .context_window.context_window_size,
+      current_usage: .context_window.current_usage,
+      five_hour_pct: .rate_limits.five_hour.used_percentage
+    }' > "$side_tmp" && mv "$side_tmp" "$side_dir/${side_key}.json"
+    rm -f "$side_tmp"
+  fi
+} 2>/dev/null || true
 
 CYAN='\033[36m'
 GREEN='\033[32m'
