@@ -22,10 +22,11 @@
 // セッションで /execute-task を送る。claude -p を使わないのは、-p が最終応答の約 5 秒後にバックグラウンドの
 // Bash を殺し、Codex worker の待機(templates/codex-worker.md「起動」)と衝突するため。
 //
-// T ごとの流れ: 前提検査(T の状態・依存・checkpoint 以後の完了数)→ /clear(Codex は /new)→ session_id の
-// 変化を待つ → sessions/<id>.json に loop を書く(check-stop-question.sh はこのセッションを差し戻さない)→
-// /execute-task を --wait で送る → 落ち着くのを待つ(worker のロック中・working の間は待ち、idle が --settle-sec
-// 続いたら判定)→ 判定(decide.mjs の judge)。
+// T ごとの流れ: 前提検査(T の状態・依存・checkpoint 以後の完了数)→ /clear → session_id の変化を待つ →
+// sessions/<id>.json に loop を書く(check-stop-question.sh はこのセッションを差し戻さない)→ /execute-task を
+// --wait で送る → 落ち着くのを待つ(worker のロック中・working の間は待ち、idle が --settle-sec 続いたら判定)→
+// 判定(decide.mjs の judge)。Codex は /clear では session_id が変わらないので、$execute-task を送ってから変化を
+// 確かめて loop を書く(openTurn)。
 //   next  : TODO.md の T が [x] ∧ T を含むコミットが増えた ∧ 作業ツリーが clean
 //   retry : 予算停止(hook が budget を書いた)。同じ T を新しいセッションで再送し、/execute-task が作業記録から再開する
 //   stop  : それ以外(穴の記録・関門の質問・blocked・timeout・compact など)。人の判断を待つ
@@ -75,7 +76,7 @@ function resumeCheck(root, task) {
 
 // --target が無い時に送る先を決める。同じプロジェクト(git ルート)で入力待ちの Claude / Codex のペインを、
 // 呼び出し元と同じタブを優先して 1 つ選ぶ。無ければ隣にペインを作って起動する(このターンの利用者の
-// 手作業を無くすため)。起動する Claude には launchName を付ける。候補が複数なら選ばず止まる
+// 手作業を無くすため)。起動する時は { start } を返し、起動は startAgent に任せる。候補が複数なら選ばず止まる
 function pickAgent(root, args, launchName) {
   let agents;
   try { agents = agentList(); } catch (error) { return { errors: [`herdr agent list に失敗: ${error.message}`] }; }
@@ -92,14 +93,18 @@ function pickAgent(root, args, launchName) {
     return { errors: [`同じプロジェクトのペイン ${inRoot.map((a) => `${a.pane_id}(${a.agent_status})`).join(", ")} が入力待ちではない。終わるのを待つか、--target で別のペインを選ぶ`] };
   }
   const kind = args.kind ?? "claude";
+  // Codex には起動時に名前を付ける引数が無い
+  return { start: { kind, args: [...(kind === "claude" ? ["--name", launchName] : []), ...(args.model ? ["--model", args.model] : [])] } };
+}
+
+// 呼び出し元のペインの隣にペインを作り、start.kind のエージェントを start.args で起動する
+function startAgent(root, start) {
   const name = `task-loop-${Date.now().toString(36)}`;
   try {
     const pane = paneSplit({ cwd: root });
-    // Codex には起動時に名前を付ける引数が無い
-    const agentArgs = [...(kind === "claude" ? ["--name", launchName] : []), ...(args.model ? ["--model", args.model] : [])];
-    const started = agentStart(name, { kind, pane, args: agentArgs });
+    const started = agentStart(name, { kind: start.kind, pane, args: start.args });
     const agent = { ...(started ?? agentGet(pane)), pane_id: pane };
-    return { agent, started: { pane, name, kind } };
+    return { agent, started: { pane, name, kind: start.kind } };
   } catch (error) {
     const hint = error.code === "agent_not_ready"
       ? "(新しいペインで確認の画面(フォルダの信頼など)が出ている。答えてから task-loop をもう一度打つ)"
@@ -150,15 +155,20 @@ function preflight(args, positionalTasks) {
   }
   if (errors.length > 0) return { errors };
 
+  const tasksFrom = spec ? "args" : "TODO.md";
   if (!agent) {
     const picked = pickAgent(root, args, sessionName(root, tasks[0], "loop"));
     if (picked.errors) return picked;
-    agent = picked.agent;
-    started = picked.started ?? null;
+    // --dry-run はペインを作らず、起動する予定だけを返す
+    if (picked.start && args["dry-run"]) return { errors, tasks, host: picked.start.kind, root, target: null, pane: null, started: null, wouldStart: picked.start, tasksFrom };
+    const got = picked.start ? startAgent(root, picked.start) : picked;
+    if (got.errors) return got;
+    agent = got.agent;
+    started = got.started ?? null;
     errors.push(...agentErrors(agent.pane_id, agent));
   }
   const target = args.target ?? agent.pane_id;
-  return { errors, tasks, host: agent.agent, root, target, pane: agent.pane_id, started, tasksFrom: spec ? "args" : "TODO.md" };
+  return { errors, tasks, host: agent.agent, root, target, pane: agent.pane_id, started, tasksFrom };
 }
 
 // 送った後、成果物の判定に進んでよいところまで待つ。Codex worker の実行中(ロック)と working の間は待ち、
@@ -210,52 +220,80 @@ function nameSession(ctx, name, logTask) {
   }
 }
 
-// /clear(Codex は /new)を送り、session_id が変わるのを待ってから名前を付ける。新しい session_id を返す
-function clearSession(ctx, name, logTask) {
-  const before = agentGet(ctx.target).agent_session?.value ?? null;
-  agentPrompt(ctx.target, ctx.host === "codex" ? "/new" : "/clear");
+const CLEAR_ERRORS = new Set(["blocked_after_clear", "clear_not_detected"]);
+const PROMPT_ERRORS = { agent_blocked: "blocked_before_send", agent_prompt_stalled: "stalled", timeout: "timeout" };
+
+// session_id が before 以外になるのを --clear-timeout-ms まで待つ。変わらなければ null
+function waitSessionChange(ctx, before) {
   const deadline = Date.now() + ctx.clearTimeoutMs;
   for (;;) {
-    const agent = agentGet(ctx.target);
-    const now = agent.agent_session?.value ?? null;
-    if (now && now !== before) {
-      const settled = agentWait(ctx.target, { timeoutMs: 30_000 });
-      if (settled?.agent_status === "blocked") throw new HerdrError("blocked_after_clear", "新しいセッションが承認・質問の画面で止まっている");
-      nameSession(ctx, name, logTask);
-      return now;
-    }
-    if (Date.now() > deadline) throw new HerdrError("clear_not_detected", `${ctx.clearTimeoutMs}ms 待っても session_id が変わらない`);
+    const now = agentGet(ctx.target).agent_session?.value ?? null;
+    if (now && now !== before) return now;
+    if (Date.now() > deadline) return null;
     sleep(500);
+  }
+}
+
+// /clear を送って新しいセッションを始める。戻り値の before は送る前の session_id、session は新しい session_id。
+// Claude は /clear で session_id が変わるので、それを待って名前を付ける。Codex は /clear では変わらず、最初の発言で
+// 新しい会話ができて SessionStart が走り、そこで herdr に session_id が届く(2026-09-24 実測)ので session は null。
+// Codex で /new を使わないのは、worktrees 機能(既定で有効)が「どこで動かすか」の選択画面を出して止まるため(同日実測)
+function clearSession(ctx, name, logTask) {
+  const before = agentGet(ctx.target).agent_session?.value ?? null;
+  agentPrompt(ctx.target, "/clear");
+  const session = ctx.host === "codex" ? null : waitSessionChange(ctx, before);
+  if (ctx.host !== "codex" && !session) throw new HerdrError("clear_not_detected", `${ctx.clearTimeoutMs}ms 待っても session_id が変わらない`);
+  const settled = agentWait(ctx.target, { timeoutMs: 30_000 });
+  if (settled?.agent_status === "blocked") throw new HerdrError("blocked_after_clear", "新しいセッションが承認・質問の画面で止まっている");
+  nameSession(ctx, name, logTask);
+  return { before, session };
+}
+
+// 新しいセッションで text を送り、送った後の最初の落ち着いた状態(idle / done / blocked)まで待つ。
+// 戻り値は { session, agent }、または止まる理由 { stop, session?, details? }。sessions/<id>.json の loop は、Claude なら
+// 送る前に書く(check-stop-question.sh がこのセッションを差し戻さないように)。Codex は送った後に session_id が
+// 変わったのを確かめてから書き、変わらなければ止める(送信が確定していないか、前の会話に届いている)。Codex の hook は
+// loop を読まないので、書くのが送った後でも差し戻しの扱いは変わらない
+function openTurn(ctx, text, { task, attempt }, name, logTask) {
+  let cleared;
+  try {
+    cleared = clearSession(ctx, name, logTask);
+  } catch (error) {
+    return { stop: CLEAR_ERRORS.has(error.code) ? error.code : "clear_failed", details: { error: error.message } };
+  }
+  const state = { host: ctx.host, loop: { target: ctx.target, task, root: ctx.root, attempt, started_at: Date.now(), loop_pid: process.pid } };
+  let session = cleared.session;
+  try {
+    if (session) {
+      updateSession(session, { ...state, budget: null, compact: null });
+      log(logTask, `send "${text}" (session ${session.slice(0, 8)})`);
+      return { session, agent: agentPrompt(ctx.target, text, { wait: true, timeoutMs: ctx.taskTimeoutMs }) };
+    }
+    log(logTask, `send "${text}"`);
+    agentPrompt(ctx.target, text);
+    session = waitSessionChange(ctx, cleared.before);
+    if (!session) {
+      return { stop: "new_session_not_detected", details: { error: `送った後 ${ctx.clearTimeoutMs}ms 待っても session_id が変わらない(送信が確定していないか、前の会話に届いた)` } };
+    }
+    updateSession(session, state);
+    log(logTask, `session ${session.slice(0, 8)}`);
+    return { session, agent: agentWait(ctx.target, { timeoutMs: ctx.taskTimeoutMs }) };
+  } catch (error) {
+    return { stop: PROMPT_ERRORS[error.code] ?? "herdr_error", session, details: { error: error.message } };
   }
 }
 
 // checkpoint 以後の完了が上限に達した時、次の T の前に /follow-up を新しいセッションで送る。成果物(checkpoint の
 // コミットが増えたか)で判定する。/follow-up が利用者への問い(要確認の回収など)で止まれば blocked として人へ渡す
 function runFollowUp(ctx, nextTask) {
-  let session;
-  try {
-    log("follow-up", "clear");
-    session = clearSession(ctx, sessionName(ctx.root, nextTask, "follow-up"), "follow-up");
-  } catch (error) {
-    return { action: "stop", reason: error.code === "blocked_after_clear" || error.code === "clear_not_detected" ? error.code : "clear_failed", details: { error: error.message } };
-  }
-  updateSession(session, {
-    host: ctx.host,
-    loop: { target: ctx.target, task: "follow-up", root: ctx.root, attempt: 1, started_at: Date.now(), loop_pid: process.pid },
-    budget: null, compact: null,
-  });
   const headBefore = headOf(ctx.root);
-  const text = `${ctx.host === "codex" ? "$" : "/"}follow-up`;
   const deadline = Date.now() + ctx.taskTimeoutMs;
-  log("follow-up", `send "${text}" (session ${session.slice(0, 8)})`);
-  try {
-    const agent = agentPrompt(ctx.target, text, { wait: true, timeoutMs: ctx.taskTimeoutMs });
-    if (agent?.agent_status === "blocked") return { action: "stop", reason: "follow_up_question", session };
-    if (agent?.agent_status === "unknown") return { action: "stop", reason: "unknown", session };
-  } catch (error) {
-    const reason = { agent_blocked: "blocked_before_send", agent_prompt_stalled: "stalled", timeout: "timeout" }[error.code] ?? "herdr_error";
-    return { action: "stop", reason, session, details: { error: error.message } };
-  }
+  log("follow-up", "clear");
+  const turn = openTurn(ctx, `${ctx.host === "codex" ? "$" : "/"}follow-up`, { task: "follow-up", attempt: 1 }, sessionName(ctx.root, nextTask, "follow-up"), "follow-up");
+  const { session } = turn;
+  if (turn.stop) return { action: "stop", reason: turn.stop, session, details: turn.details };
+  if (turn.agent?.agent_status === "blocked") return { action: "stop", reason: "follow_up_question", session };
+  if (turn.agent?.agent_status === "unknown") return { action: "stop", reason: "unknown", session };
   const settled = settle(ctx, deadline, () => checkpointSince(ctx.root, headBefore));
   if (settled.stop) return { action: "stop", reason: settled.stop === "blocked" ? "follow_up_question" : settled.stop, session, details: settled.detail ? { error: settled.detail } : undefined };
   if (!checkpointSince(ctx.root, headBefore)) return { action: "stop", reason: "follow_up_incomplete", session, details: { dirty: dirtyPaths(ctx.root) } };
@@ -280,30 +318,14 @@ function runTask(ctx, task, attempt) {
     if (since && since.count >= CHECKPOINT_LIMIT) return { action: "stop", reason: "follow_up_required", details: since };
   }
 
-  let session;
-  try {
-    log(task, `clear (attempt ${attempt})`);
-    session = clearSession(ctx, sessionName(ctx.root, task), task);
-  } catch (error) {
-    return { action: "stop", reason: error.code === "blocked_after_clear" || error.code === "clear_not_detected" ? error.code : "clear_failed", details: { error: error.message } };
-  }
-  updateSession(session, {
-    host: ctx.host,
-    loop: { target: ctx.target, task, root: ctx.root, attempt, started_at: Date.now(), loop_pid: process.pid },
-    budget: null, compact: null,
-  });
   const headBefore = headOf(ctx.root);
-  const text = `${ctx.host === "codex" ? "$" : "/"}execute-task ${task}`;
   const deadline = Date.now() + ctx.taskTimeoutMs;
-  log(task, `send "${text}" (session ${session.slice(0, 8)})`);
-  try {
-    const agent = agentPrompt(ctx.target, text, { wait: true, timeoutMs: ctx.taskTimeoutMs });
-    if (agent?.agent_status === "blocked") return { action: "stop", reason: "blocked", session };
-    if (agent?.agent_status === "unknown") return { action: "stop", reason: "unknown", session };
-  } catch (error) {
-    const reason = { agent_blocked: "blocked_before_send", agent_prompt_stalled: "stalled", timeout: "timeout" }[error.code] ?? "herdr_error";
-    return { action: "stop", reason, session, details: { error: error.message } };
-  }
+  log(task, `clear (attempt ${attempt})`);
+  const turn = openTurn(ctx, `${ctx.host === "codex" ? "$" : "/"}execute-task ${task}`, { task, attempt }, sessionName(ctx.root, task), task);
+  const { session } = turn;
+  if (turn.stop) return { action: "stop", reason: turn.stop, session, details: turn.details };
+  if (turn.agent?.agent_status === "blocked") return { action: "stop", reason: "blocked", session };
+  if (turn.agent?.agent_status === "unknown") return { action: "stop", reason: "unknown", session };
 
   const facts = () => {
     const state = readSession(session);
@@ -363,9 +385,9 @@ function main() {
     followUpBefore: new Set(),
   };
   const texts = checked.tasks.map((t) => `${ctx.host === "codex" ? "$" : "/"}execute-task ${t}`);
-  log(null, `target ${ctx.target} (${ctx.host}${checked.started ? "、隣に起動" : ""}) tasks ${checked.tasks.join(",")} (${checked.tasksFrom})`);
+  log(null, `target ${ctx.target ?? "(隣に起動する)"} (${ctx.host}${checked.started ? "、隣に起動" : ""}) tasks ${checked.tasks.join(",")} (${checked.tasksFrom})`);
   if (values["dry-run"]) {
-    finish({ stopped: false, reason: "dry_run", target: ctx.target, host: ctx.host, root: ctx.root, started: checked.started, tasks: checked.tasks, tasks_from: checked.tasksFrom, prompts: texts, retry_max: ctx.retryMax, follow_up: ctx.followUp }, 0);
+    finish({ stopped: false, reason: "dry_run", target: ctx.target, host: ctx.host, root: ctx.root, started: checked.started, would_start: checked.wouldStart ?? null, tasks: checked.tasks, tasks_from: checked.tasksFrom, prompts: texts, retry_max: ctx.retryMax, follow_up: ctx.followUp }, 0);
     return;
   }
   sweep();

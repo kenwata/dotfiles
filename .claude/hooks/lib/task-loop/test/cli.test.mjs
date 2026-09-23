@@ -9,8 +9,9 @@ import { execFileSync, spawnSync } from "node:child_process";
 
 const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.mjs");
 
-// 偽の herdr: 状態を FAKE_HERDR_STATE の JSON に持つ。/clear・/new で session を変え(ignoreClear なら変えず、
-// blockOnClear なら変えた後に blocked)、/execute-task T<n> には scenario[T<n>] の先頭の動きで応える:
+// 偽の herdr: 状態を FAKE_HERDR_STATE の JSON に持つ。Claude は /clear で session を変える(ignoreClear なら変えず、
+// blockOnClear なら変えた後に blocked)。Codex は本物と同じく /clear では変えず、次の発言で新しい session になる
+// (ignoreClear なら前の session のまま)。/execute-task T<n> には scenario[T<n>] の先頭の動きで応える:
 //   complete: TODO.md を [x] にしてコミット / mark_only: [x] にするだけ / dirty: complete + untracked を残す /
 //   budget: hook と同じく予算停止を記録 / compact: 予算停止に加えて compact を記録(閾値をすり抜けた形)/ hole: HANDOFF.md に /amend を書く /
 //   blocked: 質問の画面で止まる / stalled: 送信後に動かない / newsession: /clear なしに session が変わる /
@@ -68,12 +69,15 @@ if (args[1] === "read") { console.log("screen tail"); process.exit(0); }
 if (args[1] === "prompt") {
   const text = args[3];
   if (s.status === "blocked") fail("agent_blocked");
-  if (text === "/clear" || text === "/new") {
-    if (!s.ignoreClear) { s.n += 1; s.session = "sess-" + s.n; }
+  if (text === "/clear") {
+    if (s.host === "codex") s.fresh = !s.ignoreClear;
+    else if (!s.ignoreClear) { s.n += 1; s.session = "sess-" + s.n; }
     if (s.blockOnClear) s.status = "blocked";
     save();
     ok(agent());
   }
+  if (text === "/new") fail("bad_args"); // Codex の /new は worktrees 機能が有効だと選択画面で止まるので使わない
+  if (s.fresh) { s.fresh = false; s.n += 1; s.session = "sess-" + s.n; save(); }
   if (text.startsWith("/rename ")) {
     if (!s.ignoreRename) s.title = text.slice("/rename ".length);
     save();
@@ -97,7 +101,9 @@ if (args[1] === "prompt") {
     fs.writeFileSync(todo, fs.readFileSync(todo, "utf8").replace(new RegExp("(\\\\| " + task + " \\\\|[^\\\\n]*)\\\\[ \\\\]"), "$1[x]"));
   }
   if (action === "budget" || action === "compact") {
-    const cur = JSON.parse(fs.readFileSync(sessionFile(), "utf8"));
+    // 本物の hook(updateSession)と同じく、ループがまだ書いていなければ作る(Codex はループが送った後に書く)
+    const cur = fs.existsSync(sessionFile()) ? JSON.parse(fs.readFileSync(sessionFile(), "utf8")) : {};
+    fs.mkdirSync(path.dirname(sessionFile()), { recursive: true });
     cur.budget = { task, root: s.root, stage: 2, pct: 81 }; // compact の場面でも予算停止は立っている(閾値をすり抜けた形)
     if (action === "compact") cur.compact = { at: Date.now(), trigger: "auto" };
     fs.writeFileSync(sessionFile(), JSON.stringify(cur));
@@ -234,13 +240,30 @@ test("checkpoint 以後の完了が 5 件で --no-follow-up なら、/follow-up 
   } finally { t.cleanup(); }
 });
 
-test("Codex のペインには /new と $execute-task を送り、済んだ T は飛ばす", () => {
-  const t = setup({ host: "codex", scenario: { T2: ["complete"] }, todo: "| #1-1 | T1 | x | — | [x] |\n| #1-2 | T2 | y | — | [ ] |\n" });
+test("Codex のペインには /clear と $execute-task を送り、送った後に変わった session に状態を書く。済んだ T は飛ばす", () => {
+  let t = setup({ host: "codex", scenario: { T2: ["complete"] }, todo: "| #1-1 | T1 | x | — | [x] |\n| #1-2 | T2 | y | — | [ ] |\n" });
   try {
     const { code, json } = t.run("--tasks", "T1..T2");
     assert.equal(code, 0, JSON.stringify(json));
     assert.deepEqual(json.tasks_skipped, ["T1"]);
-    assert.deepEqual(t.prompts(), ["/new", "$execute-task T2"]);
+    assert.deepEqual(t.prompts(), ["/clear", "$execute-task T2"]);
+    assert.deepEqual({ task: t.session("sess-1").loop.task, host: t.session("sess-1").host }, { task: "T2", host: "codex" });
+  } finally { t.cleanup(); }
+
+  t = setup({ host: "codex", scenario: { T1: ["budget", "complete"] } });
+  try {
+    const { code, json } = t.run("--tasks", "T1");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(t.prompts(), ["/clear", "$execute-task T1", "/clear", "$execute-task T1"], "予算停止は新しい session の budget で読む");
+    assert.equal(t.session("sess-2").loop.attempt, 2);
+  } finally { t.cleanup(); }
+
+  t = setup({ host: "codex", ignoreClear: true, scenario: { T1: ["complete"] } });
+  try {
+    const { code, json } = t.run("--tasks", "T1", "--clear-timeout-ms", "1200");
+    assert.equal(code, 1);
+    assert.equal(json.reason, "new_session_not_detected", "前の会話に届いた T は完了しても次へ進まない");
+    assert.deepEqual(t.prompts(), ["/clear", "$execute-task T1"]);
   } finally { t.cleanup(); }
 });
 
@@ -380,6 +403,16 @@ test("同じプロジェクトにペインが無ければ隣に作って起動�
     assert.equal(started.pane, "w1:p2");
     assert.deepEqual(started.extra, ["--name", "repo loop", "--model", "claude-opus-5-5"]);
   } finally { t.cleanup(); }
+  t = setup({ agents: "none" });
+  try {
+    const { code, json } = t.runAuto("T1", "--dry-run");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(json.would_start, { kind: "claude", args: ["--name", "repo loop"] });
+    assert.equal(json.target, null);
+    assert.deepEqual(json.prompts, ["/execute-task T1"]);
+    assert.equal(t.state().splits, undefined, "--dry-run はペインを作らない");
+    assert.equal(t.state().started, undefined);
+  } finally { t.cleanup(); }
   t = setup({ agents: "many" });
   try {
     const { code, json } = t.runAuto("T1");
@@ -457,7 +490,7 @@ test("Codex のペインを起動する時は名前を付けず、前提検査�
     const { code, json } = t.runAuto("T1", "--kind", "codex");
     assert.equal(code, 0, JSON.stringify(json));
     assert.deepEqual(t.state().started.extra, []);
-    assert.deepEqual(t.prompts(), ["/new", "$execute-task T1"]);
+    assert.deepEqual(t.prompts(), ["/clear", "$execute-task T1"]);
   } finally { t.cleanup(); }
   t = setup({ agents: "none" });
   try {

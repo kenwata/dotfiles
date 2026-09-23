@@ -3,7 +3,8 @@
 // TMPDIR に置かないのは、ループのシェルと Claude / Codex のプロセスで TMPDIR が同じとは限らないため。
 //
 //   sessions/<session_id>.json   { session_id, host, loop, budget, compact, updated_at }
-//     loop    … ループが /execute-task を送る前に書く({ target, task, root, attempt, started_at, loop_pid })。
+//     loop    … ループが /execute-task を送る前(Codex は送って session_id が変わった後。cli.mjs の openTurn)に書く
+//               ({ target, task, root, attempt, started_at, loop_pid })。
 //               check-stop-question.sh はこれがあるセッションを差し戻さない(無人の実行で問いかけは届かない)
 //     budget  … hook が段を上げた時に書く({ task, root, stage, pct, window, source, at, stage1_at, stage2_at, notice_pct })
 //     compact … hook が compact を検知した時に書く({ at, trigger })。ループはこれを見て止まる
