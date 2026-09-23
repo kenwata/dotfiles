@@ -54,6 +54,7 @@ import {
   takeSnapshot, validateResult,
 } from "./core.mjs";
 import { lineSplitter, renderEvent, renderSummary } from "./status.mjs";
+import { readPlan, rootSlug, runsDir, stateDir, taskDir } from "./worklog.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULTS = { timeout: 1200, maxPacket: 12 * 1024, maxAllow: 3, peakThreshold: 0.6, family: "luna" };
@@ -71,33 +72,9 @@ function emit(report, runDir, code) {
   process.exitCode = code;
 }
 
-function stateDir() {
-  const base = process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local", "state");
-  return path.join(base, "claude-codex-worker");
-}
-
-function runsDir() {
-  return path.join(stateDir(), "runs");
-}
-
-// プロジェクトごとの置き場の名前。~/.claude/projects/ と同じく、ルートのパスの記号を - にしたもの
-const rootSlug = (root) => root.replace(/[^A-Za-z0-9]/g, "-");
-
 // 状態行のプロジェクトごとのログ
 function statusLogPath(root) {
   return path.join(stateDir(), "status", `${rootSlug(root)}.log`);
-}
-
-// タスクのステップ計画と packet の写しの置き場。セッションの scratchpad と違い、場所がタスクで決まる
-function taskDir(root, task) {
-  return path.join(stateDir(), "tasks", rootSlug(root), task);
-}
-
-function readPlan(root, task) {
-  const file = path.join(taskDir(root, task), "plan.md");
-  let text;
-  try { text = fs.readFileSync(file, "utf8"); } catch { return null; }
-  return { file, ...parsePlan(text) };
 }
 
 // 状態行の前置きのステップ表記。計画があれば全体の何番目かを添える
