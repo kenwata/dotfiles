@@ -28,6 +28,7 @@ prepend to `PATH`, and others probe `PATH` to decide whether to configure anythi
 | `00-path.zsh` | Bootstrap | Homebrew, `~/.local/bin`, Ghostty |
 | `10-editor.zsh` | General | `EDITOR` / `VISUAL` |
 | `11-aliases.zsh` | General | Command aliases |
+| `12-unattended-shell.zsh` | General | Drops prezto's `-i` aliases and `noclobber` when stdin is not a terminal |
 | `20-rust.zsh` | Tool | Sources `~/.cargo/env`, which prepends `~/.cargo/bin` |
 | `30-node.zsh` | Tool | Sets `PNPM_HOME` and prepends it |
 | `40-aws.zsh` | Tool | AWS CLI completion, profile, helper functions |
