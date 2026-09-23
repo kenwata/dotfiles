@@ -9,7 +9,10 @@
 //                                    Claude / Codex のペインを herdr から探す(同じタブを優先)。無ければ隣にペインを作って
 //                                    起動する(--kind claude|codex、--model <ID> で起動時のモデル)
 //   その他: [--root <プロジェクトルート>] [--retry-max <回数>] [--task-timeout-min <分。既定 180>]
-//          [--clear-timeout-ms <既定 30000>] [--settle-sec <既定 90>] [--dry-run]
+//          [--clear-timeout-ms <既定 30000>] [--settle-sec <既定 90>] [--no-follow-up] [--dry-run]
+//   checkpoint 以後の完了が 5 件に達したら、次の T を送る前に新しいセッションで /follow-up を送る(既定)。checkpoint の
+//   コミット(trailer Follow-Up-Checkpoint: true)が増えたら続け、/follow-up が利用者への問いで止まれば(blocked)そこで止まる。
+//   --no-follow-up なら 5 件で follow_up_required として止まる
 //
 // 経緯(2026-09-23): 利用者はタスクの間で /clear を打ち、compact(自動要約)による情報消失を避けてきた。複数の T を
 // 続けて回したいが、1 つのセッションで続けるとコンテキストが積み上がる。そこで T ごとに /clear した新しい
@@ -34,7 +37,7 @@ import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { activeWorkerLock, gitRoot } from "../../check-task-scope.mjs";
 import {
-  committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, openTasks, parseTaskList,
+  checkpointSince, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, openTasks, parseTaskList,
 } from "./decide.mjs";
 import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, agentWait, available, paneSplit } from "./herdr.mjs";
 import { loopStateDir, readConfig, readSession, sweep, updateSession } from "./session-state.mjs";
@@ -186,6 +189,39 @@ function clearSession(ctx) {
   }
 }
 
+// checkpoint 以後の完了が上限に達した時、次の T の前に /follow-up を新しいセッションで送る。成果物(checkpoint の
+// コミットが増えたか)で判定する。/follow-up が利用者への問い(要確認の回収など)で止まれば blocked として人へ渡す
+function runFollowUp(ctx) {
+  let session;
+  try {
+    log("follow-up", "clear");
+    session = clearSession(ctx);
+  } catch (error) {
+    return { action: "stop", reason: error.code === "blocked_after_clear" || error.code === "clear_not_detected" ? error.code : "clear_failed", details: { error: error.message } };
+  }
+  updateSession(session, {
+    host: ctx.host,
+    loop: { target: ctx.target, task: "follow-up", root: ctx.root, attempt: 1, started_at: Date.now(), loop_pid: process.pid },
+    budget: null, compact: null,
+  });
+  const headBefore = headOf(ctx.root);
+  const text = `${ctx.host === "codex" ? "$" : "/"}follow-up`;
+  const deadline = Date.now() + ctx.taskTimeoutMs;
+  log("follow-up", `send "${text}" (session ${session.slice(0, 8)})`);
+  try {
+    const agent = agentPrompt(ctx.target, text, { wait: true, timeoutMs: ctx.taskTimeoutMs });
+    if (agent?.agent_status === "blocked") return { action: "stop", reason: "follow_up_question", session };
+    if (agent?.agent_status === "unknown") return { action: "stop", reason: "unknown", session };
+  } catch (error) {
+    const reason = { agent_blocked: "blocked_before_send", agent_prompt_stalled: "stalled", timeout: "timeout" }[error.code] ?? "herdr_error";
+    return { action: "stop", reason, session, details: { error: error.message } };
+  }
+  const settled = settle(ctx, deadline, () => checkpointSince(ctx.root, headBefore));
+  if (settled.stop) return { action: "stop", reason: settled.stop === "blocked" ? "follow_up_question" : settled.stop, session, details: settled.detail ? { error: settled.detail } : undefined };
+  if (!checkpointSince(ctx.root, headBefore)) return { action: "stop", reason: "follow_up_incomplete", session, details: { dirty: dirtyPaths(ctx.root) } };
+  return { action: "continue", session };
+}
+
 function runTask(ctx, task, attempt) {
   const info = findTask(ctx.root, task);
   if (!info) return { action: "stop", reason: "task_not_found" };
@@ -193,8 +229,16 @@ function runTask(ctx, task, attempt) {
   if (info.state === "-") return { action: "stop", reason: "task_closed" };
   const open = openDependencies(ctx.root, task);
   if (open.length > 0) return { action: "stop", reason: "dependency_open", details: { open } };
-  const since = completedSinceCheckpoint(ctx.root);
-  if (since && since.count >= CHECKPOINT_LIMIT) return { action: "stop", reason: "follow_up_required", details: since };
+  let since = completedSinceCheckpoint(ctx.root);
+  if (since && since.count >= CHECKPOINT_LIMIT) {
+    if (!ctx.followUp || ctx.followUpBefore.has(task)) return { action: "stop", reason: "follow_up_required", details: since };
+    ctx.followUpBefore.add(task); // 同じ T の前で /follow-up を繰り返さない
+    const outcome = runFollowUp(ctx);
+    log("follow-up", `${outcome.action}: ${outcome.reason ?? "checkpoint"}`);
+    if (outcome.action !== "continue") return outcome;
+    since = completedSinceCheckpoint(ctx.root);
+    if (since && since.count >= CHECKPOINT_LIMIT) return { action: "stop", reason: "follow_up_required", details: since };
+  }
 
   let session;
   try {
@@ -251,7 +295,7 @@ function main() {
       options: {
         target: { type: "string" }, tasks: { type: "string" }, root: { type: "string" }, "retry-max": { type: "string" },
         "task-timeout-min": { type: "string" }, "clear-timeout-ms": { type: "string" }, "settle-sec": { type: "string" },
-        "dry-run": { type: "boolean" }, kind: { type: "string" }, model: { type: "string" },
+        "dry-run": { type: "boolean" }, kind: { type: "string" }, model: { type: "string" }, "no-follow-up": { type: "boolean" },
       },
     });
   } catch (error) {
@@ -275,11 +319,13 @@ function main() {
     taskTimeoutMs: Number(values["task-timeout-min"] ?? 180) * 60_000,
     clearTimeoutMs: Number(values["clear-timeout-ms"] ?? 30_000),
     settleMs: Number(values["settle-sec"] ?? 90) * 1000,
+    followUp: !values["no-follow-up"],
+    followUpBefore: new Set(),
   };
   const texts = checked.tasks.map((t) => `${ctx.host === "codex" ? "$" : "/"}execute-task ${t}`);
   log(null, `target ${ctx.target} (${ctx.host}${checked.started ? "、隣に起動" : ""}) tasks ${checked.tasks.join(",")} (${checked.tasksFrom})`);
   if (values["dry-run"]) {
-    finish({ stopped: false, reason: "dry_run", target: ctx.target, host: ctx.host, root: ctx.root, started: checked.started, tasks: checked.tasks, tasks_from: checked.tasksFrom, prompts: texts, retry_max: ctx.retryMax }, 0);
+    finish({ stopped: false, reason: "dry_run", target: ctx.target, host: ctx.host, root: ctx.root, started: checked.started, tasks: checked.tasks, tasks_from: checked.tasksFrom, prompts: texts, retry_max: ctx.retryMax, follow_up: ctx.followUp }, 0);
     return;
   }
   sweep();

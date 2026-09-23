@@ -96,6 +96,13 @@ export function committedSince(root, head, task) {
   return subjects.split("\n").some((s) => taskPattern(task).test(s));
 }
 
+// head 以後の first-parent に、Follow-Up-Checkpoint: true の trailer を持つコミット(/follow-up の checkpoint)が増えたか
+export function checkpointSince(root, head) {
+  let log;
+  try { log = git(root, ["log", "--first-parent", "--format=%H%x1f%(trailers:key=Follow-Up-Checkpoint,valueonly)%x1e", head ? `${head}..HEAD` : "HEAD"]); } catch { return false; }
+  return log.split("\x1e").some((record) => (record.split("\x1f")[1] ?? "").trim().split("\n").includes("true"));
+}
+
 // 最新の Follow-Up-Checkpoint 以後に [x] になった異なる T の数(execute-task 手順1 の数え方。amend のコミットは数えない)。
 // checkpoint が無ければ null(execute-task もこの制限だけでは止まらない)
 export function completedSinceCheckpoint(root) {

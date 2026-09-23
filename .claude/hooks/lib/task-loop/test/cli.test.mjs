@@ -68,6 +68,13 @@ if (args[1] === "prompt") {
     save();
     ok(agent());
   }
+  if (/follow-up$/.test(text)) {
+    const fu = (s.scenario["follow-up"] || []).shift() || "nothing";
+    if (fu === "checkpoint") git("commit", "-q", "--allow-empty", "-m", "chore: follow-up checkpoint\\n\\nFollow-Up-Checkpoint: true");
+    if (fu === "question") s.status = "blocked";
+    save();
+    ok(agent());
+  }
   const task = (text.match(/execute-task (T\\d+)/) || [])[1];
   const action = (s.scenario[task] || []).shift() || "nothing";
   save();
@@ -203,13 +210,13 @@ test("穴の記録・依存の未完了・質問の画面・送信後に動か�
   } finally { t.cleanup(); }
 });
 
-test("checkpoint 以後の完了が 5 件なら /follow-up が要るとして送らずに止まる", () => {
+test("checkpoint 以後の完了が 5 件で --no-follow-up なら、/follow-up が要るとして送らずに止まる", () => {
   const rows = Array.from({ length: 6 }, (_, i) => `| #1-${i + 1} | T${i + 1} | x | — | [${i < 5 ? "x" : " "}] |`);
   const t = setup({ todo: rows.join("\n") + "\n" });
   try {
     git(t.root, "commit", "-q", "--allow-empty", "-m", "chore: 総点検\n\nFollow-Up-Checkpoint: true");
     for (let i = 1; i <= 5; i += 1) git(t.root, "commit", "-q", "--allow-empty", "-m", `feat: T${i}`);
-    const { json } = t.run("--tasks", "T6");
+    const { json } = t.run("--tasks", "T6", "--no-follow-up");
     assert.equal(json.reason, "follow_up_required");
     assert.equal(json.details.count, 5);
     assert.deepEqual(t.prompts(), []);
@@ -375,5 +382,45 @@ test("同じプロジェクトにペインが無ければ隣に作って起動�
   t = setup({ todo: "| #1-1 | T1 | 済み | — | [x] |\n" });
   try {
     assert.match(t.runAuto().json.errors.join(), /未着手.*が無い/);
+  } finally { t.cleanup(); }
+});
+
+// checkpoint 以後に 5 件完了した状態(T1〜T5 が [x]、T6 が [ ])を作る
+function fiveDone(scenario, todoExtra = "") {
+  const rows = Array.from({ length: 6 }, (_, i) => `| #1-${i + 1} | T${i + 1} | x | — | [${i < 5 ? "x" : " "}] |`);
+  const t = setup({ scenario, todo: rows.join("\n") + "\n" + todoExtra });
+  git(t.root, "commit", "-q", "--allow-empty", "-m", "chore: 総点検\n\nFollow-Up-Checkpoint: true");
+  for (let i = 1; i <= 5; i += 1) git(t.root, "commit", "-q", "--allow-empty", "-m", `feat: T${i}`);
+  return t;
+}
+
+test("完了が 5 件に達したら /follow-up を送り、checkpoint が増えたら次の T へ進む", () => {
+  let t = fiveDone({ "follow-up": ["checkpoint"], T6: ["complete"] });
+  try {
+    const { code, json } = t.runAuto("T6");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(t.prompts(), ["/clear", "/follow-up", "/clear", "/execute-task T6"]);
+    assert.equal(t.session("sess-1").loop.task, "follow-up");
+  } finally { t.cleanup(); }
+
+  t = fiveDone({ T6: ["complete"] });
+  try {
+    const { json } = t.runAuto("T6", "--no-follow-up");
+    assert.equal(json.reason, "follow_up_required");
+    assert.deepEqual(t.prompts(), [], "--no-follow-up なら何も送らずに止まる");
+  } finally { t.cleanup(); }
+});
+
+test("/follow-up が利用者への問いで止まれば人へ渡し、checkpoint が増えなければ止まる", () => {
+  let t = fiveDone({ "follow-up": ["question"] });
+  try {
+    const { json } = t.runAuto("T6");
+    assert.equal(json.reason, "follow_up_question");
+    assert.deepEqual(t.prompts(), ["/clear", "/follow-up"]);
+  } finally { t.cleanup(); }
+  t = fiveDone({ "follow-up": ["nothing"] });
+  try {
+    const { json } = t.runAuto("T6");
+    assert.equal(json.reason, "follow_up_incomplete");
   } finally { t.cleanup(); }
 });
