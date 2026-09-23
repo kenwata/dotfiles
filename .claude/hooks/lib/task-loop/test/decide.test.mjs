@@ -7,7 +7,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseDependencies, readTaskScope } from "../../../check-task-scope.mjs";
 import {
-  committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, parseTaskList,
+  committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, openTasks, parseTaskList,
 } from "../decide.mjs";
 
 const TODO = `| # | T | タスク | 実 | 状態 |
@@ -136,5 +136,14 @@ test("HANDOFF の /elaborate docs/design/… は再計画への差し戻しと�
     fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "- 次の一手: /elaborate docs/design/x.md(穴の記録: 目的が変わる)\n");
     assert.equal(handoffSignals(t.root, "T5").elaborate, true);
     assert.equal(judge({ state: " ", committed: false, dirty: [], sessionChanged: false, compacted: false, budgetStage: 2, handoff: handoffSignals(t.root, "T5"), retries: 0, retryMax: 2 }).reason, "hole_recorded");
+  } finally { t.cleanup(); }
+});
+
+test("openTasks は TODO.md のタスク表で [ ] の T を上から順に返し、計画表の行は数えない", () => {
+  const t = fixture();
+  try {
+    assert.deepEqual(openTasks(t.root), ["T5", "T6", "T7", "T8", "T70"]);
+    fs.writeFileSync(path.join(t.root, "TODO.md"), "| #1 | 計画 | docs/design/x.md | [ ] |\n");
+    assert.deepEqual(openTasks(t.root), []);
   } finally { t.cleanup(); }
 });

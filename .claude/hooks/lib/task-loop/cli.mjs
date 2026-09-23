@@ -2,10 +2,14 @@
 // 連続実行ループ: 利用者が手で打っていた「/clear → /execute-task T<n>」を、herdr で動いている対話セッションへ
 // 機械的に送り、T を 1 件ずつ新しいセッションで実行する。進む・再送する・止まるの判定は成果物だけで行う。
 //
-// 呼び出し規約(herdr のペインの中の端末から。HERDR_ENV=1 が要る):
-//   node ~/.claude/hooks/lib/task-loop/cli.mjs run --target <pane_id|エージェント名> --tasks <T12..T16 | T12,T13 | 混在>
-//        [--root <プロジェクトルート>] [--retry-max <回数>] [--task-timeout-min <分。既定 180>]
-//        [--clear-timeout-ms <既定 30000>] [--settle-sec <既定 90>] [--dry-run]
+// 呼び出し規約(herdr のペインの中の端末から。HERDR_ENV=1 が要る。zsh の alias `task-loop` = `node <このファイル> run`):
+//   task-loop                       … カレントディレクトリのプロジェクトで、TODO.md の未着手の T を上から順に回す
+//   task-loop T12..T16              … 範囲(T12,T15 の列挙、混在も可)。--tasks <指定> でも同じ
+//   task-loop --target <pane_id|名前> … 送る先のペインを指定する。省略時は同じプロジェクト(git ルート)で入力待ちの
+//                                    Claude / Codex のペインを herdr から探す(同じタブを優先)。無ければ隣にペインを作って
+//                                    起動する(--kind claude|codex、--model <ID> で起動時のモデル)
+//   その他: [--root <プロジェクトルート>] [--retry-max <回数>] [--task-timeout-min <分。既定 180>]
+//          [--clear-timeout-ms <既定 30000>] [--settle-sec <既定 90>] [--dry-run]
 //
 // 経緯(2026-09-23): 利用者はタスクの間で /clear を打ち、compact(自動要約)による情報消失を避けてきた。複数の T を
 // 続けて回したいが、1 つのセッションで続けるとコンテキストが積み上がる。そこで T ごとに /clear した新しい
@@ -30,9 +34,9 @@ import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { activeWorkerLock, gitRoot } from "../../check-task-scope.mjs";
 import {
-  committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, parseTaskList,
+  committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, openDependencies, openTasks, parseTaskList,
 } from "./decide.mjs";
-import { HerdrError, agentGet, agentPrompt, agentRead, agentWait, available } from "./herdr.mjs";
+import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, agentWait, available, paneSplit } from "./herdr.mjs";
 import { loopStateDir, readConfig, readSession, sweep, updateSession } from "./session-state.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -60,23 +64,70 @@ function resumeCheck(root, task) {
   try { return JSON.parse(result.stdout); } catch { return null; }
 }
 
-function preflight(args) {
+// --target が無い時に送る先を決める。同じプロジェクト(git ルート)で入力待ちの Claude / Codex のペインを、
+// 呼び出し元と同じタブを優先して 1 つ選ぶ。無ければ隣にペインを作って起動する(このターンの利用者の
+// 手作業を無くすため)。候補が複数なら選ばず止まる
+function pickAgent(root, args) {
+  let agents;
+  try { agents = agentList(); } catch (error) { return { errors: [`herdr agent list に失敗: ${error.message}`] }; }
+  const inRoot = agents.filter((a) => (a.agent === "claude" || a.agent === "codex") && a.pane_id !== process.env.HERDR_PANE_ID
+    && gitRoot(a.foreground_cwd ?? a.cwd ?? "") === root); // 呼び出し元のペイン(ループを動かしている側)は送る先にしない
+  const ready = inRoot.filter((a) => ["idle", "done"].includes(a.agent_status));
+  const sameTab = ready.filter((a) => a.tab_id && a.tab_id === process.env.HERDR_TAB_ID);
+  const pool = sameTab.length > 0 ? sameTab : ready;
+  if (pool.length === 1) return { agent: pool[0] };
+  if (pool.length > 1) {
+    return { errors: [`同じプロジェクトで入力待ちのペインが複数ある。--target で選ぶ: ${pool.map((a) => `${a.pane_id}(${a.agent})`).join(", ")}`] };
+  }
+  if (inRoot.length > 0) {
+    return { errors: [`同じプロジェクトのペイン ${inRoot.map((a) => `${a.pane_id}(${a.agent_status})`).join(", ")} が入力待ちではない。終わるのを待つか、--target で別のペインを選ぶ`] };
+  }
+  const kind = args.kind ?? "claude";
+  const name = `task-loop-${Date.now().toString(36)}`;
+  try {
+    const pane = paneSplit({ cwd: root });
+    const started = agentStart(name, { kind, pane, args: args.model ? ["--model", args.model] : [] });
+    const agent = { ...(started ?? agentGet(pane)), pane_id: pane };
+    return { agent, started: { pane, name, kind } };
+  } catch (error) {
+    const hint = error.code === "agent_not_ready"
+      ? "(新しいペインで確認の画面(フォルダの信頼など)が出ている。答えてから task-loop をもう一度打つ)"
+      : "";
+    return { errors: [`ペインの自動起動に失敗: ${error.message}${hint}`] };
+  }
+}
+
+function preflight(args, positionalTasks) {
+  if (!available()) return { errors: ["herdr の中で実行していない(HERDR_ENV=1 と herdr が要る)"] };
   const errors = [];
-  const { tasks, errors: taskErrors } = parseTaskList(args.tasks);
-  errors.push(...taskErrors);
-  if (!args.target) errors.push("--target が無い(herdr の pane_id かエージェント名)");
-  if (!available()) errors.push("herdr の中で実行していない(HERDR_ENV=1 と herdr が要る)");
+  let root = args.root ? gitRoot(path.resolve(args.root)) : null;
+  let agent = null;
+  let started = null;
+  if (args.target) {
+    try { agent = agentGet(args.target); } catch (error) { return { errors: [`${args.target} を herdr で見つけられない: ${error.message}`] }; }
+    root ??= gitRoot(path.resolve(agent.foreground_cwd ?? agent.cwd ?? "."));
+    if (!root) return { errors: [`git のリポジトリではない: ${args.root ?? agent.cwd}`] };
+  } else {
+    root ??= gitRoot(process.cwd());
+    if (!root) return { errors: ["--target も --root も無く、カレントディレクトリが git のリポジトリでもない"] };
+    const picked = pickAgent(root, args);
+    if (picked.errors) return picked;
+    agent = picked.agent;
+    started = picked.started ?? null;
+  }
+  const target = args.target ?? agent.pane_id;
+  const host = agent.agent;
+  if (host !== "claude" && host !== "codex") errors.push(`${target} は claude / codex ではない(${host})`);
+  if (!["idle", "done"].includes(agent.agent_status)) errors.push(`${target} が入力を受け付ける状態ではない(${agent.agent_status})`);
+  if (!fs.existsSync(path.join(root, "TODO.md"))) errors.push(`TODO.md が無い: ${root}`);
   if (errors.length > 0) return { errors };
 
-  let agent;
-  try { agent = agentGet(args.target); } catch (error) { return { errors: [`${args.target} を herdr で見つけられない: ${error.message}`] }; }
-  const host = agent.agent;
-  if (host !== "claude" && host !== "codex") errors.push(`${args.target} は claude / codex ではない(${host})`);
-  if (!["idle", "done"].includes(agent.agent_status)) errors.push(`${args.target} が入力を受け付ける状態ではない(${agent.agent_status})`);
-  const root = gitRoot(path.resolve(args.root ?? agent.foreground_cwd ?? agent.cwd ?? "."));
-  if (!root) errors.push(`git のリポジトリではない: ${args.root ?? agent.cwd}`);
-  else if (!fs.existsSync(path.join(root, "TODO.md"))) errors.push(`TODO.md が無い: ${root}`);
+  const spec = args.tasks ?? positionalTasks ?? null;
+  const parsed = spec ? parseTaskList(spec) : { tasks: openTasks(root), errors: [] };
+  errors.push(...parsed.errors);
+  if (!spec && parsed.tasks.length === 0) errors.push(`TODO.md に未着手([ ])の T が無い: ${root}`);
   if (errors.length > 0) return { errors };
+  const tasks = parsed.tasks;
 
   const dirty = dirtyPaths(root);
   if (dirty.length > 0) {
@@ -85,7 +136,7 @@ function preflight(args) {
       errors.push(`作業ツリーに未コミットの変更がある(${tasks[0]} の作業記録で説明できない): ${(resume?.unexplained_dirty ?? dirty).join(", ")}`);
     }
   }
-  return { errors, tasks, host, root };
+  return { errors, tasks, host, root, target, started, tasksFrom: spec ? "args" : "TODO.md" };
 }
 
 // 送った後、成果物の判定に進んでよいところまで待つ。Codex worker の実行中(ロック)と working の間は待ち、
@@ -200,7 +251,7 @@ function main() {
       options: {
         target: { type: "string" }, tasks: { type: "string" }, root: { type: "string" }, "retry-max": { type: "string" },
         "task-timeout-min": { type: "string" }, "clear-timeout-ms": { type: "string" }, "settle-sec": { type: "string" },
-        "dry-run": { type: "boolean" },
+        "dry-run": { type: "boolean" }, kind: { type: "string" }, model: { type: "string" },
       },
     });
   } catch (error) {
@@ -208,26 +259,27 @@ function main() {
     return;
   }
   if (args.positionals[0] !== "run") {
-    finish({ stopped: true, reason: "preflight_failed", errors: ["usage: cli.mjs run --target <pane_id|名前> --tasks <T12..T16> [...]"] }, 2);
+    finish({ stopped: true, reason: "preflight_failed", errors: ["usage: task-loop [T12..T16] [--target <pane_id|名前>] [--tasks <T12..T16>] [...](= cli.mjs run ...)"] }, 2);
     return;
   }
   const values = args.values;
-  const checked = preflight(values);
+  const checked = preflight(values, args.positionals[1] ?? null);
   if (checked.errors.length > 0) {
     finish({ stopped: true, reason: "preflight_failed", errors: checked.errors, target: values.target ?? null }, 2);
     return;
   }
   const config = readConfig();
   const ctx = {
-    target: values.target, host: checked.host, root: checked.root,
+    target: checked.target, host: checked.host, root: checked.root,
     retryMax: Number(values["retry-max"] ?? config.retry_max),
     taskTimeoutMs: Number(values["task-timeout-min"] ?? 180) * 60_000,
     clearTimeoutMs: Number(values["clear-timeout-ms"] ?? 30_000),
     settleMs: Number(values["settle-sec"] ?? 90) * 1000,
   };
   const texts = checked.tasks.map((t) => `${ctx.host === "codex" ? "$" : "/"}execute-task ${t}`);
+  log(null, `target ${ctx.target} (${ctx.host}${checked.started ? "、隣に起動" : ""}) tasks ${checked.tasks.join(",")} (${checked.tasksFrom})`);
   if (values["dry-run"]) {
-    finish({ stopped: false, reason: "dry_run", target: ctx.target, host: ctx.host, root: ctx.root, tasks: checked.tasks, prompts: texts, retry_max: ctx.retryMax }, 0);
+    finish({ stopped: false, reason: "dry_run", target: ctx.target, host: ctx.host, root: ctx.root, started: checked.started, tasks: checked.tasks, tasks_from: checked.tasksFrom, prompts: texts, retry_max: ctx.retryMax }, 0);
     return;
   }
   sweep();

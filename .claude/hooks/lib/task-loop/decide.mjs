@@ -32,6 +32,18 @@ function readText(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return null; }
 }
 
+// TODO.md のタスク表で [ ] の T を、書かれている順に返す(--tasks を省略した時の既定)。計画表の行は T の列が無いので入らない
+export function openTasks(root) {
+  const tasks = [];
+  for (const line of (readText(path.join(root, "TODO.md")) ?? "").split(/\r?\n/)) {
+    if (!/^\|/.test(line)) continue;
+    const cells = line.split("|").map((c) => c.trim());
+    const id = cells.find((c) => /^T\d+$/.test(c));
+    if (id && cells.includes("[ ]") && !tasks.includes(id)) tasks.push(id);
+  }
+  return tasks;
+}
+
 // TODO.md、無ければ archive から T を探す(完了・廃止のタスクは archive へ逐語で移る)
 export function findTask(root, task) {
   for (const rel of ["TODO.md", ...ARCHIVES]) {

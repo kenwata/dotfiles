@@ -294,8 +294,9 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
    設計の穴を見つけたら: 穴の記録を HANDOFF に残して停止 → /amend T<n>(設計書の該当節と未着手タスクを改訂)→ 6 へ戻る。
    設計書の目的・スコープが変わる時だけ 4 へ戻る(分類の正は BLUEPRINT §6「変更の三段分類」)
    コンテキストが閾値に達したら(予算停止): 作業記録と HANDOFF を書いてコミットせずに終える → /clear → /execute-task T<n>(同じ T を作業記録から再開)。
-   複数の T は herdr のペインの端末から `node ~/.claude/hooks/lib/task-loop/cli.mjs run --target <pane_id> --tasks T12..T16` で
-   続けて回せる(T ごとに /clear。穴の記録・関門の質問・依存の未完了・checkpoint 以後 5 件・compact などで止まり、理由を JSON で出す)
+   複数の T は、herdr のペインの端末でプロジェクトのディレクトリから `task-loop`(zsh の alias。引数なしで TODO.md の未着手の T を
+   上から順に、`task-loop T12..T16` で範囲)と打てば続けて回せる。送る先は同じプロジェクトで入力待ちのペインを自動で選び、無ければ
+   隣に作って起動する(T ごとに /clear。穴の記録・関門の質問・依存の未完了・checkpoint 以後 5 件・compact などで止まり、理由を JSON で出す)
 7. 節目で /follow-up → checkpoint以後の複数タスクを横断して総点検し、次フェーズは 4 へ戻る。
    HANDOFF の要確認は、/execute-task の着手前(対象 T を回収点に持つ項目)と /follow-up の冒頭(全項目)で利用者に問い、決着を decisions.md に書く
 ````

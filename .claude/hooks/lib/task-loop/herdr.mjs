@@ -61,3 +61,25 @@ export function agentWait(target, { until = [], timeoutMs } = {}) {
 export function agentRead(target, lines = 80) {
   try { return call(["agent", "read", target, "--source", "recent-unwrapped", "--lines", String(lines)]).text; } catch { return ""; }
 }
+
+// このサーバーの全エージェント({ agent, agent_status, agent_session, cwd, foreground_cwd, pane_id, tab_id, ... })
+export function agentList() {
+  return call(["agent", "list"]).json?.result?.agents ?? [];
+}
+
+// 呼び出し元のペインの隣に、フォーカスを移さずにペインを作る(HERDR_PANE_ID の中から呼ぶ)。新しい pane_id を返す
+export function paneSplit({ cwd, direction = "right" } = {}) {
+  const args = ["pane", "split", "--current", "--direction", direction, "--no-focus"];
+  if (cwd) args.push("--cwd", cwd);
+  const pane = call(args).json?.result?.pane;
+  if (!pane?.pane_id) throw new HerdrError("no_pane", "pane split の結果に pane_id が無い");
+  return pane.pane_id;
+}
+
+// 既存のシェルのペインでエージェントを起動し、入力を受け付けるまで待つ。起動時に確認の画面で止まると
+// agent_not_ready(HerdrError)になる
+export function agentStart(name, { kind = "claude", pane, args = [], timeoutMs = 90_000 } = {}) {
+  const argv = ["agent", "start", name, "--kind", kind, "--pane", pane, "--timeout", String(timeoutMs)];
+  if (args.length > 0) argv.push("--", ...args);
+  return call(argv, timeoutMs).json?.result?.agent ?? null;
+}
