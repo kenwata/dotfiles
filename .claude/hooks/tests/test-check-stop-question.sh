@@ -60,6 +60,18 @@ run_case "blocks_using_transcript_when_message_field_absent" 2 "自動ゲート"
 run_case "blocks_with_realistic_input_having_path_but_no_agent_id" 2 "自動ゲート" \
   "$(jq -n --arg p "$transcript" '{hook_event_name: "Stop", session_id: "s1", transcript_path: $p, cwd: "/tmp", stop_hook_active: false, last_assistant_message: "どちらにしますか？"}')"
 
+# 連続実行ループが駆動するセッション(sessions/<id>.json に loop がある)は差し戻さない。無いセッションは従来どおり
+export XDG_STATE_HOME="$work_dir/state"
+mkdir -p "$XDG_STATE_HOME/claude-task-loop/sessions"
+echo '{"session_id":"loop1","loop":{"task":"T7"}}' > "$XDG_STATE_HOME/claude-task-loop/sessions/loop1.json"
+echo '{"session_id":"s2","budget":{"stage":1}}' > "$XDG_STATE_HOME/claude-task-loop/sessions/s2.json"
+run_case "passes_for_loop_driven_session" 0 "" \
+  "$(jq -n '{hook_event_name: "Stop", session_id: "loop1", stop_hook_active: false, last_assistant_message: "どちらにしますか？"}')"
+run_case "blocks_for_session_state_without_loop" 2 "自動ゲート" \
+  "$(jq -n '{hook_event_name: "Stop", session_id: "s2", stop_hook_active: false, last_assistant_message: "どちらにしますか？"}')"
+run_case "blocks_for_session_id_with_path_characters" 2 "自動ゲート" \
+  "$(jq -n '{hook_event_name: "Stop", session_id: "../loop1", stop_hook_active: false, last_assistant_message: "どちらにしますか？"}')"
+
 if [ "$failures" -ne 0 ]; then
   echo "FAILED: $failures"
   exit 1

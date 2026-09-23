@@ -16,6 +16,10 @@
 # 動作: 最終メッセージの末尾が問いかけ・依頼なら exit 2 で差し戻す(理由文は stderr 経由でモデルにだけ
 # 渡る)。差し戻し後の再終了は stop_hook_active=true で素通しするため、1 回の終了につき最大 1 回。
 # 対象外・異常時は何も出さず exit 0(フェイルオープン)。サブエージェントには適用しない。
+#
+# 連続実行ループ(lib/task-loop/cli.mjs)が駆動するセッション(${XDG_STATE_HOME:-~/.local/state}/claude-task-loop/
+# sessions/<session_id>.json に loop がある)も素通しする(2026-09-23)。無人の実行では問いかけに答える人がおらず、
+# 止まったセッションはループが成果物で判定して人へ渡す。手で操作するセッションには影響しない。
 
 # 末尾の何行を「応答の締め」とみなすか。締めの問いかけだけを拾い、本文途中の引用や見出しの「？」を拾わない幅
 readonly CLOSING_LINE_COUNT=3
@@ -29,6 +33,9 @@ input="$(cat)"
 printf '%s' "$input" | jq -e 'type == "object"' >/dev/null 2>&1 || exit 0
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false')" = "true" ] && exit 0
 [ -n "$(printf '%s' "$input" | jq -r '.agent_id // empty')" ] && exit 0
+session_key="$(printf '%s' "$input" | jq -r '.session_id // empty' | tr -d '\n' | tr -c 'A-Za-z0-9._-' '_')"
+loop_state="${XDG_STATE_HOME:-$HOME/.local/state}/claude-task-loop/sessions/${session_key}.json"
+[ -n "$session_key" ] && [ -f "$loop_state" ] && jq -e '.loop != null' "$loop_state" >/dev/null 2>&1 && exit 0
 transcript_path="$(printf '%s' "$input" | jq -r '.transcript_path // empty')"
 
 message="$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)"
