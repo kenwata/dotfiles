@@ -29,7 +29,8 @@
 // 作業ごとに、送る前に checkpoint 以後の完了数を見る(上限なら /follow-up で区間を閉じる)。
 // T ごとの流れ: 前提検査(T の状態・依存)→ /clear → session_id の変化を待つ →
 // sessions/<id>.json に loop を書く(check-stop-question.sh はこのセッションを差し戻さない)→ /execute-task を
-// --wait で送る → 落ち着くのを待つ(worker のロック中・working の間は待ち、idle が --settle-sec 続いたら判定)→
+// --wait で送る → 落ち着くのを待つ(worker のロック中・working・hook が書いたターンの途中の間は待ち、idle が
+// --settle-sec 続いたら判定)→
 // 判定(decide.mjs の judge)。Codex は /clear では session_id が変わらないので、$execute-task を送ってから変化を
 // 確かめて loop を書く(openTurn)。
 //   next  : TODO.md の T が [x] ∧ T を含むコミットが増えた ∧ 作業ツリーが clean
@@ -41,7 +42,8 @@
 // 引数なしで T の間に読む次の一手が回せない時の停止理由: next_step_not_runnable(/elaborate・コマンド無し・引数の形が違う)/
 // next_step_not_open(済んだ T・廃止した T を指す)/ breakdown_repeated(同じ設計書の /breakdown が T の完了を挟まずに続いた)
 // 問い(AskUserQuestion・承認の画面)で blocked になっても止めず、人が答えて動き出すまで待つ(settle)。blocked の間は
-// タスクの制限時間に数えない。/elaborate は対話で詰める工程なのでループに入れない(2026-09-24 利用者決定)。
+// タスクの制限時間に数えない。問いの画面とターンの途中は、herdr の画面の判定に加えて hook(../../loop-turn.mjs)が
+// turns/<id>.json に書いた状態でも見る(herdr は名前の罫線の下の問いの画面を idle と見逃す。turn.mjs)。/elaborate は対話で詰める工程なのでループに入れない(2026-09-24 利用者決定)。
 // 計画工程: 引数なしの時は、次の一手が /breakdown docs/design/<slug>.md なら送り(runBreakdown)、/amend T<n> なら送る。
 // T を位置引数・--tasks で指定した時は範囲を「ここまで」と読み、/breakdown を送らない(範囲が済めば all_done、次の一手は
 // next_step に出す)。/amend・/breakdown が途中で止まった時の再開は無い(人が片付けて打ち直す)
@@ -64,11 +66,13 @@ import {
   loopStep, nextStep, openDependencies, openTasks, parseTaskList, planSlug,
 } from "./decide.mjs";
 import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, agentWait, available, paneSplit, paneTitle } from "./herdr.mjs";
-import { loopStateDir, readConfig, readSession, sweep, updateSession } from "./session-state.mjs";
+import { clearTurn, loopStateDir, readConfig, readSession, readTurn, sweep, updateSession } from "./session-state.mjs";
+import { waitPhase } from "./turn.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_CLI = path.join(here, "..", "codex-worker", "cli.mjs");
-const POLL_MS = 5_000;
+// 状態を見直す間隔。TASK_LOOP_POLL_MS はテストで短くするためだけの上書き
+const POLL_MS = Number(process.env.TASK_LOOP_POLL_MS) > 0 ? Number(process.env.TASK_LOOP_POLL_MS) : 5_000;
 const CHECKPOINT_LIMIT = 5;
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -209,41 +213,68 @@ function handoffTasks(root) {
   return { tasks: step.command === "execute-task" || step.command === "amend" ? [step.arg] : [], step, errors: [] };
 }
 
-// 送った後、成果物の判定に進んでよいところまで待つ。Codex worker の実行中(ロック)と working の間は待ち、
-// idle / done が settle の間続いたら落ち着いたとみなす(worker の完了通知で監督のターンが再開する間を空ける)。
-// blocked(AskUserQuestion・承認の画面)は人の答えを待つ。答えると約 1 秒で working に戻る(2026-09-24 実測:
-// blocked → 回答 → working → idle)。blocked の間は制限時間に数えない。制限時間はエージェントの停滞を見るためのもので、
-// 人の応答の遅さは別物だから。待つ間の上限は設けない(窓の題名が <計画> T<n> / amend / breakdown のまま残り、何を
-// 待たれているかは見える)
-function settle(ctx, deadline, isComplete, logTask) {
+// 利用者の答えを待つ。herdr が blocked を見ていれば、状態が変わるまで herdr agent wait --until で待つ。herdr が
+// 問いの画面を見逃して hook だけが答え待ち(turn の awaiting_user)を書いている時は、POLL_MS だけ待って呼び出し側の
+// 次の周回に任せる。戻り値は null(待った)か、止まる理由 { stop, detail }
+function waitForAnswer(ctx, agentStatus) {
+  if (agentStatus !== "blocked") { sleep(POLL_MS); return null; }
+  try {
+    for (;;) {
+      try { agentWait(ctx.target, { until: ["working", "idle", "done", "unknown"], timeoutMs: 10 * 60_000 }); return null; } catch (error) {
+        if (error.code !== "timeout") throw error;
+      }
+    }
+  } catch (error) { return { stop: "herdr_error", detail: error.message }; }
+}
+
+// ターンの途中を待つ。herdr が working を見ていれば状態が変わるまで(制限時間と 10 分の短い方まで)herdr agent wait で
+// 待つ。herdr が idle と見て hook だけがターンの途中(turn の running)を書いている時は POLL_MS だけ待つ。
+// 戻り値は null(待った)か、止まる理由 { stop, detail }
+function waitWhileBusy(ctx, agentStatus, limit) {
+  if (agentStatus !== "working") { sleep(POLL_MS); return null; }
+  try { agentWait(ctx.target, { timeoutMs: Math.max(1_000, Math.min(limit - Date.now(), 10 * 60_000)) }); } catch (error) {
+    if (error.code !== "timeout") return { stop: "herdr_error", detail: error.message };
+  }
+  return null;
+}
+
+// 送った後、成果物の判定に進んでよいところまで待つ。待ち方は herdr の agent_status と、hook(../../loop-turn.mjs)が
+// turns/<session>.json に書いたターンの状態を併せて決める(turn.mjs の waitPhase。herdr は画面を読んで判定し、
+// 名前の罫線の下の問いの画面やシェルの待ちを idle と見逃すため。経緯は turn.mjs)。
+// - 答え待ち(AskUserQuestion・承認の画面): 人の答えを待ち、その間は制限時間に数えない。制限時間はエージェントの
+//   停滞を見るためのもので、人の応答の遅さは別物だから。待つ間の上限は設けない(窓の題名が <計画> T<n> / amend /
+//   breakdown のまま残り、何を待たれているかは見える)
+// - ターンの途中(working・turn の running)と Codex worker の実行中(ロック): 待つ
+// - それ以外: idle / done が settle の間続いたら落ち着いたとみなす(worker の完了通知で監督のターンが再開する間を空ける)
+function settle(ctx, deadline, isComplete, logTask, session) {
   let quietSince = null;
+  let answerSince = null;
   let limit = deadline;
   for (;;) {
     if (Date.now() > limit) return { stop: "timeout" };
-    if (isComplete()) return {};
+    if (isComplete()) {
+      if (answerSince !== null) log(logTask, "blocked: 答えを受けて再開");
+      return {};
+    }
     let agent;
     try { agent = agentGet(ctx.target); } catch (error) { return { stop: "herdr_error", detail: error.message }; }
-    if (agent.agent_status === "blocked") {
-      const blockedAt = Date.now();
+    if (agent.agent_status === "unknown") return { stop: "unknown" };
+    const phase = waitPhase(agent.agent_status, session ? readTurn(session) : null, Date.now());
+    if (phase !== "awaiting_user" && answerSince !== null) { log(logTask, "blocked: 答えを受けて再開"); answerSince = null; }
+    if (phase === "awaiting_user") {
+      if (answerSince === null) log(logTask, "blocked: 利用者の答えを待つ");
+      answerSince ??= Date.now();
       quietSince = null;
-      log(logTask, "blocked: 利用者の答えを待つ");
-      try {
-        for (;;) {
-          try { agentWait(ctx.target, { until: ["working", "idle", "done", "unknown"], timeoutMs: 10 * 60_000 }); break; } catch (error) {
-            if (error.code !== "timeout") throw error;
-          }
-        }
-      } catch (error) { return { stop: "herdr_error", detail: error.message }; }
-      limit += Date.now() - blockedAt;
-      log(logTask, "blocked: 答えを受けて再開");
+      const waitedFrom = Date.now();
+      const failed = waitForAnswer(ctx, agent.agent_status);
+      if (failed) return failed;
+      limit += Date.now() - waitedFrom;
       continue;
     }
-    if (agent.agent_status === "unknown") return { stop: "unknown" };
-    if (agent.agent_status === "working") {
+    if (phase === "busy") {
       quietSince = null;
-      try { agentWait(ctx.target, { timeoutMs: Math.max(1_000, Math.min(limit - Date.now(), 10 * 60_000)) }); } catch (error) {
-        if (error.code !== "timeout") return { stop: "herdr_error", detail: error.message };
-      }
+      const failed = waitWhileBusy(ctx, agent.agent_status, limit);
+      if (failed) return failed;
       continue;
     }
     if (activeWorkerLock(ctx.root)) {
@@ -323,6 +354,7 @@ function openTurn(ctx, text, { task, attempt }, name, logTask) {
   try {
     if (session) {
       updateSession(session, { ...state, budget: null, compact: null });
+      clearTurn(session);
       log(logTask, `send "${text}" (session ${session.slice(0, 8)})`);
       return { session, agent: agentPrompt(ctx.target, text, { wait: true, timeoutMs: ctx.taskTimeoutMs }) };
     }
@@ -350,7 +382,7 @@ function runFollowUp(ctx, nextTask) {
   const { session } = turn;
   if (turn.stop) return { action: "stop", reason: turn.stop, session, details: turn.details };
   if (turn.agent?.agent_status === "unknown") return { action: "stop", reason: "unknown", session };
-  const settled = settle(ctx, deadline, () => checkpointSince(ctx.root, headBefore), "follow-up");
+  const settled = settle(ctx, deadline, () => checkpointSince(ctx.root, headBefore), "follow-up", session);
   if (settled.stop) return { action: "stop", reason: settled.stop, session, details: settled.detail ? { error: settled.detail } : undefined };
   if (!checkpointSince(ctx.root, headBefore)) return { action: "stop", reason: "follow_up_incomplete", session, details: { dirty: dirtyPaths(ctx.root) } };
   return { action: "continue", session };
@@ -366,7 +398,7 @@ function runPlanning(ctx, { label, text, loopTask, name, outcome }) {
   const { session } = turn;
   if (turn.stop) return { stop: turn.stop, session, details: turn.details };
   if (turn.agent?.agent_status === "unknown") return { stop: "unknown", session };
-  const settled = settle(ctx, deadline, () => outcome() === "done", label);
+  const settled = settle(ctx, deadline, () => outcome() === "done", label, session);
   if (settled.stop) return { stop: settled.stop, session, details: settled.detail ? { error: settled.detail } : undefined };
   const state = readSession(session);
   if (state.compact) return { stop: "compacted", session };
@@ -433,7 +465,7 @@ function runTask(ctx, task, attempt, { amended = false } = {}) {
       amended,
     };
   };
-  const settled = settle(ctx, deadline, () => judge(facts()).action === "next", task);
+  const settled = settle(ctx, deadline, () => judge(facts()).action === "next", task, session);
   if (settled.stop) return { action: "stop", reason: settled.stop, session, details: settled.detail ? { error: settled.detail } : undefined };
   const f = facts();
   return { ...judge(f), session, details: { budget_stage: f.budgetStage, dirty: f.dirty } };

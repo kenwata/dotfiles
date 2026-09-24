@@ -10,6 +10,12 @@
 //     compact … hook が compact を検知した時に書く({ at, trigger })。ループはこれを見て止まる
 //   statusline/<session_id>.json { session_id, at, used_percentage, context_window_size, current_usage, five_hour_pct }
 //     statusline.sh が描画のたびに書く。Claude の使用率の源(hook の入力には使用率が無い)
+//   turns/<session_id>.json      { state, event, at }
+//     ../../loop-turn.mjs が、sessions/<id>.json に loop があるセッション(Claude)でだけ書くターンの状態
+//     (値域と経緯は turn.mjs)。ループは送る前に消し(cli.mjs の openTurn)、settle で読む。sessions/<id>.json に
+//     入れないのは、PostToolUse で並行に走る予算停止の hook と読み書きが競合し、互いの書き込みを消すため
+//     (2026-09-24 のレビューで、並行 40 回のうち budget が 21 回・turn が 10 回消えることを確認)。このファイルは
+//     loop-turn だけが丸ごと置き換える
 //
 // 閾値は ${XDG_CONFIG_HOME:-~/.config}/claude-task-loop/config.json(無ければ既定値)。動いているセッションに
 // 環境変数は届かないので、恒常の設定はファイルだけで持つ。CONTEXT_BUDGET_STAGE1/2 は試験用の上書き。
@@ -73,13 +79,40 @@ export function updateSession(id, patch) {
   return next;
 }
 
+export function turnFile(id) {
+  return path.join(loopStateDir(), "turns", `${sessionKey(id)}.json`);
+}
+
+/**
+ * ターンの状態を読む。
+ * @param {string} id session_id
+ * @returns {{ state: string, event: string, at: number } | null} 無い・読めなければ null
+ */
+export function readTurn(id) {
+  return id ? readJson(turnFile(id)) : null;
+}
+
+/**
+ * ターンの状態を丸ごと置き換える(読んでから書き戻さないので、他の書き手と競合しない)。
+ * @param {string} id session_id
+ * @param {{ state: string, event: string, at: number }} turn turn.mjs の turnFromHook の戻り値
+ */
+export function writeTurn(id, turn) {
+  writeJsonAtomic(turnFile(id), turn);
+}
+
+// ターンの状態を消す(前のターンの記録を次の送信に持ち越さないため)。無ければ何もしない
+export function clearTurn(id) {
+  fs.rmSync(turnFile(id), { force: true });
+}
+
 export function readStatusline(id) {
   return id ? readJson(statuslineFile(id)) : null;
 }
 
 // 48 時間より古いセッションの状態を消す(session_id はセッションごとに変わるので溜まり続けるため)
 export function sweep(maxAgeMs = SWEEP_AGE_MS, now = Date.now()) {
-  for (const dir of ["sessions", "statusline"].map((d) => path.join(loopStateDir(), d))) {
+  for (const dir of ["sessions", "statusline", "turns"].map((d) => path.join(loopStateDir(), d))) {
     let names;
     try { names = fs.readdirSync(dir); } catch { continue; }
     for (const name of names) {

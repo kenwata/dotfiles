@@ -153,7 +153,9 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     それ以外は止まって人へ渡す(2026-09-23。`claude -p` を使わないのは、最終応答の後にバックグラウンドの
     Bash が殺され Codex worker の待機と衝突するため)。穴の記録で止まった T には `/amend T<n>` を、次の一手が
     次の段階の分解なら `/breakdown` を同じループが送り、着地を成果物で確かめて続ける。`/elaborate` は送らない。
-    問いの画面(blocked)では止まらず答えを待つ(2026-09-24)。引数なしの時に次に回す T は HANDOFF.md の次の一手だけで決め、
+    問いの画面(blocked)では止まらず答えを待つ(2026-09-24)。問いの画面とターンの途中は herdr の画面の判定だけでなく、
+    hook(`hooks/loop-turn.sh`)が書くターンの状態でも見る(herdr が名前の罫線の下の問いの画面を idle と見逃し、
+    /follow-up の問いの最中にループが終わった実例による。同日)。引数なしの時に次に回す T は HANDOFF.md の次の一手だけで決め、
     1 回の起動は /follow-up の 1 区間で終える(同日。TODO.md の並びから凍結中の T を拾って止まった実例による)
 
 ## ディレクトリ構成
@@ -168,6 +170,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md の未コミット変更と、未決の要確認(件数・回収点の無い行)を通知(設計方針 7)
 │   ├── check-stop-question.sh   # Stop hook — 問いかけ・依頼で応答を終えようとしたら 1 回だけ差し戻す自律判断ゲート(task-loop が駆動するセッションは素通し)
 │   ├── context-budget.sh/.mjs   # PostToolUse + Stop + PostCompact + SessionStart hook — /execute-task の実行中、compact の前に作業記録を書かせてターンを終えさせる予算停止(Codex と本体を共有。設計方針 17)
+│   ├── loop-turn.sh/.mjs        # UserPromptSubmit + PreToolUse(AskUserQuestion) + PermissionRequest + PostToolUse(+Failure) + Stop(+Failure) hook — task-loop が駆動するセッションのターンの状態(実行中・答え待ち・終了)を記録し、ループが herdr の画面の判定の取りこぼしを補う(設計方針 17)
 │   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
 │   ├── check-task-scope.sh/.mjs # UserPromptSubmit + PreToolUse(Write|Edit) + SubagentStart/Stop hook — /execute-task 実行中に TODO.md の対象パス外への編集を拒否し、レビュー役の返答待ち中は主文脈の編集を、Codex worker の実行中はそのリポジトリへの編集を拒否(Codex と本体を共有)
 │   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認の要否・推奨の向き・可読性のゲート(呼び出しごとに1回 deny→取りやめ or 書き直し。設計方針 12)
