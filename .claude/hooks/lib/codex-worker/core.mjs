@@ -108,19 +108,30 @@ function headEntries(root, paths) {
   return result;
 }
 
-// HEAD・全 ref・index の指紋。worker による commit / stash / ブランチ操作 / add を検出する
-export function repoFingerprint(root) {
+// HEAD・指定範囲の ref・index の指紋。
+// worker による commit / stash / ブランチ操作 / add を検出する。
+// refScope 指定時は、範囲外の ref (refs/stash やほかのブランチ) の変化を見ない。
+// refScope の省略または null は全 ref、ref の完全名の配列はその ref だけを対象にする。
+export function repoFingerprint(root, { refScope } = {}) {
   let head = "";
   try { head = git(root, ["rev-parse", "HEAD"]).trim(); } catch { head = "(no HEAD)"; }
   let symbolic = "";
   try { symbolic = git(root, ["symbolic-ref", "-q", "HEAD"]).trim(); } catch { symbolic = "(detached)"; }
-  const refs = sha1(git(root, ["for-each-ref", "--format=%(refname) %(objectname)"]));
+  const refArgs = ["for-each-ref", "--format=%(refname) %(objectname)"];
+  if (refScope != null) refArgs.push(...refScope);
+  const refOutput = refScope != null && refScope.length === 0
+    ? ""
+    : git(root, refArgs).split("\n")
+      .filter((entry) => refScope == null || refScope.includes(entry.split(" ")[0]))
+      .join("\n");
+  const refs = sha1(refOutput);
   const index = sha1(git(root, ["ls-files", "-s", "-z"]));
   return { head, symbolic, refs, index };
 }
 
-// run 前の状態を runDir に保存する。未コミット・ignored のファイルは内容も退避する(restore 用)
-export function takeSnapshot(root, runDir) {
+// run 前の状態を runDir に保存する。未コミット・ignored のファイルは内容も退避する(restore 用)。
+// refScope を渡した時だけ snapshot に保存し、gate が同じ範囲を参照する。
+export function takeSnapshot(root, runDir, { refScope } = {}) {
   const tracked = trackedPaths(root);
   const states = worktreeStates(root, tracked.map((e) => e.path));
   const filesDir = path.join(runDir, "files");
@@ -135,7 +146,10 @@ export function takeSnapshot(root, runDir) {
     }
     files[p] = { state, saved, ignored };
   });
-  const snapshot = { root, fingerprint: repoFingerprint(root), files, at: Date.now() };
+  const fingerprint = repoFingerprint(root, { refScope });
+  const snapshot = refScope === undefined
+    ? { root, fingerprint, files, at: Date.now() }
+    : { root, fingerprint, files, at: Date.now(), refScope };
   fs.writeFileSync(path.join(runDir, "snapshot.json"), JSON.stringify(snapshot, null, 2));
   return snapshot;
 }
@@ -163,7 +177,7 @@ export function changedSince(snapshot) {
 // .gitignore を足して新しいファイルを隠す、無視されるパスに設定ファイルを置く、を捕まえる)。
 // 既定の "violation" は従来どおりすべて違反にする
 export function gate(snapshot, allow, { ignoredFiles: ignoredFilesPolicy = "violation" } = {}) {
-  const now = repoFingerprint(snapshot.root);
+  const now = repoFingerprint(snapshot.root, { refScope: snapshot.refScope });
   const before = snapshot.fingerprint;
   const repoChanges = ["head", "symbolic", "refs", "index"].filter((key) => before[key] !== now[key]);
   const changed = changedSince(snapshot);
@@ -352,15 +366,27 @@ export function workspaceErrors(root, workspace) {
   return [];
 }
 
+// relocate が無ければ absolute をそのまま返す。実体パスが relocate.from の中なら relocate.to
+// の同じ相対位置へ付け替え、外ならそのまま返す
+function relocateAbsolute(absolute, relocate) {
+  if (relocate == null) return absolute;
+  const relative = relativeInside(relocate.from, absolute);
+  return relative === null ? absolute : path.join(relocate.to, relative);
+}
+
 // T の対象の 1 項目を、作業場所からの相対パスに読み替える。~/ で始まる項目と絶対パスは実体パスへ
 // 解決し(~/.claude が dotfiles への symlink である構成で、dotfiles の中のパスになる)、相対パスは
 // 帳簿の root からのパスとして読む。作業場所の外を指すなら null(その項目はどの許可パスにも
-// 当たらない)。作業場所が root と同じ時の相対パスは、書かれたまま返す(従来の判定を変えない)
-function scopeInWorkspace(scopePath, { root, workspace, home }) {
+// 当たらない)。作業場所が root と同じ時の相対パスは、書かれたまま返す(従来の判定を変えない)。
+// relocate を渡すと ~/… と絶対パスを付け替えてから、作業場所からの相対を取る
+function scopeInWorkspace(scopePath, { root, workspace, home, relocate }) {
   const fromHome = scopePath === "~" || scopePath.startsWith("~/");
   if (!fromHome && !path.isAbsolute(scopePath) && workspace === root) return scopePath;
 
-  const absolute = fromHome ? path.join(home, scopePath.slice(2)) : path.resolve(root, scopePath);
+  const absolute = relocateAbsolute(
+    fromHome ? path.join(home, scopePath.slice(2)) : path.resolve(root, scopePath),
+    relocate,
+  );
   const relative = relativeInside(workspace, absolute);
   if (relative === null) return null;
   return scopePath.endsWith("/") && relative !== "" ? `${relative}/` : relative;
@@ -369,7 +395,7 @@ function scopeInWorkspace(scopePath, { root, workspace, home }) {
 // 許可パスを作業場所からの相対にそろえる。~/ で始まるパスと絶対パスは実体パスへ解決して読み替え
 // (監督が T の対象の `~/…` をそのまま渡しても、ゲートとプロンプトが作業場所からの相対で
 // 照合できるように)、相対パスは書かれたまま残す。作業場所の外を指すものは errors に挙げる
-export function normalizeAllow(allow, { workspace, home = os.homedir() }) {
+export function normalizeAllow(allow, { workspace, home = os.homedir(), relocate }) {
   const errors = [];
   const normalized = [];
   for (const a of allow) {
@@ -379,7 +405,8 @@ export function normalizeAllow(allow, { workspace, home = os.homedir() }) {
       continue;
     }
 
-    const relative = relativeInside(workspace, fromHome ? path.join(home, a.slice(2)) : a);
+    const absolute = fromHome ? path.join(home, a.slice(2)) : a;
+    const relative = relativeInside(workspace, relocateAbsolute(absolute, relocate));
     if (relative === null) errors.push(`作業場所の外のパス: ${a}`);
     else normalized.push(a.endsWith("/") && relative !== "" ? `${relative}/` : relative);
   }
@@ -392,8 +419,10 @@ export function normalizeAllow(allow, { workspace, home = os.homedir() }) {
 // workspace: worker が書くリポジトリ(既定は root)。許可パスはここからの相対で読む。
 // T の対象は root の TODO.md から読み、scopeInWorkspace で作業場所の中へ読み替えて比べる。
 // home は対象の ~ の展開先
+// relocate があれば、relocate.from 内を指す ~/… と絶対パスを relocate.to の同じ位置へ付け替え、
+// その後、作業場所からの相対パスを取る。
 export function checkAllow(root, task, allow, maxAllow = 3, options = {}) {
-  const { workspace = root, home = os.homedir() } = options;
+  const { workspace = root, home = os.homedir(), relocate } = options;
   const errors = [];
   const warnings = [];
   if (allow.length === 0) errors.push("変更してよいパス(--allow)が 1 つも無い");
@@ -421,7 +450,7 @@ export function checkAllow(root, task, allow, maxAllow = 3, options = {}) {
   else {
     const bare = (p) => p.replace(/^\.\//, "").replace(/\/$/, "");
     const scopePaths = scope.paths
-      .map((p) => scopeInWorkspace(p, { root, workspace, home }))
+      .map((p) => scopeInWorkspace(p, { root, workspace, home, relocate }))
       .filter((p) => p !== null);
     const covers = (a, p) => p === "" || bare(a) === bare(p) || isInside(bare(a), p, workspace);
     const outside = allow.filter((a) => !scopePaths.some((p) => covers(a, p)));

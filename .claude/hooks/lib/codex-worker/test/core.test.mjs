@@ -502,3 +502,106 @@ test("規約はリポジトリの最上位のものも選び、paths はその�
     assert.deepEqual(rules.map((r) => r.file), expected);
   } finally { cleanup(); }
 });
+
+test("ref 範囲付き snapshot は自ブランチだけを gate し、範囲なしは全 ref を見る", () => {
+  const { root, base, cleanup } = fixture();
+  try {
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "fixture changes");
+    const mainBranch = git(root, "symbolic-ref", "--short", "HEAD").trim();
+    const worktreeBranch = "codex-worker/T7";
+    const worktree = path.join(base, "worker");
+    git(root, "worktree", "add", "-b", worktreeBranch, worktree, "HEAD");
+    const refScope = ["refs/heads/codex-worker/T7"];
+    const scopedRunDir = path.join(base, "scoped-run");
+    const allRefsRunDir = path.join(base, "all-refs-run");
+    const scoped = takeSnapshot(worktree, scopedRunDir, { refScope });
+    const allRefs = takeSnapshot(worktree, allRefsRunDir);
+
+    assert.deepEqual(scoped.refScope, refScope);
+    const savedSnapshot = JSON.parse(
+      fs.readFileSync(path.join(scopedRunDir, "snapshot.json"), "utf8"),
+    );
+    assert.deepEqual(savedSnapshot.refScope, refScope);
+    assert.equal("refScope" in allRefs, false);
+
+    write(root, "main-only.txt", "main\n");
+    git(root, "add", "main-only.txt");
+    git(root, "commit", "-qm", "main branch commit");
+    assert.equal(
+      gate(scoped, []).passed,
+      true,
+      "本体のコミットは linked worktree の範囲外",
+    );
+    assert.deepEqual(gate(allRefs, []).repoChanges, ["refs"], "範囲なし snapshot は全 ref を見る");
+
+    git(root, "checkout", "-qb", "other-branch");
+    write(root, "other-branch.txt", "other\n");
+    git(root, "add", "other-branch.txt");
+    git(root, "commit", "-qm", "other branch commit");
+    git(root, "checkout", mainBranch);
+    assert.equal(
+      gate(scoped, []).passed,
+      true,
+      "別ブランチのコミットは linked worktree の範囲外",
+    );
+
+    write(worktree, "src/a/x.ts", "staged on worker\n");
+    git(worktree, "add", "src/a/x.ts");
+    assert.deepEqual(
+      gate(scoped, []).repoChanges,
+      ["index"],
+      "自ブランチの worktree index の add は検出",
+    );
+    git(worktree, "commit", "-qm", "worker branch commit");
+    const selfCommit = gate(scoped, []);
+    assert.ok(selfCommit.repoChanges.includes("head"));
+    assert.ok(selfCommit.repoChanges.includes("refs"));
+  } finally { cleanup(); }
+});
+
+test("worktree への付け替えは対象と許可パスの ~・絶対パスに適用し、省略時は従来どおり", () => {
+  const { root, ws, home, base, cleanup } = workspaceFixture();
+  try {
+    write(ws, "pkg/src/a/x.ts", "x1\n");
+    write(ws, "pkg/other/y.ts", "y1\n");
+    git(ws, "add", "-A");
+    git(ws, "commit", "-qm", "pkg fixture");
+
+    const worktree = path.join(base, "worktree");
+    git(ws, "worktree", "add", "-b", "codex-worker/T7-relocate", worktree, "HEAD");
+    const workspace = path.join(worktree, "pkg");
+    const relocate = { from: ws, to: worktree };
+    const targets = ["~/.cfg/pkg/src/a/", `${ws}/pkg/other/`]
+      .map((target) => `\`${target}\``)
+      .join("、");
+    withTodo(root, `**#1-1 / T7** — 完了条件: 対象: ${targets}。`);
+
+    const absoluteAllow = `${ws}/pkg/other/`;
+    const homeAllow = "~/.cfg/pkg/src/a/x.ts";
+    const relocated = normalizeAllow([homeAllow, absoluteAllow, "src/b/"], {
+      workspace,
+      home,
+      relocate,
+    });
+    const unrelocated = normalizeAllow([homeAllow, absoluteAllow], { workspace, home });
+
+    assert.deepEqual(relocated, { allow: ["src/a/x.ts", "other/", "src/b/"], errors: [] });
+    assert.deepEqual(unrelocated, {
+      allow: [],
+      errors: [
+        `作業場所の外のパス: ${homeAllow}`,
+        `作業場所の外のパス: ${absoluteAllow}`,
+      ],
+    });
+    assert.deepEqual(
+      checkAllow(root, "T7", relocated.allow.slice(0, 2), 3, { workspace, home, relocate }).errors,
+      [],
+    );
+    assert.match(
+      checkAllow(root, "T7", ["src/a/x.ts", "other/"], 3, { workspace, home })
+        .errors.join(),
+      /T の対象の外/,
+    );
+  } finally { cleanup(); }
+});
