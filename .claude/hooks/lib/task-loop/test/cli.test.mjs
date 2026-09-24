@@ -12,7 +12,9 @@ const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.m
 // 偽の herdr: 状態を FAKE_HERDR_STATE の JSON に持つ。Claude は /clear で session を変える(ignoreClear なら変えず、
 // blockOnClear なら変えた後に blocked)。Codex は本物と同じく /clear では変えず、次の発言で新しい session になる
 // (ignoreClear なら前の session のまま)。/execute-task T<n> には scenario[T<n>] の先頭の動きで応える:
-//   complete: TODO.md を [x] にしてコミット / mark_only: [x] にするだけ / dirty: complete + untracked を残す /
+//   complete: TODO.md を [x] にし、HANDOFF.md の次の一手を書いてコミット(本物の /execute-task と同じ。次の一手は
+//   s.after[T<n>] があればそれ、無ければ TODO.md で最初の [ ] の T、それも無ければコマンド無し)/
+//   mark_only: [x] にするだけ / dirty: complete + untracked を残す /
 //   budget: hook と同じく予算停止を記録 / compact: 予算停止に加えて compact を記録(閾値をすり抜けた形)/ hole: HANDOFF.md の次の一手を /amend T<n> にする /
 //   hole_elaborate: HANDOFF.md の次の一手を /elaborate にする / stalled: 送信後に動かない / newsession: /clear なしに session が変わる /
 //   unknown: 状態を分類できない / working: 送信後の get で 2 回 working を返してから complete する(監督のターンが
@@ -23,7 +25,7 @@ const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.m
 // でコミット)/ land_add(land に加えて T4 を足す)/ land_fix(是正タスク T4 を足し、次の一手を T4 にする)/ abolish(T<n> を廃止して置き換え先 T4 を立てる)/ question(承認の
 // 問いで止まり、答えると land)/ elaborate(次の一手を /elaborate にするだけ)/ nothing
 // /breakdown <設計書> には scenario.breakdown の先頭で応える: land(T4・T5 を足し、次の一手を /execute-task T4 に
-// して plan: でコミット)/ nothing
+// して plan: でコミット)/ land_stay(land と同じだが次の一手を /breakdown のまま残す)/ nothing
 // 端末の題名(pane get の terminal_title_stripped)は起動時の --name と /rename で変わり、/clear では変わらない
 // (本物の Claude と同じく前の名前を引き継ぐ)。ignoreRename なら /rename を受けても変えない
 const FAKE_HERDR = `#!/usr/bin/env node
@@ -40,13 +42,17 @@ const ok = (a) => { process.stdout.write(JSON.stringify({ id: "x", result: { age
 const fail = (code) => { process.stdout.write(JSON.stringify({ error: { code, message: code }, id: "x" })); process.exit(1); };
 const git = (...a) => execFileSync("git", ["-C", s.root, "-c", "user.email=t@example.com", "-c", "user.name=t", ...a]);
 const sessionFile = () => path.join(process.env.XDG_STATE_HOME, "claude-task-loop", "sessions", s.session + ".json");
-const complete = (task) => {
+const handoff = (step) => fs.writeFileSync(path.join(s.root, "HANDOFF.md"), "## 仕掛かり中\\n\\n- なし\\n\\n## 次セッションの最初の一手\\n\\n- \`" + step + "\`(説明)\\n");
+const firstOpen = () => fs.readFileSync(path.join(s.root, "TODO.md"), "utf8").split("\\n")
+  .filter((l) => l.startsWith("|") && l.includes("[ ]")).map((l) => l.split("|").map((c) => c.trim()).find((c) => /^T\\d+$/.test(c))).find(Boolean);
+const complete = (task, next) => {
   const todo = path.join(s.root, "TODO.md");
   fs.writeFileSync(todo, fs.readFileSync(todo, "utf8").replace(new RegExp("(\\\\| " + task + " \\\\|[^\\\\n]*)\\\\[ \\\\]"), "$1[x]"));
+  const open = firstOpen();
+  handoff(next ?? s.after?.[task] ?? (open ? "/execute-task " + open : "なし"));
   git("add", "-A");
   git("commit", "-qm", "feat: " + task + " 完了");
 };
-const handoff = (step) => fs.writeFileSync(path.join(s.root, "HANDOFF.md"), "## 仕掛かり中\\n\\n- なし\\n\\n## 次セッションの最初の一手\\n\\n- \`" + step + "\`(説明)\\n");
 // 表の末尾(最初の空行の前)に行を、末尾に完了条件ブロックを足す
 const addTasks = (ids) => {
   const todo = path.join(s.root, "TODO.md");
@@ -67,7 +73,7 @@ const amend = (how, task) => {
     handoff("/execute-task " + (how === "land_fix" ? "T4" : task));
   }
   git("add", "-A");
-  git("commit", "-qm", "amend: repo の設計を改訂(" + task + " 由来)");
+  git("commit", "-q", "--allow-empty", "-m", "amend: repo の設計を改訂(" + task + " 由来)"); // HANDOFF.md が初期と同じ文面に戻っても記録は残す
 };
 const answer = () => {
   const [kind, arg] = s.onAnswer;
@@ -147,9 +153,9 @@ if (args[1] === "prompt") {
   }
   if (/breakdown docs\\/design\\//.test(text)) {
     const how = (s.scenario.breakdown || []).shift() || "nothing";
-    if (how === "land") {
+    if (how === "land" || how === "land_stay") {
       addTasks(["T4", "T5"]);
-      handoff("/execute-task T4");
+      if (how === "land") handoff("/execute-task T4");
       git("add", "-A");
       git("commit", "-qm", "plan: plan の実行計画を策定(T4〜T5)");
     }
@@ -177,7 +183,7 @@ if (args[1] === "prompt") {
   if (action === "hole") handoff("/amend " + task);
   if (action === "hole_elaborate") handoff("/elaborate docs/design/plan.md");
   if (action === "question") { s.status = "blocked"; s.onAnswer = ["complete", task]; }
-  if (action === "stage_end") { handoff("/breakdown docs/design/plan.md"); complete(task); }
+  if (action === "stage_end") complete(task, "/breakdown docs/design/plan.md");
   if (action === "unknown") s.status = "unknown";
   if (action === "newsession") s.session = "sess-x-" + s.n;
   if (action === "working") { s.workingLeft = 2; s.pending = task; }
@@ -191,7 +197,11 @@ function git(root, ...args) {
   return execFileSync("git", ["-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", ...args], { encoding: "utf8" });
 }
 
-function setup({ host = "claude", status = "idle", scenario = {}, todo, ignoreClear = false, blockOnClear = false, ignoreRename = false, agents = "one", answerDelayMs = 0 } = {}) {
+// HANDOFF.md の「次セッションの最初の一手」だけを書いた本文(本物の書き方と同じく、コマンドの後ろに説明が続く)
+const handoffText = (step) => `## 仕掛かり中\n\n- なし\n\n## 次セッションの最初の一手\n\n- \`${step}\`(説明)\n`;
+
+// next は HANDOFF.md の最初の次の一手(null なら HANDOFF.md を置かない)。after は偽のエージェントが T の完了時に書く次の一手
+function setup({ host = "claude", status = "idle", scenario = {}, todo, next = "/execute-task T1", after = {}, ignoreClear = false, blockOnClear = false, ignoreRename = false, agents = "one", answerDelayMs = 0 } = {}) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "task-loop-cli-")));
   const root = path.join(base, "repo");
   fs.mkdirSync(root);
@@ -200,13 +210,14 @@ function setup({ host = "claude", status = "idle", scenario = {}, todo, ignoreCl
     "| #1-1 | T1 | 一つ目 | — | [ ] |", "| #1-2 | T2 | 二つ目 | — | [ ] |", "| #1-3 | T3 | 三つ目 | — | [ ] |", "",
     "**#1-1 / T1** — 完了条件: 対象: `src/`。", "**#1-2 / T2** — 完了条件: 対象: `src/`。依存: T1。", "**#1-3 / T3** — 完了条件: 対象: `src/`。依存: T9。", "",
   ].join("\n"));
+  if (next !== null) fs.writeFileSync(path.join(root, "HANDOFF.md"), handoffText(next));
   git(root, "add", "-A");
   git(root, "commit", "-qm", "init");
   const bin = path.join(base, "bin");
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "herdr"), FAKE_HERDR, { mode: 0o755 });
   const stateFile = path.join(base, "herdr.json");
-  fs.writeFileSync(stateFile, JSON.stringify({ host, status, session: "sess-0", n: 0, root, scenario, ignoreClear, blockOnClear, ignoreRename, workingLeft: 0, agents, answerDelayMs }));
+  fs.writeFileSync(stateFile, JSON.stringify({ host, status, session: "sess-0", n: 0, root, scenario, after, ignoreClear, blockOnClear, ignoreRename, workingLeft: 0, agents, answerDelayMs }));
   const logFile = path.join(base, "herdr.log");
   fs.writeFileSync(logFile, "");
   fs.mkdirSync(path.join(base, "tmp"));
@@ -443,18 +454,57 @@ test("タスクの制限時間を過ぎたら timeout で止まる", () => {
   } finally { t.cleanup(); }
 });
 
-test("--target を省略すると同じプロジェクトで入力待ちのペインを選び、--tasks を省略すると TODO.md の未着手の T を順に回す", () => {
-  const t = setup({ scenario: { T1: ["complete"], T2: ["complete"] } });
+// T1〜T3(依存なし)の TODO.md
+const THREE = ["| #1-1 | T1 | 一つ目 | — | [ ] |", "| #1-2 | T2 | 二つ目 | — | [ ] |", "| #1-3 | T3 | 三つ目 | — | [ ] |", ""].join("\n");
+
+test("--target を省略すると同じプロジェクトで入力待ちのペインを選び、引数なしなら HANDOFF.md の次の一手の T から始めて T ごとに読み直す", () => {
+  const t = setup({
+    todo: THREE, next: "/execute-task T3", after: { T3: "/execute-task T1", T1: "/execute-task T2", T2: "なし" },
+    scenario: { T1: ["complete"], T2: ["complete"], T3: ["complete"] },
+  });
   try {
     const { code, json } = t.runAuto();
-    assert.equal(code, 1, JSON.stringify(json));
+    assert.equal(code, 0, JSON.stringify(json));
     assert.equal(json.target, "w1:p1");
-    assert.deepEqual(json.tasks_done, ["T1", "T2"]);
-    assert.equal(json.reason, "dependency_open", "T3 は依存が締まらず止まる");
-    assert.deepEqual(t.prompts(), ["/clear", "/rename repo T1", "/execute-task T1", "/clear", "/rename repo T2", "/execute-task T2"]);
+    assert.equal(json.reason, "all_done");
+    assert.deepEqual(json.tasks_done, ["T3", "T1", "T2"], "TODO.md の並び(T1 が先頭)ではなく、次の一手の順に回す");
+    assert.deepEqual(t.prompts().filter((p) => p.startsWith("/execute-task")), ["/execute-task T3", "/execute-task T1", "/execute-task T2"]);
     const dry = t.runAuto("T2..T3", "--dry-run");
     assert.deepEqual([dry.json.tasks, dry.json.tasks_from], [["T2", "T3"], "args"], "位置引数の T も受け付ける");
   } finally { t.cleanup(); }
+});
+
+test("引数なしで HANDOFF.md の次の一手が回せる工程でなければ、何も送らずに前提検査で止まる", () => {
+  for (const [label, opts, pattern] of [
+    ["HANDOFF.md が無い", { next: null }, /次の一手/],
+    ["次の一手が /elaborate", { next: "/elaborate docs/design/plan.md" }, /次の一手.*elaborate/],
+    ["次の一手の T が済んでいる", { todo: "| #1-1 | T1 | 済み | — | [x] |\n" }, /T1 は未着手\(\[ \]\)ではない/],
+  ]) {
+    const t = setup(opts);
+    try {
+      const { code, json } = t.runAuto();
+      assert.equal(code, 2, `${label}: ${JSON.stringify(json)}`);
+      assert.match(json.errors.join(), pattern, label);
+      assert.deepEqual(t.prompts(), [], `${label}: 何も送らない`);
+    } finally { t.cleanup(); }
+  }
+});
+
+test("引数なしで T の完了後の次の一手が済んだ T や回せない工程を指したら、推測で T を選ばずに止まる", () => {
+  for (const [after, reason] of [
+    [{ T1: "/execute-task T1" }, "next_step_not_open"],
+    [{ T1: "/elaborate docs/design/plan.md" }, "next_step_not_runnable"],
+    [{ T1: "なし" }, "next_step_not_runnable"],
+  ]) {
+    const t = setup({ todo: THREE, after, scenario: { T1: ["complete"], T2: ["complete"] } });
+    try {
+      const { code, json } = t.runAuto();
+      assert.equal(code, 1, `${reason}: ${JSON.stringify(json)}`);
+      assert.equal(json.reason, reason);
+      assert.deepEqual(json.tasks_done, ["T1"]);
+      assert.deepEqual(t.prompts().filter((p) => p.startsWith("/execute-task")), ["/execute-task T1"], "T2 を TODO.md の並びから拾わない");
+    } finally { t.cleanup(); }
+  }
 });
 
 test("同じプロジェクトにペインが無ければ隣に作って起動し、複数あれば選ばずに止まる", () => {
@@ -488,49 +538,67 @@ test("同じプロジェクトにペインが無ければ隣に作って起動�
   try {
     assert.match(t.runAuto("T1").json.errors.join(), /入力待ちではない/);
   } finally { t.cleanup(); }
-  t = setup({ todo: "| #1-1 | T1 | 済み | — | [x] |\n" });
-  try {
-    assert.match(t.runAuto().json.errors.join(), /未着手.*が無く、次の一手も \/breakdown ではない/);
-  } finally { t.cleanup(); }
 });
 
-// checkpoint 以後に 5 件完了した状態(T1〜T5 が [x]、T6 が [ ])を作る
-function fiveDone(scenario, todoExtra = "") {
-  const rows = Array.from({ length: 6 }, (_, i) => `| #1-${i + 1} | T${i + 1} | x | — | [${i < 5 ? "x" : " "}] |`);
-  const t = setup({ scenario, todo: rows.join("\n") + "\n" + todoExtra });
+// checkpoint 以後に done 件完了した状態(T1〜T<done> が [x]、残りの T<done+1>〜T6 が [ ]、次の一手は T<done+1>)を作る
+function sinceCheckpoint(done, scenario) {
+  const rows = Array.from({ length: 6 }, (_, i) => `| #1-${i + 1} | T${i + 1} | x | — | [${i < done ? "x" : " "}] |`);
+  const t = setup({ scenario, todo: rows.join("\n") + "\n", next: `/execute-task T${done + 1}` });
   git(t.root, "commit", "-q", "--allow-empty", "-m", "chore: 総点検\n\nFollow-Up-Checkpoint: true");
-  for (let i = 1; i <= 5; i += 1) git(t.root, "commit", "-q", "--allow-empty", "-m", `feat: T${i}`);
+  for (let i = 1; i <= done; i += 1) git(t.root, "commit", "-q", "--allow-empty", "-m", `feat: T${i}`);
   return t;
 }
+const fiveDone = (scenario) => sinceCheckpoint(5, scenario);
 
-test("完了が 5 件に達したら /follow-up を送り、checkpoint が増えたら次の T へ進む", () => {
-  let t = fiveDone({ "follow-up": ["checkpoint"], T6: ["complete"] });
+test("1 回の起動は /follow-up の 1 区間: 完了が 5 件に達したら次の T の前に /follow-up を送り、checkpoint が増えたらそこで終える", () => {
+  let t = sinceCheckpoint(3, { "follow-up": ["checkpoint"], T4: ["complete"], T5: ["complete"], T6: ["complete"] });
   try {
-    const { code, json } = t.runAuto("T6");
+    const { code, json } = t.runAuto();
     assert.equal(code, 0, JSON.stringify(json));
-    assert.deepEqual(t.prompts(), ["/clear", "/rename repo follow-up", "/follow-up", "/clear", "/rename repo T6", "/execute-task T6"]);
+    assert.equal(json.reason, "follow_up_done");
+    assert.deepEqual(json.tasks_done, ["T4", "T5"]);
+    assert.deepEqual(json.next_step, { command: "execute-task", arg: "T6" }, "次の区間は次の一手から始まる");
+    assert.deepEqual(t.prompts().slice(-3), ["/clear", "/rename repo follow-up", "/follow-up"], "/follow-up の後に T6 を送らない");
+  } finally { t.cleanup(); }
+
+  t = sinceCheckpoint(3, { "follow-up": ["checkpoint"], T4: ["complete"], T5: ["complete"], T6: ["complete"] });
+  try {
+    const { code, json } = t.run("--tasks", "T4..T6");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.equal(json.reason, "follow_up_done", "範囲を広く書いても区間の終わりで止まる");
+    assert.deepEqual([json.tasks_done, json.tasks_remaining], [["T4", "T5"], ["T6"]]);
+  } finally { t.cleanup(); }
+
+  t = fiveDone({ "follow-up": ["checkpoint"], T6: ["complete"] });
+  try {
+    const { code, json } = t.runAuto();
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.equal(json.reason, "follow_up_done");
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo follow-up", "/follow-up"], "起動時点で 5 件なら /follow-up だけで終える");
     assert.equal(t.session("sess-1").loop.task, "follow-up");
   } finally { t.cleanup(); }
 
   t = fiveDone({ T6: ["complete"] });
   try {
-    const { json } = t.runAuto("T6", "--no-follow-up");
+    const { json } = t.runAuto("--no-follow-up");
     assert.equal(json.reason, "follow_up_required");
     assert.deepEqual(t.prompts(), [], "--no-follow-up なら何も送らずに止まる");
   } finally { t.cleanup(); }
 });
 
-test("/follow-up が利用者への問いを出せば答えを待って続け、checkpoint が増えなければ止まる", () => {
+test("/follow-up があなたへの問いを出せば答えを待ってから終え、checkpoint が増えなければ止まる", () => {
   let t = fiveDone({ "follow-up": ["question"], T6: ["complete"] });
   try {
-    const { code, json } = t.runAuto("T6");
+    const { code, json } = t.runAuto();
     assert.equal(code, 0, JSON.stringify(json));
+    assert.equal(json.reason, "follow_up_done");
     assert.equal(t.state().waitedBlocked, 1, "問いの画面では答えを待った");
-    assert.deepEqual(t.prompts(), ["/clear", "/rename repo follow-up", "/follow-up", "/clear", "/rename repo T6", "/execute-task T6"]);
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo follow-up", "/follow-up"]);
   } finally { t.cleanup(); }
   t = fiveDone({ "follow-up": ["nothing"] });
   try {
-    const { json } = t.runAuto("T6");
+    const { code, json } = t.runAuto();
+    assert.equal(code, 1);
     assert.equal(json.reason, "follow_up_incomplete");
   } finally { t.cleanup(); }
 });
@@ -631,7 +699,7 @@ test("amend が着地しない・/elaborate へ回した・同じ T で 2 回目
   }
 });
 
-test("amend が足した T は TODO.md から回す時だけ拾い、廃止した T は置き換え先から続ける", () => {
+test("amend が足した T は引数なしなら次の一手の順で回り、範囲指定なら回さない。廃止した T は置き換え先から続ける", () => {
   let t = setup({ todo: TWO, scenario: { T1: ["hole", "complete"], T2: ["complete"], T4: ["complete"], amend: ["land_add"] } });
   try {
     const { code, json } = t.runAuto();
@@ -653,7 +721,7 @@ test("amend が足した T は TODO.md から回す時だけ拾い、廃止し�
   } finally { t.cleanup(); }
 });
 
-test("T が尽きて次の一手が /breakdown なら送り、足された T で続ける。範囲指定なら送らず next_step に出す", () => {
+test("次の一手が /breakdown なら送り、足された T で続ける。範囲指定なら送らず next_step に出す", () => {
   const one = ["| #1-1 | T1 | 一つ目 | — | [ ] |", "", "**#1-1 / T1** — 完了条件: 対象: `src/`。", ""].join("\n");
   let t = setup({ todo: one, scenario: { T1: ["stage_end"], T4: ["complete"], T5: ["complete"], breakdown: ["land"] } });
   try {
@@ -709,12 +777,105 @@ test("履歴に T 由来の amend が既に 2 件あれば、打ち直した後�
   } finally { t.cleanup(); }
 });
 
-test("段階の最後の T が次の一手を /breakdown にしたら、キューに別の T が残っていても次の T の前に送る", () => {
+test("段階の最後の T が次の一手を /breakdown にしたら、未着手の T が残っていても次の T の前に送る", () => {
   const t = setup({ todo: TWO, scenario: { T1: ["stage_end"], T2: ["complete"], T4: ["complete"], T5: ["complete"], breakdown: ["land"] } });
   try {
     const { code, json } = t.runAuto();
     assert.equal(code, 0, JSON.stringify(json));
-    assert.deepEqual(json.tasks_done, ["T1", "T2", "T4", "T5"]);
+    assert.deepEqual(json.tasks_done, ["T1", "T4", "T2", "T5"], "分解の後は /breakdown が書いた次の一手(T4)から回す");
     assert.deepEqual(t.prompts().slice(3, 6), ["/clear", "/rename plan breakdown", "/breakdown docs/design/plan.md"], "T2 より先に分解する");
+  } finally { t.cleanup(); }
+});
+
+test("引数なしで次の一手が /amend T なら /amend を送り、amend が書いた次の一手から続ける", () => {
+  const t = setup({ todo: TWO, next: "/amend T1", scenario: { T1: ["complete"], T2: ["complete"], amend: ["land"] } });
+  try {
+    const { code, json } = t.runAuto();
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(json.tasks_done, ["T1", "T2"]);
+    assert.deepEqual(t.prompts().slice(0, 3), ["/clear", "/rename repo T1 amend", "/amend T1"]);
+  } finally { t.cleanup(); }
+});
+
+test("/breakdown が着地しても次の一手が同じ /breakdown のままなら、2 回目を送らずに止まる", () => {
+  const t = setup({ todo: TWO, next: "/breakdown docs/design/plan.md", scenario: { breakdown: ["land_stay", "land_stay"] } });
+  try {
+    const { code, json } = t.runAuto();
+    assert.equal(code, 1, JSON.stringify(json));
+    assert.equal(json.reason, "breakdown_repeated");
+    assert.equal(t.prompts().filter((p) => p.startsWith("/breakdown")).length, 1);
+  } finally { t.cleanup(); }
+});
+
+test("5 件目の完了で回す作業が尽きても、終える前に /follow-up を送って区間を閉じる", () => {
+  let t = sinceCheckpoint(4, { "follow-up": ["checkpoint"], T5: ["complete"] });
+  try {
+    fs.writeFileSync(path.join(t.root, "TODO.md"), fs.readFileSync(path.join(t.root, "TODO.md"), "utf8").replace("| T6 | x | — | [ ] |", "| T6 | x | — | [x] |"));
+    git(t.root, "commit", "-qam", "chore: 残りの表を閉じる"); // 要約に T 番号を書かない(完了数に数えさせない)
+    const { code, json } = t.runAuto();
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.equal(json.reason, "follow_up_done");
+    assert.deepEqual(json.tasks_done, ["T5"]);
+    assert.deepEqual(t.prompts().slice(-3), ["/clear", "/rename repo follow-up", "/follow-up"]);
+  } finally { t.cleanup(); }
+  t = sinceCheckpoint(4, { "follow-up": ["checkpoint"], T5: ["complete"] });
+  try {
+    const { code, json } = t.run("--tasks", "T5");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.equal(json.reason, "follow_up_done", "範囲が 5 件目で尽きても閉じる");
+  } finally { t.cleanup(); }
+});
+
+test("完了が 5 件なら、次の一手が /breakdown・/amend でも先に /follow-up を送って終える", () => {
+  for (const next of ["/breakdown docs/design/plan.md", "/amend T6"]) {
+    const t = fiveDone({ "follow-up": ["checkpoint"], breakdown: ["land"], amend: ["land"] });
+    try {
+      fs.writeFileSync(path.join(t.root, "HANDOFF.md"), handoffText(next));
+      git(t.root, "commit", "-qam", "handoff");
+      const { code, json } = t.runAuto();
+      assert.equal(code, 0, `${next}: ${JSON.stringify(json)}`);
+      assert.equal(json.reason, "follow_up_done");
+      assert.deepEqual(t.prompts(), ["/clear", "/rename repo follow-up", "/follow-up"], next);
+    } finally { t.cleanup(); }
+  }
+});
+
+test("次の一手が /follow-up なら、完了が 5 件未満でも /follow-up を送って終える", () => {
+  const t = setup({ next: "/follow-up", scenario: { "follow-up": ["checkpoint"] } });
+  try {
+    const { code, json } = t.runAuto();
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.equal(json.reason, "follow_up_done");
+    assert.deepEqual(t.prompts(), ["/clear", "/rename repo follow-up", "/follow-up"]);
+  } finally { t.cleanup(); }
+});
+
+test("引数なしでも同じ T の 2 回目の穴、または履歴に T 由来の amend が 2 件ある /amend の次の一手では amend を送らずに止まる", () => {
+  let t = setup({ todo: TWO, scenario: { T1: ["hole", "hole"], amend: ["land", "land"] } });
+  try {
+    const { code, json } = t.runAuto();
+    assert.equal(code, 1, JSON.stringify(json));
+    assert.equal(json.reason, "amend_repeated");
+    assert.equal(t.state().amendSent, 1);
+  } finally { t.cleanup(); }
+  t = setup({ todo: TWO, next: "/amend T1", scenario: { amend: ["land"] } });
+  try {
+    git(t.root, "commit", "-q", "--allow-empty", "-m", "amend: repo の設計を改訂(T1 由来)");
+    git(t.root, "commit", "-q", "--allow-empty", "-m", "amend: repo の設計を改訂(T1 由来)");
+    const { code, json } = t.runAuto();
+    assert.equal(code, 1, JSON.stringify(json));
+    assert.equal(json.reason, "amend_repeated");
+    assert.deepEqual(json.tasks_remaining, ["T1"]);
+    assert.equal(t.state().amendSent, undefined, "amend を送らない");
+  } finally { t.cleanup(); }
+});
+
+test("引数なしの --dry-run は HANDOFF.md の次の一手をそのまま送る文として出す", () => {
+  const t = setup({ todo: TWO, next: "/amend T1" });
+  try {
+    const { code, json } = t.runAuto("--dry-run");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual([json.prompts, json.tasks_from], [["/amend T1"], "HANDOFF.md"]);
+    assert.deepEqual(t.prompts(), []);
   } finally { t.cleanup(); }
 });

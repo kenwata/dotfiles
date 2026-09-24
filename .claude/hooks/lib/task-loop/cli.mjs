@@ -3,16 +3,19 @@
 // 機械的に送り、T を 1 件ずつ新しいセッションで実行する。進む・再送する・止まるの判定は成果物だけで行う。
 //
 // 呼び出し規約(herdr のペインの中の端末から。HERDR_ENV=1 が要る。zsh の alias `task-loop` = `node <このファイル> run`):
-//   task-loop                       … カレントディレクトリのプロジェクトで、TODO.md の未着手の T を上から順に回す
-//   task-loop T12..T16              … 範囲(T12,T15 の列挙、混在も可)。--tasks <指定> でも同じ
+//   task-loop                       … カレントディレクトリのプロジェクトで、HANDOFF.md の次の一手から回す。工程を 1 つ
+//                                    終えるたびに次の一手を読み直す(各工程が次の一手を書き換える)。TODO.md の並びからは
+//                                    選ばない。次の一手が /elaborate・コマンド無し・済んだ T なら止まる
+//   task-loop T12..T16              … 範囲(T12,T15 の列挙、混在も可)。--tasks <指定> でも同じ。/breakdown は送らない
 //   task-loop --target <pane_id|名前> … 送る先のペインを指定する。省略時は同じプロジェクト(git ルート)で入力待ちの
 //                                    Claude / Codex のペインを herdr から探す(同じタブを優先)。無ければ隣にペインを作って
 //                                    起動する(--kind claude|codex、--model <ID> で起動時のモデル)
 //   その他: [--root <プロジェクトルート>] [--retry-max <回数>] [--task-timeout-min <分。既定 180>]
 //          [--clear-timeout-ms <既定 30000>] [--settle-sec <既定 90>] [--no-follow-up] [--dry-run]
-//   checkpoint 以後の完了が 5 件に達したら、次の T を送る前に新しいセッションで /follow-up を送る(既定)。checkpoint の
-//   コミット(trailer Follow-Up-Checkpoint: true)が増えたら続ける。/follow-up が利用者への問い(blocked)を出せば答えを待つ。
-//   --no-follow-up なら 5 件で follow_up_required として止まる
+//   1 回の起動は /follow-up の 1 区間: checkpoint 以後の完了が 5 件に達したら、次の作業の前に新しいセッションで
+//   /follow-up を送り、checkpoint のコミット(trailer Follow-Up-Checkpoint: true)が増えたら follow_up_done で終える
+//   (次の区間は打ち直して始める。範囲指定でも同じ)。/follow-up が利用者への問い(blocked)を出せば答えを待つ。
+//   --no-follow-up なら /follow-up を送らず follow_up_required として止まる
 //   Claude のセッションには名前を付ける(窓の題名と /resume の一覧に出る)。自動起動は `claude --name "<計画> loop"`、
 //   /clear の後は毎回 `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`、/amend は `<計画> T<n> amend`、
 //   /breakdown は `<設計書の slug> breakdown`)。<計画> は T が属する TODO.md の
@@ -23,7 +26,8 @@
 // セッションで /execute-task を送る。claude -p を使わないのは、-p が最終応答の約 5 秒後にバックグラウンドの
 // Bash を殺し、Codex worker の待機(templates/codex-worker.md「起動」)と衝突するため。
 //
-// T ごとの流れ: 前提検査(T の状態・依存・checkpoint 以後の完了数)→ /clear → session_id の変化を待つ →
+// 作業ごとに、送る前に checkpoint 以後の完了数を見る(上限なら /follow-up で区間を閉じる)。
+// T ごとの流れ: 前提検査(T の状態・依存)→ /clear → session_id の変化を待つ →
 // sessions/<id>.json に loop を書く(check-stop-question.sh はこのセッションを差し戻さない)→ /execute-task を
 // --wait で送る → 落ち着くのを待つ(worker のロック中・working の間は待ち、idle が --settle-sec 続いたら判定)→
 // 判定(decide.mjs の judge)。Codex は /clear では session_id が変わらないので、$execute-task を送ってから変化を
@@ -34,15 +38,20 @@
 //           次の一手が指す T(元の T・置き換え先・足された是正タスク)を attempt 1 から送る。同じ T でこのループ 2 回目の穴、
 //           または履歴に T 由来の amend が既に 2 件ある時は amend_repeated で止まる
 //   stop  : それ以外(次の一手が /elaborate・timeout・compact など)。人の判断を待つ
+// 引数なしで T の間に読む次の一手が回せない時の停止理由: next_step_not_runnable(/elaborate・コマンド無し・引数の形が違う)/
+// next_step_not_open(済んだ T・廃止した T を指す)/ breakdown_repeated(同じ設計書の /breakdown が T の完了を挟まずに続いた)
 // 問い(AskUserQuestion・承認の画面)で blocked になっても止めず、人が答えて動き出すまで待つ(settle)。blocked の間は
 // タスクの制限時間に数えない。/elaborate は対話で詰める工程なのでループに入れない(2026-09-24 利用者決定)。
-// 計画工程: T を取り出す前に毎回、HANDOFF.md の次の一手が /breakdown docs/design/<slug>.md なら送り
-// (runBreakdown)、増えた T で続ける。未着手の T が無くても次の一手が /breakdown なら起動できる。T を位置引数・--tasks で
-// 指定した時は範囲を「ここまで」と読み、/breakdown を送らず一覧も組み直さない(範囲が済めば all_done、次の一手は
+// 計画工程: 引数なしの時は、次の一手が /breakdown docs/design/<slug>.md なら送り(runBreakdown)、/amend T<n> なら送る。
+// T を位置引数・--tasks で指定した時は範囲を「ここまで」と読み、/breakdown を送らない(範囲が済めば all_done、次の一手は
 // next_step に出す)。/amend・/breakdown が途中で止まった時の再開は無い(人が片付けて打ち直す)
+// 経緯(2026-09-24): 引数なしの既定を「TODO.md の未着手を上から順に」にしていたため、表の先頭にあった凍結中の T47 を
+// 2 回送り、HANDOFF.md の次の一手(T142)に進まなかった。また /follow-up の後も次の区間へ進み続ける作りで、
+// 利用者の意図(1 回の起動 = /follow-up の 1 区間)と違っていた。どちらも利用者の決定ではなく実装の誤り
 //
 // 出力規約: 終了時に JSON を 1 つ stdout に出し、${XDG_STATE_HOME:-~/.local/state}/claude-task-loop/last-run.json にも
-// 書く。進行は stderr に [loop T<n>] で始まる行で出す。exit 0 = 全 T を完了、1 = 途中で止まった、2 = 前提検査で止まった。
+// 書く。進行は stderr に [loop T<n>] で始まる行で出す。exit 0 = 区間を閉じた(follow_up_done)か回す作業が尽きた
+// (all_done)、1 = 途中で止まった、2 = 前提検査で止まった。
 
 import fs from "node:fs";
 import path from "node:path";
@@ -51,8 +60,8 @@ import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { activeWorkerLock, gitRoot } from "../../check-task-scope.mjs";
 import {
-  amendCount, amendOutcome, breakdownOutcome, breakdownTarget, checkpointSince, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge,
-  nextStep, openDependencies, openTasks, parseTaskList, planSlug,
+  amendCount, amendOutcome, breakdownOutcome, checkpointSince, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge,
+  loopStep, nextStep, openDependencies, openTasks, parseTaskList, planSlug,
 } from "./decide.mjs";
 import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, agentWait, available, paneSplit, paneTitle } from "./herdr.mjs";
 import { loopStateDir, readConfig, readSession, sweep, updateSession } from "./session-state.mjs";
@@ -151,11 +160,11 @@ function preflight(args, positionalTasks) {
   if (errors.length > 0) return { errors };
 
   const spec = args.tasks ?? positionalTasks ?? null;
-  const parsed = spec ? parseTaskList(spec) : { tasks: openTasks(root), errors: [] };
+  const parsed = spec ? parseTaskList(spec) : handoffTasks(root);
   errors.push(...parsed.errors);
-  if (!spec && parsed.tasks.length === 0 && !breakdownTarget(root)) errors.push(`TODO.md に未着手([ ])の T が無く、次の一手も /breakdown ではない: ${root}`);
   if (errors.length > 0) return { errors };
   const tasks = parsed.tasks;
+  const step = parsed.step ?? null;
 
   const dirty = dirtyPaths(root);
   if (dirty.length > 0 && tasks.length === 0) return { errors: [`作業ツリーに未コミットの変更がある: ${dirty.join(", ")}`] };
@@ -167,12 +176,12 @@ function preflight(args, positionalTasks) {
   }
   if (errors.length > 0) return { errors };
 
-  const tasksFrom = spec ? "args" : "TODO.md";
+  const tasksFrom = spec ? "args" : "HANDOFF.md";
   if (!agent) {
     const picked = pickAgent(root, args, sessionName(root, tasks[0], "loop"));
     if (picked.errors) return picked;
     // --dry-run はペインを作らず、起動する予定だけを返す
-    if (picked.start && args["dry-run"]) return { errors, tasks, host: picked.start.kind, root, target: null, pane: null, started: null, wouldStart: picked.start, tasksFrom };
+    if (picked.start && args["dry-run"]) return { errors, tasks, step, host: picked.start.kind, root, target: null, pane: null, started: null, wouldStart: picked.start, tasksFrom };
     const got = picked.start ? startAgent(root, picked.start) : picked;
     if (got.errors) return got;
     agent = got.agent;
@@ -180,7 +189,24 @@ function preflight(args, positionalTasks) {
     errors.push(...agentErrors(agent.pane_id, agent));
   }
   const target = args.target ?? agent.pane_id;
-  return { errors, tasks, host: agent.agent, root, target, pane: agent.pane_id, started, tasksFrom };
+  return { errors, tasks, step, host: agent.agent, root, target, pane: agent.pane_id, started, tasksFrom };
+}
+
+// 引数なしの起動で最初に回す工程(HANDOFF.md の次の一手。decide.mjs の loopStep)。tasks は /execute-task・/amend の T
+// (未コミットの変更の照合とセッション名に使う)。回せなければ何も送らずに前提検査で止まる
+function handoffTasks(root) {
+  const { step, error } = loopStep(root);
+  const shown = step ? `/${step.command}${step.arg ? " " + step.arg : ""}` : null;
+  if (error === "not_open") return { tasks: [], errors: [`HANDOFF.md の次の一手 ${shown} の ${step.arg} は未着手([ ])ではない。次の一手を直すか、T を引数で指定する: ${root}`] };
+  if (error) {
+    return {
+      tasks: [],
+      errors: [shown
+        ? `HANDOFF.md の次の一手 ${shown} は task-loop が回す工程(/execute-task・/amend・/breakdown・/follow-up)ではないか、引数の形が違う: ${root}`
+        : `HANDOFF.md の次の一手(「次セッションの最初の一手」節)に task-loop が回す工程(/execute-task・/amend・/breakdown・/follow-up)が無い: ${root}`],
+    };
+  }
+  return { tasks: step.command === "execute-task" || step.command === "amend" ? [step.arg] : [], step, errors: [] };
 }
 
 // 送った後、成果物の判定に進んでよいところまで待つ。Codex worker の実行中(ロック)と working の間は待ち、
@@ -314,7 +340,7 @@ function openTurn(ctx, text, { task, attempt }, name, logTask) {
   }
 }
 
-// checkpoint 以後の完了が上限に達した時、次の T の前に /follow-up を新しいセッションで送る。成果物(checkpoint の
+// 区間を閉じる /follow-up を新しいセッションで送る(checkpoint 以後の完了が上限に達した時と、次の一手が /follow-up の時)。成果物(checkpoint の
 // コミットが増えたか)で判定する。/follow-up が利用者への問い(要確認の回収など)を出せば、答えを待つ(settle)
 function runFollowUp(ctx, nextTask) {
   const headBefore = headOf(ctx.root);
@@ -381,16 +407,6 @@ function runTask(ctx, task, attempt, { amended = false } = {}) {
   if (info.state === "-") return { action: "stop", reason: "task_closed" };
   const open = openDependencies(ctx.root, task);
   if (open.length > 0) return { action: "stop", reason: "dependency_open", details: { open } };
-  let since = completedSinceCheckpoint(ctx.root);
-  if (since && since.count >= CHECKPOINT_LIMIT) {
-    if (!ctx.followUp || ctx.followUpBefore.has(task)) return { action: "stop", reason: "follow_up_required", details: since };
-    ctx.followUpBefore.add(task); // 同じ T の前で /follow-up を繰り返さない
-    const outcome = runFollowUp(ctx, task);
-    log("follow-up", `${outcome.action}: ${outcome.reason ?? "checkpoint"}`);
-    if (outcome.action !== "continue") return outcome;
-    since = completedSinceCheckpoint(ctx.root);
-    if (since && since.count >= CHECKPOINT_LIMIT) return { action: "stop", reason: "follow_up_required", details: since };
-  }
 
   const headBefore = headOf(ctx.root);
   const deadline = Date.now() + ctx.taskTimeoutMs;
@@ -456,43 +472,48 @@ function main() {
     clearTimeoutMs: Number(values["clear-timeout-ms"] ?? 30_000),
     settleMs: Number(values["settle-sec"] ?? 90) * 1000,
     followUp: !values["no-follow-up"],
-    followUpBefore: new Set(),
   };
-  const texts = checked.tasks.map((t) => `${ctx.host === "codex" ? "$" : "/"}execute-task ${t}`);
-  log(null, `target ${ctx.target ?? "(隣に起動する)"} (${ctx.host}${checked.started ? "、隣に起動" : ""}) tasks ${checked.tasks.join(",")} (${checked.tasksFrom})`);
+  const texts = checked.step ? [stepText(ctx.host, checked.step)] : checked.tasks.map((t) => stepText(ctx.host, { command: "execute-task", arg: t }));
+  log(null, `target ${ctx.target ?? "(隣に起動する)"} (${ctx.host}${checked.started ? "、隣に起動" : ""}) ${checked.step ? `next ${texts[0]}` : `tasks ${checked.tasks.join(",")}`} (${checked.tasksFrom})`);
   if (values["dry-run"]) {
     finish({ stopped: false, reason: "dry_run", target: ctx.target, host: ctx.host, root: ctx.root, started: checked.started, would_start: checked.wouldStart ?? null, tasks: checked.tasks, tasks_from: checked.tasksFrom, prompts: texts, retry_max: ctx.retryMax, follow_up: ctx.followUp }, 0);
     return;
   }
   sweep();
+  runLoop(ctx, checked);
+}
 
-  // 回す T はキューに持つ。TODO.md から取った時(引数なし)は、/amend・/breakdown の後に TODO.md から組み直す
-  // (追加された T を拾い、廃止された T を外す)。引数で指定した時は組み直さない
-  const fromTodo = checked.tasksFrom === "TODO.md";
-  let queue = [...checked.tasks];
+// 送る文。Claude は /<工程>、Codex は $<工程>
+const stepText = (host, step) => `${host === "codex" ? "$" : "/"}${step.command}${step.arg ? " " + step.arg : ""}`;
+
+// 1 回の起動で /follow-up の 1 区間を回す。区間は最新の checkpoint 以後の完了が 5 件に達するまでで、達したら次の作業の
+// 前に /follow-up を送り、checkpoint が増えたら follow_up_done で終える(次の区間は打ち直して始める)。
+// 次に回す作業は、引数なし(tasksFrom が HANDOFF.md)なら毎回 HANDOFF.md の次の一手(loopStep)から決める。各工程が
+// 次の一手を書き換えるので、/amend・/breakdown の後もそのまま続く。引数で T を指定した時は、その範囲を上から回す
+function runLoop(ctx, checked) {
+  const fromHandoff = checked.tasksFrom === "HANDOFF.md";
+  let queue = fromHandoff ? [] : [...checked.tasks];
   const done = [];
   const skipped = [];
   const amended = new Set();
+  let lastBreakdown = null;
   const handled = (t) => done.includes(t) || skipped.includes(t);
-  const rebuild = (head = []) => [...head, ...openTasks(ctx.root).filter((t) => !handled(t) && !head.includes(t))];
   const base = () => ({ target: ctx.target, host: ctx.host, root: ctx.root, tasks_done: done, tasks_skipped: skipped });
   const stop = (outcome, task, attempt) => finish({
     stopped: true, reason: outcome.reason, task, attempt, session_id: outcome.session ?? null, ...base(),
     tasks_remaining: queue, next_step: nextStep(ctx.root), details: outcome.details ?? null, tail: agentRead(ctx.target, 80),
   }, 1);
-  // 次の一手が /breakdown なら送る(TODO.md から取った時だけ。範囲指定の時は範囲が済めば all_done で、次の一手は
-  // next_step に出す)。戻り値: true = 送って着地した / false = 送らない / null = 止まった
-  const breakdownIfNext = () => {
-    const design = fromTodo ? breakdownTarget(ctx.root) : null;
-    if (!design) return false;
-    const outcome = runBreakdown(ctx, design);
-    log("breakdown", `${outcome.action}: ${outcome.reason ?? design}`);
-    if (outcome.action !== "continue") { stop(outcome, null, null); return null; }
-    queue = rebuild(queue);
-    return true;
+
+  // 区間を閉じる: /follow-up を送り、checkpoint が増えたら終える。--no-follow-up なら送らずに止まる
+  const closeInterval = (nextTask) => {
+    if (!ctx.followUp) { stop({ reason: "follow_up_required", details: completedSinceCheckpoint(ctx.root) }, nextTask, null); return; }
+    const outcome = runFollowUp(ctx, nextTask);
+    log("follow-up", `${outcome.action}: ${outcome.reason ?? "checkpoint"}`);
+    if (outcome.action !== "continue") { stop(outcome, nextTask, null); return; }
+    finish({ stopped: false, reason: "follow_up_done", ...base(), tasks_remaining: queue, next_step: nextStep(ctx.root) }, 0);
   };
 
-  // 範囲指定の時: amend が廃止した T は置き換え先へ読み替え(無ければ外し)、重複を除く(TODO.md から取る時は rebuild が同じことをする)
+  // 範囲指定の時: amend が廃止した T は置き換え先へ読み替え(無ければ外し)、重複を除く
   const settleQueue = (list) => {
     const out = [];
     for (const t of list) {
@@ -503,37 +524,60 @@ function main() {
     return out;
   };
 
-  // 次の一手が /breakdown かは T を取り出す前に毎回見る(段階の最後の T が書いた /breakdown を、キューに残る別の計画の
-  // T が上書きする前に拾うため)
-  for (;;) {
-    const planned = breakdownIfNext();
-    if (planned === null) return;
-    if (queue.length === 0) break;
-    const task = queue.shift();
+  // 穴の記録の T に /amend を送る。同じ T の amend はこのループで 1 回まで。履歴に T 由来の amend が既に 2 件あれば送らない
+  // (amend.md「同じ T<n> に 3 回目を実行する前に止める」。git log から数えるので打ち直しをまたいでも揃う)。
+  // 戻り値: true = 着地して続ける / false = 止まった
+  const amendTask = (task, attempt) => {
+    if (amended.has(task) || amendCount(ctx.root, task) >= 2) { queue.unshift(task); stop({ reason: "amend_repeated" }, task, attempt); return false; }
+    amended.add(task);
+    const planned = runAmend(ctx, task);
+    log(task, `amend: ${planned.action}${planned.reason ? " " + planned.reason : ""}`);
+    if (planned.action !== "continue") { queue.unshift(task); stop(planned, task, attempt); return false; }
+    // 範囲指定の時は、次の一手が指す T(元の T・置き換え先・amend が足した是正タスクのどれか。amendOutcome が未着手と
+    // 確認済み)をキューの先頭に置く。次の一手から回す時は次の周回でそのまま読む
+    if (!fromHandoff) queue = settleQueue([nextStep(ctx.root).arg, ...queue]);
+    return true;
+  };
+
+  // T を送り、予算停止なら再送、穴の記録なら /amend を挟む。戻り値: true = 続ける / false = 止まった
+  const runTaskAttempts = (task) => {
     for (let attempt = 1; ; attempt += 1) {
-      // 同じ T の amend はこのループで 1 回まで。履歴に T 由来の amend が既に 2 件あれば送らない
-      // (amend.md「同じ T<n> に 3 回目を実行する前に止める」。git log から数えるので打ち直しをまたいでも揃う)
       const outcome = runTask(ctx, task, attempt, { amended: amended.has(task) || amendCount(ctx.root, task) >= 2 });
       log(task, `${outcome.action}: ${outcome.reason}`);
-      if (outcome.action === "next") { done.push(task); break; }
-      if (outcome.action === "skip") { skipped.push(task); break; }
+      if (outcome.action === "next") { done.push(task); return true; }
+      if (outcome.action === "skip") { skipped.push(task); return true; }
       if (outcome.action === "retry") continue;
-      if (outcome.action === "amend") {
-        amended.add(task);
-        const planned = runAmend(ctx, task);
-        log(task, `amend: ${planned.action}${planned.reason ? " " + planned.reason : ""}`);
-        if (planned.action !== "continue") { queue.unshift(task); stop(planned, task, attempt); return; }
-        // 次の一手が指す T から続ける(元の T・置き換え先・amend が足した是正タスクのどれか。amendOutcome が未着手と確認済み)。
-        // 置き換え先や是正タスクは別の T なので、このループでの amend の 1 回はそれぞれが持つ
-        const resume = nextStep(ctx.root).arg;
-        queue = fromTodo ? rebuild([resume]) : settleQueue([resume, ...queue]);
-        break;
-      }
+      if (outcome.action === "amend") return amendTask(task, attempt);
       queue.unshift(task);
       stop(outcome, task, attempt);
-      return;
+      return false;
     }
+  };
+
+  // 同じ設計書の /breakdown が、間に T の完了を挟まずに続いたら止まる(着地したのに次の一手が /breakdown のまま)
+  const breakdown = (design) => {
+    if (lastBreakdown?.design === design && lastBreakdown.done === done.length) { stop({ reason: "breakdown_repeated", details: { design } }, null, null); return false; }
+    lastBreakdown = { design, done: done.length };
+    const outcome = runBreakdown(ctx, design);
+    log("breakdown", `${outcome.action}: ${outcome.reason ?? design}`);
+    if (outcome.action !== "continue") { stop(outcome, null, null); return false; }
+    return true;
+  };
+
+  const intervalFull = () => (completedSinceCheckpoint(ctx.root)?.count ?? 0) >= CHECKPOINT_LIMIT;
+  for (;;) {
+    const work = fromHandoff ? loopStep(ctx.root) : { step: queue.length > 0 ? { command: "execute-task", arg: queue[0] } : null };
+    if (!work.step && (!fromHandoff || openTasks(ctx.root).length === 0)) break;
+    if (work.error || !work.step) { stop({ reason: work.error === "not_open" ? "next_step_not_open" : "next_step_not_runnable" }, work.step?.arg ?? null, null); return; }
+    const { command, arg } = work.step;
+    const task = command === "execute-task" || command === "amend" ? arg : null;
+    if (command === "follow-up" || intervalFull()) { closeInterval(task); return; }
+    if (!fromHandoff) queue.shift();
+    const going = command === "breakdown" ? breakdown(arg) : command === "amend" ? amendTask(task, null) : runTaskAttempts(task);
+    if (!going) return;
   }
+  // 5 件目の完了で回す作業が尽きた時も区間を閉じる(閉じずに終えると、次の起動は回す作業が無く /follow-up を送れない)
+  if (intervalFull()) { closeInterval(null); return; }
   finish({ stopped: false, reason: "all_done", ...base(), tasks_remaining: [], next_step: nextStep(ctx.root) }, 0);
 }
 

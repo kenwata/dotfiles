@@ -9,5 +9,5 @@ alias ..='cd ..'
 alias initialize='mkdir -p .claude && cp -Rn ~/.claude/templates/. .claude/'
 
 # /execute-task の連続実行ループ。herdr のペインの端末で、プロジェクトのディレクトリから打つ。
-# 引数なしで TODO.md の未着手の T を上から順に、`task-loop T12..T16` で範囲を回す。送る先のペインは自動で探す
+# 引数なしで HANDOFF.md の次の一手から /follow-up の 1 区間を、`task-loop T12..T16` で範囲を回す。送る先のペインは自動で探す
 alias task-loop='node ~/.claude/hooks/lib/task-loop/cli.mjs run'

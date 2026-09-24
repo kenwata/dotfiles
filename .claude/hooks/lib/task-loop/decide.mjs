@@ -32,7 +32,8 @@ function readText(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return null; }
 }
 
-// TODO.md のタスク表で [ ] の T を、書かれている順に返す(--tasks を省略した時の既定)。計画表の行は T の列が無いので入らない
+// TODO.md のタスク表で [ ] の T を、書かれている順に返す。計画表の行は T の列が無いので入らない。回す T を選ぶのには使わない
+// (表の並びは実行順ではない。loopStep)。使い道は「未着手が残っているか」と、/breakdown が T を足したかの判定だけ
 export function openTasks(root) {
   const tasks = [];
   for (const line of (readText(path.join(root, "TODO.md")) ?? "").split(/\r?\n/)) {
@@ -173,6 +174,24 @@ export function nextStep(root) {
 export function breakdownTarget(root) {
   const step = nextStep(root);
   return step?.command === "breakdown" && /^docs\/design\/\S+\.md$/.test(step.arg ?? "") ? step.arg : null;
+}
+
+// 引数なしの task-loop が回す工程。/elaborate は対話で詰める工程なので入れない(2026-09-24 利用者決定)
+const LOOP_COMMANDS = ["execute-task", "amend", "breakdown", "follow-up"];
+
+// 引数なしの task-loop が次に回す工程を、HANDOFF.md の次の一手から決める。T の順は各工程が次の一手に書いた順が正で、
+// TODO.md の並びからは選ばない(表の並びは実行順ではない。2026-09-24、凍結中の T47 を表の先頭として 2 回送って止まった)。
+// 戻り値: { step }(回してよい)/ { error: "not_runnable", step }(次の一手が無い・回さない工程・引数の形が違う)/
+// { error: "not_open", step }(/execute-task・/amend の T が未着手([ ])ではない。推測で別の T を選ばない)
+export function loopStep(root) {
+  const step = nextStep(root);
+  if (!step || !LOOP_COMMANDS.includes(step.command)) return { error: "not_runnable", step };
+  if (step.command === "breakdown" && !breakdownTarget(root)) return { error: "not_runnable", step };
+  if (step.command === "execute-task" || step.command === "amend") {
+    if (!/^T\d+$/.test(step.arg ?? "")) return { error: "not_runnable", step };
+    if (findTask(root, step.arg)?.state !== " ") return { error: "not_open", step };
+  }
+  return { step };
 }
 
 // T を由来にした設計の改訂(要約 `amend: … (T<n> 由来)`)の件数。履歴全体から数えるので、ループを打ち直しても揃う。

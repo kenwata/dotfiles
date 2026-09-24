@@ -7,7 +7,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseDependencies, readTaskScope } from "../../../check-task-scope.mjs";
 import {
-  amendCount, amendOutcome, breakdownOutcome, breakdownTarget, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, nextStep,
+  amendCount, amendOutcome, breakdownOutcome, breakdownTarget, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, loopStep, nextStep,
   openDependencies, openTasks, parseTaskList, planSlug,
 } from "../decide.mjs";
 
@@ -207,6 +207,36 @@ test("nextStep は「次セッションの最初の一手」節の最初のコ�
     assert.equal(nextStep(t.root), null, "コマンドの形で書かれていなければ読まない");
     write("## 次セッションの最初の一手\n- `/breakdown`(引数なし)\n");
     assert.equal(breakdownTarget(t.root), null, "設計書のパスが無い /breakdown は送らない");
+  } finally { t.cleanup(); }
+});
+
+test("loopStep は次の一手を引数なしの task-loop が回す工程として読み、回せない工程と済んだ T を理由付きで返す", () => {
+  const t = fixture();
+  const write = (line) => fs.writeFileSync(path.join(t.root, "HANDOFF.md"), `## 次セッションの最初の一手\n\n- ${line}\n`);
+  try {
+    assert.deepEqual(loopStep(t.root), { error: "not_runnable", step: null }, "HANDOFF.md が無い");
+    for (const [line, step] of [
+      ["`/execute-task T70`(説明)", { command: "execute-task", arg: "T70" }],
+      ["`/amend T5`", { command: "amend", arg: "T5" }],
+      ["`/breakdown docs/design/a.md`", { command: "breakdown", arg: "docs/design/a.md" }],
+      ["`/follow-up`", { command: "follow-up", arg: null }],
+    ]) {
+      write(line);
+      assert.deepEqual(loopStep(t.root), { step }, line);
+    }
+    for (const [line, error] of [
+      ["`/elaborate docs/design/a.md`", "not_runnable"],
+      ["`/breakdown`(引数なし)", "not_runnable"],
+      ["`/execute-task`(T が無い)", "not_runnable"],
+      ["なし", "not_runnable"],
+      ["`/execute-task T1`", "not_open"],
+      ["`/execute-task T2`", "not_open"],
+      ["`/execute-task T99`", "not_open"],
+      ["`/amend T4`", "not_open"],
+    ]) {
+      write(line);
+      assert.equal(loopStep(t.root).error, error, line);
+    }
   } finally { t.cleanup(); }
 });
 
