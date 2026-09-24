@@ -24,6 +24,8 @@ const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.m
 //   herdr_blip: ターンを終え、get を 3 回失敗させてから complete する / quick: running を書かずに stopped だけ書いて
 //   complete する(最初の見直しの前に終わる短いターン)/ background: hook と同じくターンの終わりに裏の処理が 1 件
 //   走っていると書き(画面は idle)、get を 5 回受けたら complete する(完了通知で再開するまでの空白)/
+//   post_commit_work: complete(コミット)した後もターンを続け、get を 5 回受けたらターンを終える。その間に届いた
+//   /clear は本物の Claude と同じく待ち行列に入り、ターンの終わりに実行される(2026-09-24 の VC_Analysis T61)/
 //   stage_end: complete に加えて HANDOFF.md の次の一手を /breakdown docs/design/plan.md にする /
 //   hidden_question: 画面は idle のまま、hook と同じく turn を awaiting_user と書き、get を 5 回受けたら人が答えた形にする
 //   (名前の罫線で herdr が問いの画面を見逃す場面)/ silent_work: 同じく idle のまま turn を running と書き、get を 5 回
@@ -142,6 +144,15 @@ if (args[1] === "get") {
     save();
     fail("timeout");
   }
+  if (s.postLeft > 0) {
+    s.postLeft -= 1;
+    s.status = s.postLeft === 0 ? "idle" : "working";
+    if (s.postLeft === 0) {
+      endTurn();
+      if (s.clearQueued) { s.clearQueued = false; s.n += 1; s.session = "sess-" + s.n; }
+    }
+    save();
+  }
   if (s.bgLeft > 0) {
     s.bgLeft -= 1;
     if (s.bgLeft === 0) { complete(s.pending); endTurn(); }
@@ -178,6 +189,7 @@ if (args[1] === "prompt") {
   const text = args[3];
   if (s.status === "blocked") fail("agent_blocked");
   if (text === "/clear") {
+    if (s.postLeft > 0) { s.clearQueued = true; s.clearWhileWorking = true; save(); ok(agent()); }
     if (s.host === "codex") s.fresh = !s.ignoreClear;
     else if (!s.ignoreClear) { s.n += 1; s.session = "sess-" + s.n; }
     if (s.blockOnClear) s.status = "blocked";
@@ -258,7 +270,8 @@ if (args[1] === "prompt") {
   if (action === "herdr_down") s.down = true;
   if (action === "herdr_blip") { s.downLeft = 3; s.pending = task; }
   if (action === "background") { s.bgLeft = HIDDEN_GETS; s.pending = task; }
-  if (!["question", "hidden_question", "silent_work", "working", "flaky_work", "background"].includes(action)) endTurn();
+  if (action === "post_commit_work") { complete(task); s.postLeft = HIDDEN_GETS; s.status = "working"; }
+  if (!["question", "hidden_question", "silent_work", "working", "flaky_work", "background", "post_commit_work"].includes(action)) endTurn();
   if (action === "background") writeTurn("stopped", "Stop", { background: 1 });
   save();
   ok(agent());
@@ -853,6 +866,17 @@ test("答え待ちが --answer-timeout-hours を超えたら answer_timeout で�
     assert.equal(code, 2);
     assert.match(json.errors.join(), /--answer-timeout-hours/);
     assert.deepEqual(t.prompts(), []);
+  } finally { t.cleanup(); }
+});
+
+test("成果物が揃ってもターンが続いている間は /clear を送らず、ターンが終わってから次の T へ進む", () => {
+  const t = setup({ scenario: { T1: ["post_commit_work"], T2: ["complete"] } });
+  try {
+    const { code, json, stderr } = t.run("--tasks", "T1..T2", "--clear-timeout-ms", "1200");
+    assert.equal(code, 0, `2026-09-24 の VC_Analysis T61: 作業中に /clear を送って待ち行列に入り clear_not_detected で止まらない: ${JSON.stringify(json)}`);
+    assert.equal(json.reason, "all_done");
+    assert.equal(t.state().clearWhileWorking, undefined, "/clear は作業中に届いていない");
+    assert.match(stderr, /\[loop T1\] 完了を確認。ターンが終わるのを待つ/);
   } finally { t.cleanup(); }
 });
 

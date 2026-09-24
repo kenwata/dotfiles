@@ -245,7 +245,8 @@ function observe(ctx) {
 //   background。完了通知で再開するまでの空白。turn.mjs の経緯)、Codex worker の実行中(ロック): 待つ
 // - 判定できない(hook が待つ理由を示さず herdr も読めない): 静かな時間を数えずに待ち、HERDR_GRACE_MS 続いたら止まる
 // - それ以外: 落ち着いた状態が settle の間続いたら落ち着いたとみなす(worker の完了通知で監督のターンが再開する間を空ける)
-// 成果物の完了は毎周の最初に見るので、herdr が読めない間も完了したものは先へ進む。
+// 成果物の完了は毎周見て、揃えばターンの終わりを待って先へ進む。herdr が読めない間も、hook がターンの終わりを
+// 書いていれば進む。
 function settle(ctx, deadline, isComplete, logTask, session) {
   let quietSince = null;
   let quietPausedAt = null; // 落ち着いた状態の途中で判定できなくなった時刻。読めない間は静かな時間に数えない
@@ -253,15 +254,12 @@ function settle(ctx, deadline, isComplete, logTask, session) {
   let answeredFrom = null; // 前の周が答え待ちなら、その周の始まり。周の全体を作業の制限時間から除く
   let blindSince = null;
   let blind = false;
+  let completeSeen = false;
   let limit = deadline;
   for (;;) {
     const roundAt = Date.now();
     if (answeredFrom !== null) { limit += roundAt - answeredFrom; answeredFrom = null; }
     if (roundAt > limit) return { stop: "timeout" };
-    if (isComplete()) {
-      if (answerSince !== null) log(logTask, "blocked: 答えを受けて再開");
-      return {};
-    }
     const seen = observe(ctx);
     // 送った時と別のセッションになったら、hook の記録(前のセッションのもの)では待つ理由を決められない。判定へ進む
     // (runTask では judge が session_changed として止め、/follow-up・/amend・/breakdown では着地していないとして止まる)
@@ -271,6 +269,17 @@ function settle(ctx, deadline, isComplete, logTask, session) {
       log(logTask, blind ? `herdr: 状態を読めない(${seen.detail ?? seen.failure})。hook の記録で判定を続ける` : "herdr: 状態を読めるようになった");
     }
     const phase = waitPhase(seen.status, session ? readTurn(session) : null, Date.now());
+    // 成果物が揃っても、ターンが続いている間(作業中・答え待ち・worker の実行中)は先へ進まない。次の /clear が
+    // Claude Code の待ち行列に入り、ターンの終わりまで実行されないため(2026-09-24 の VC_Analysis T61: コミットの後に
+    // 完了条件の確かめを 2 分続けている間に /clear を送り、clear_not_detected で止まった)。揃った後は静かな時間を待たない
+    const turnGoing = phase === "busy" || phase === "awaiting_user" || activeWorkerLock(ctx.root);
+    if (isComplete()) {
+      if (!turnGoing) {
+        if (answerSince !== null) log(logTask, "blocked: 答えを受けて再開");
+        return {};
+      }
+      if (!completeSeen) { log(logTask, "完了を確認。ターンが終わるのを待つ"); completeSeen = true; }
+    }
     if (phase !== "awaiting_user" && answerSince !== null) { log(logTask, "blocked: 答えを受けて再開"); answerSince = null; }
     if (phase !== "no_evidence") blindSince = null;
     if (phase === "awaiting_user") {
