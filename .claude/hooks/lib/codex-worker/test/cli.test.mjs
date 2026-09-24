@@ -123,6 +123,18 @@ if (mode === "outside") {
   fs.writeFileSync(path.join(root, "..", "top.ts"), "edited by another session\\n");
 }
 if (mode === "ignored") fs.writeFileSync(path.join(root, ".env"), "SECRET=changed\\n");
+if (mode === "worktree-main-edit") {
+  const main = process.env.FAKE_MAIN;
+  fs.writeFileSync(path.join(main, "top.ts"), "edited by another session\\n");
+  fs.appendFileSync(path.join(main, "live.log"), "written by another process\\n");
+  fs.writeFileSync(path.join(main, "fresh.log"), "created by another process\\n");
+}
+if (mode === "worktree-second") {
+  fs.writeFileSync(path.join(root, "src/a/caller.ts"), "caller\\n");
+}
+if (mode === "worktree-first") {
+  fs.writeFileSync(path.join(root, "src/a/first.ts"), "first step\\n");
+}
 fs.writeFileSync(out, JSON.stringify({ status: "done", changed_files: ["src/a/impl.ts"], tests_run: [], criteria: [], holes: [], reference_errors: [], notes: "" }));
 console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5 } }));
 `;
@@ -948,3 +960,353 @@ test("時間切れの run も metrics の全キーを出し model_s は 0 以上
     assert.ok(json.metrics.runner_s >= json.metrics.duration_s);
   } finally { t.cleanup(); }
 });
+
+test(
+  "run --worktree は同じ本体の accepted run に branch が無ければ拒否する",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      fs.mkdirSync(path.join(t.ws, "src/a"), { recursive: true });
+      const legacy = t.run(wsArgs(t), { FAKE_MODE: "ok" });
+      assert.equal(legacy.code, 0, JSON.stringify(legacy.json));
+      assert.equal(legacy.json.accepted, true);
+
+      const sandboxCallsBefore = t.sandboxCalls().length;
+      const workerEnvBefore = t.execEnv();
+      const attempted = t.run([...wsArgs(t), "--worktree"], { FAKE_MODE: "ok" });
+
+      assert.equal(attempted.code, 2);
+      assert.match(attempted.json.errors.join("\n"), /branch なし accepted run がある/);
+      assert.equal(
+        t.sandboxCalls().length,
+        sandboxCallsBefore,
+        "拒否時は worker を起動しない",
+      );
+      assert.deepEqual(t.execEnv(), workerEnvBefore);
+      assert.equal(fs.existsSync(path.join(t.taskDir, "worktree.json")), false);
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "worktree.json がある本体リポジトリで --worktree 無しの run を拒否する",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      const createArgs = [...baseArgs(t.root, t.packet)];
+      createArgs.splice(createArgs.indexOf("--allow"), 2, "--allow", "other/y.ts");
+      createArgs.push("--workspace", t.ws, "--worktree");
+      const created = t.run(createArgs, { FAKE_MODE: "ok" });
+      assert.equal(created.code, 2);
+      assert.match(created.json.errors.join("\n"), /T の対象の外/);
+      assert.equal(
+        t.execEnv(),
+        null,
+        "作業場所の検査拒否より前に worker を起動しない",
+      );
+      assert.ok(
+        fs.existsSync(path.join(t.taskDir, "worktree.json")),
+        "検査拒否後も作成した記録を残す",
+      );
+
+      const sandboxCallsBefore = t.sandboxCalls().length;
+      const withoutWorktree = t.run(wsArgs(t), { FAKE_MODE: "ok" });
+
+      assert.equal(withoutWorktree.code, 2);
+      assert.match(
+        withoutWorktree.json.errors.join("\n"),
+        /worktree.json の本体リポジトリ/,
+      );
+      assert.equal(
+        t.sandboxCalls().length,
+        sandboxCallsBefore,
+        "拒否時は worker を起動しない",
+      );
+      assert.equal(t.execEnv(), null);
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "削除済み repo の記録では本体外から --worktree 無しで run できる",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      const createArgs = [...baseArgs(t.root, t.packet)];
+      createArgs.splice(createArgs.indexOf("--allow"), 2, "--allow", "other/y.ts");
+      createArgs.push("--workspace", t.ws, "--worktree");
+      const created = t.run(createArgs, { FAKE_MODE: "ok" });
+      assert.equal(created.code, 2);
+      assert.ok(fs.existsSync(path.join(t.taskDir, "worktree.json")));
+
+      const missingRepo = path.join(t.base, "deleted-repo");
+      const recordPath = path.join(t.taskDir, "worktree.json");
+      const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+      fs.writeFileSync(recordPath, JSON.stringify({ ...record, repo: missingRepo }, null, 2));
+      assert.equal(fs.existsSync(missingRepo), false);
+
+      const result = t.run(wsArgs(t), { FAKE_MODE: "ok" });
+
+      assert.equal(result.code, 0, JSON.stringify(result.json));
+      assert.equal(result.json.accepted, true);
+      assert.doesNotMatch(
+        result.json.errors?.join("\n") ?? "",
+        /worktree\.json の本体リポジトリ/,
+      );
+    } finally { t.cleanup(); }
+  },
+);
+
+test("run --worktree は --workspace が無ければ起動前に exit 2 で拒否する", () => {
+  const t = setup();
+  try {
+    const sandboxCallsBefore = t.sandboxCalls().length;
+    const result = t.run([...baseArgs(t.root, t.packet), "--worktree"], { FAKE_MODE: "ok" });
+
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join("\n"), /--workspace が必要/);
+    assert.equal(t.sandboxCalls().length, sandboxCallsBefore);
+    assert.equal(t.execEnv(), null);
+    assert.equal(fs.existsSync(path.join(t.taskDir, "worktree.json")), false);
+  } finally { t.cleanup(); }
+});
+
+test(
+  "run --worktree は帳簿と同じリポジトリの --workspace を exit 2 で拒否する",
+  () => {
+    const t = setup();
+    try {
+      const sandboxCallsBefore = t.sandboxCalls().length;
+      const result = t.run(
+        [...baseArgs(t.root, t.packet), "--workspace", t.root, "--worktree"],
+        { FAKE_MODE: "ok" },
+      );
+
+      assert.equal(result.code, 2);
+      assert.match(result.json.errors.join("\n"), /帳簿と別のリポジトリ/);
+      assert.equal(t.sandboxCalls().length, sandboxCallsBefore);
+      assert.equal(t.execEnv(), null);
+      assert.equal(fs.existsSync(path.join(t.taskDir, "worktree.json")), false);
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "削除済みで本体の外にある workspace は --worktree と混在扱いしない",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+      git(t.wsRepo, "add", "src/a/fixture.ts");
+      git(t.wsRepo, "commit", "-qm", "track workspace target");
+
+      const deletedWorkspace = path.join(t.base, "deleted-workspace");
+      const entry = {
+        kind: "run",
+        step: "1",
+        by: "runner",
+        keys: { accepted: true, workspace: deletedWorkspace },
+        text: "previous run",
+      };
+      const worklogModule = new URL("../worklog.mjs", import.meta.url).href;
+      const script = `import { appendWorklog } from ${JSON.stringify(worklogModule)};\n`
+        + `appendWorklog(${JSON.stringify(t.root)}, "T7", ${JSON.stringify(entry)});`;
+      execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+        env: { ...process.env, XDG_STATE_HOME: path.join(t.base, "state") },
+      });
+
+      const result = t.run([...wsArgs(t), "--worktree"], { FAKE_MODE: "ok" });
+
+      assert.equal(result.code, 0, JSON.stringify(result.json));
+      const mixedError = (result.json.errors ?? []).find(
+        (error) => /branch なし accepted run がある/.test(error),
+      );
+      assert.equal(
+        mixedError,
+        undefined,
+      );
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "run --worktree は本体の同時変更を分離して worker の変更だけ gate に出す",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+      git(t.wsRepo, "add", "src/a/fixture.ts");
+      git(t.wsRepo, "commit", "-qm", "track workspace target");
+
+      const { code, json } = t.run(
+        [...wsArgs(t), "--worktree"],
+        { FAKE_MODE: "worktree-main-edit", FAKE_MAIN: t.ws },
+      );
+
+      assert.equal(code, 0, JSON.stringify(json));
+      assert.equal(json.accepted, true);
+      assert.deepEqual(json.gate.changed, ["src/a/impl.ts"]);
+      assert.equal(
+        fs.readFileSync(path.join(t.ws, "top.ts"), "utf8"),
+        "edited by another session\n",
+      );
+      assert.equal(
+        fs.readFileSync(path.join(t.ws, "live.log"), "utf8"),
+        "line1\nwritten by another process\n",
+      );
+      assert.equal(
+        fs.readFileSync(path.join(t.ws, "fresh.log"), "utf8"),
+        "created by another process\n",
+      );
+      assert.equal(
+        fs.readFileSync(path.join(json.worktree.path, "src/a/impl.ts"), "utf8"),
+        "impl\n",
+      );
+      assert.equal(fs.existsSync(path.join(t.ws, "src/a/impl.ts")), false);
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "同じ T の後続 run は同じ worktree を使い前の変更を gate から外して残す",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+      git(t.wsRepo, "add", "src/a/fixture.ts");
+      git(t.wsRepo, "commit", "-qm", "track workspace target");
+
+      const firstArgs = [...wsArgs(t), "--worktree", "--allow", "src/a/first.ts"];
+      const first = t.run(firstArgs, { FAKE_MODE: "worktree-first" });
+      const stepIndex = firstArgs.indexOf("--step");
+      const secondArgs = [
+        ...firstArgs.slice(0, stepIndex + 1),
+        "2",
+        ...firstArgs.slice(stepIndex + 2),
+        "--allow",
+        "src/a/caller.ts",
+      ];
+      const second = t.run(secondArgs, { FAKE_MODE: "worktree-second" });
+
+      assert.equal(first.code, 0, JSON.stringify(first.json));
+      assert.equal(first.json.accepted, true);
+      assert.equal(second.code, 0, JSON.stringify(second.json));
+      assert.equal(second.json.accepted, true);
+      assert.equal(second.json.worktree.path, first.json.worktree.path);
+      assert.equal(second.json.worktree.branch, first.json.worktree.branch);
+      assert.deepEqual(second.json.gate.changed, ["src/a/caller.ts"]);
+      assert.ok(first.json.gate.changed.includes("src/a/first.ts"));
+      assert.equal(second.json.gate.changed.includes("src/a/first.ts"), false);
+      assert.equal(
+        fs.readFileSync(path.join(first.json.worktree.path, "src/a/first.ts"), "utf8"),
+        "first step\n",
+      );
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "作成後の前提検査で拒否された run は worktree を残す",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      const args = [...baseArgs(t.root, t.packet)];
+      args.splice(args.indexOf("--allow"), 2, "--allow", "other/y.ts");
+      args.push("--workspace", t.ws, "--worktree");
+
+      const result = t.run(args, { FAKE_MODE: "ok" });
+      const record = JSON.parse(
+        fs.readFileSync(path.join(t.taskDir, "worktree.json"), "utf8"),
+      );
+
+      assert.equal(result.code, 2);
+      assert.match(result.json.errors.join("\n"), /T の対象の外/);
+      assert.equal(fs.existsSync(record.path), true);
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "run --worktree は report・run.json・worklog・状態行に branch を記録する",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+      git(t.wsRepo, "add", "src/a/fixture.ts");
+      git(t.wsRepo, "commit", "-qm", "track workspace target");
+
+      const result = t.run([...wsArgs(t), "--worktree"], { FAKE_MODE: "ok" });
+      const worktreeRecord = JSON.parse(
+        fs.readFileSync(path.join(t.taskDir, "worktree.json"), "utf8"),
+      );
+      const runMeta = JSON.parse(
+        fs.readFileSync(path.join(result.json.run_dir, "run.json"), "utf8"),
+      );
+      const snapshot = JSON.parse(
+        fs.readFileSync(path.join(result.json.run_dir, "snapshot.json"), "utf8"),
+      );
+      const expected = {
+        repo: worktreeRecord.repo,
+        path: worktreeRecord.path,
+        branch: worktreeRecord.branch,
+      };
+
+      assert.equal(result.code, 0, JSON.stringify(result.json));
+      assert.equal(result.json.accepted, true);
+      assert.equal(worktreeRecord.repo, fs.realpathSync(t.wsRepo));
+      assert.equal(worktreeRecord.path, fs.realpathSync(worktreeRecord.path));
+      assert.deepEqual(snapshot.refScope, ["refs/heads/" + worktreeRecord.branch]);
+      assert.deepEqual(Object.keys(result.json.worktree).sort(), ["branch", "path", "repo"]);
+      assert.deepEqual(result.json.worktree, expected);
+      assert.deepEqual(Object.keys(runMeta.worktree).sort(), ["branch", "path", "repo"]);
+      assert.deepEqual(runMeta.worktree, expected);
+
+      const runLines = worklogEntries(t, "run");
+      assert.equal(runLines.length, 1);
+      assert.ok(runLines[0].includes(`branch=${worktreeRecord.branch}`));
+
+      for (const output of [result.stderr, fs.readFileSync(t.statusLog, "utf8")]) {
+        const startLine = output.split("\n").find((line) => line.includes(" model=gpt-6-luna "));
+        assert.ok(startLine, output);
+        assert.ok(startLine.includes(` branch=${worktreeRecord.branch} `), startLine);
+      }
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "--worktree 無しの run は記録欄を出さず worktrees/ を作らない",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      const result = t.run(wsArgs(t), { FAKE_MODE: "ok" });
+      const runMeta = JSON.parse(
+        fs.readFileSync(path.join(result.json.run_dir, "run.json"), "utf8"),
+      );
+      const snapshot = JSON.parse(
+        fs.readFileSync(path.join(result.json.run_dir, "snapshot.json"), "utf8"),
+      );
+      const worktrees = path.join(
+        t.base,
+        "state",
+        "claude-codex-worker",
+        "worktrees",
+      );
+
+      assert.equal(result.code, 0, JSON.stringify(result.json));
+      assert.equal(result.json.accepted, true);
+      assert.equal(Object.hasOwn(result.json, "worktree"), false);
+      assert.equal(Object.hasOwn(runMeta, "worktree"), false);
+      assert.equal(Object.hasOwn(snapshot, "refScope"), false);
+      assert.equal(worklogEntries(t, "run").length, 1);
+      assert.doesNotMatch(worklogEntries(t, "run")[0], /(?:^|\s)branch=/);
+      assert.equal(fs.existsSync(worktrees), false);
+
+      for (const output of [result.stderr, fs.readFileSync(t.statusLog, "utf8")]) {
+        const startLine = output.split("\n").find((line) => line.includes(" model=gpt-6-luna "));
+        assert.ok(startLine, output);
+        assert.doesNotMatch(startLine, / branch=/);
+      }
+    } finally { t.cleanup(); }
+  },
+);

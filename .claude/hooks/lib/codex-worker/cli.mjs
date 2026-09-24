@@ -11,7 +11,7 @@
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs resume --root <プロジェクトルート> --task T<n>
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs run --root <プロジェクトルート> --task T<n> --step <番号>
 //        --packet <packet.md> --allow <パス> [--allow <パス> ...(既定で 3 件まで)]
-//        [--workspace <リポジトリ>]
+//        [--workspace <リポジトリ>] [--worktree]
 //        [--model-family <luna|terra|sol ...> | --model <モデル ID>] [--timeout <秒>]
 //        [--max-packet <バイト>] [--max-allow <件数>] [--peak-threshold <0〜1>]
 //   --workspace は worker が書くリポジトリ(既定は --root)。T の対象がプロジェクトの外の
@@ -77,6 +77,7 @@ import {
 import { formatStatusLines, renderEvent, renderSummary } from "./status.mjs";
 import { stampReceivedAt, timingMetrics } from "./timing.mjs";
 import { NOTE_KINDS, appendWorklog, normalizeStep, readPlan, readWorklog, rootSlug, runsDir, stateDir, taskDir } from "./worklog.mjs";
+import { ensureWorktree, readWorktreeRecord } from "./worktree.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULTS = { timeout: 1200, maxPacket: 12 * 1024, maxAllow: 3, peakThreshold: 0.6, family: "luna" };
@@ -150,6 +151,174 @@ function gitRoot(dir) {
   } catch {
     return null;
   }
+}
+
+/** Return a repository's shared Git directory, or null when the path is not a repository.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+function gitCommonDir(dir) {
+  try {
+    const commonDir = execFileSync("git", ["-C", dir, "rev-parse", "--git-common-dir"], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return canonical(path.resolve(dir, commonDir));
+  } catch {
+    return null;
+  }
+}
+
+/** Check repository identity across linked Git worktrees, preserving unknown when Git cannot tell.
+ * @param {string} left
+ * @param {string} right
+ * @returns {boolean | null}
+ */
+function sameGitRepository(left, right) {
+  const leftCommon = gitCommonDir(left);
+  const rightCommon = gitCommonDir(right);
+  return leftCommon === null || rightCommon === null ? null : leftCommon === rightCommon;
+}
+
+/** Match a Node.js system error that exposes its stable error code and syscall details.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function hasNodeSystemErrorCode(error) {
+  return error instanceof Error
+    && "code" in error
+    && typeof error.code === "string"
+    && "errno" in error
+    && typeof error.errno === "number"
+    && "syscall" in error
+    && typeof error.syscall === "string";
+}
+
+/** Match a failed Git subprocess by its numeric exit status.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function hasGitExitStatus(error) {
+  return error instanceof Error && "status" in error && typeof error.status === "number";
+}
+
+/** Convert a malformed or unreadable worktree record into a preflight refusal.
+ * @param {string} root
+ * @param {string} task
+ * @returns {{
+ *   record: { repo: string, path: string, branch: string, base: string, base_ref: string,
+ *     created_at: string } | null,
+ *   errors: string[]
+ * }}
+ */
+function readWorktreeRecordForRun(root, task) {
+  try {
+    return { record: readWorktreeRecord(root, task), errors: [] };
+  } catch (error) {
+    if (
+      !(error instanceof SyntaxError)
+      && !(error instanceof TypeError)
+      && !hasNodeSystemErrorCode(error)
+    ) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return { record: null, errors: [`worktree の記録を読めない: ${message}`] };
+  }
+}
+
+/** Check whether a recorded workspace resolves inside a repository, including a deleted path.
+ * @param {string} workspace
+ * @param {string} repo
+ * @returns {boolean}
+ */
+function workspaceIsInsideRepo(workspace, repo) {
+  const relativeWorkspace = path.relative(repo, canonical(path.resolve(workspace)));
+  if (relativeWorkspace === "") return true;
+  if (
+    path.isAbsolute(relativeWorkspace)
+    || relativeWorkspace === ".."
+    || relativeWorkspace.startsWith(`..${path.sep}`)
+  ) return false;
+  return true;
+}
+
+/** Resolve the task worktree after checking the source workspace and mixed-mode history.
+ * @param {{ root: string, task: string, workspace: string }} options
+ * @returns {{
+ *   workspace: string,
+ *   worktree: { repo: string, path: string, branch: string } | null,
+ *   relocate: { from: string, to: string } | null,
+ *   errors: string[]
+ * }}
+ */
+function prepareWorktreeRun({ root, task, workspace }) {
+  const errors = workspaceErrors(root, workspace);
+  if (errors.length > 0) {
+    return { workspace, worktree: null, relocate: null, errors };
+  }
+
+  const repo = gitRoot(workspace);
+  if (!repo) {
+    return {
+      workspace, worktree: null, relocate: null,
+      errors: [`作業場所が git のリポジトリではない: ${workspace}`],
+    };
+  }
+  const mainRepo = canonical(repo);
+  if (sameGitRepository(root, mainRepo) !== false) {
+    return {
+      workspace, worktree: null, relocate: null,
+      errors: [`--workspace は帳簿と別のリポジトリが必要: ${mainRepo}`],
+    };
+  }
+
+  const legacyRun = (readWorklog(root, task)?.entries ?? []).some((entry) => {
+    if (
+      entry.kind !== "run"
+      || entry.keys.accepted !== "true"
+      || Object.hasOwn(entry.keys, "branch")
+      || typeof entry.keys.workspace !== "string"
+    ) return false;
+
+    const sameRepository = sameGitRepository(entry.keys.workspace, mainRepo);
+    return sameRepository === true
+      || (sameRepository === null && workspaceIsInsideRepo(entry.keys.workspace, mainRepo));
+  });
+  if (legacyRun) {
+    return {
+      workspace, worktree: null, relocate: null,
+      errors: [`同じ本体リポジトリの branch なし accepted run がある: ${mainRepo}`],
+    };
+  }
+
+  let ensured;
+  try {
+    ensured = ensureWorktree({ root, task, repo: mainRepo });
+  } catch (error) {
+    if (!(error instanceof SyntaxError) && !(error instanceof TypeError)
+      && !hasNodeSystemErrorCode(error) && !hasGitExitStatus(error)) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      workspace, worktree: null, relocate: null,
+      errors: [`worktree を準備できない: ${message}`],
+    };
+  }
+  if (!ensured.ok) {
+    return { workspace, worktree: null, relocate: null, errors: ensured.errors };
+  }
+
+  const relativeWorkspace = path.relative(mainRepo, workspace);
+  const effectiveWorkspace = canonical(path.join(ensured.record.path, relativeWorkspace));
+  return {
+    workspace: effectiveWorkspace,
+    worktree: {
+      repo: ensured.record.repo,
+      path: ensured.record.path,
+      branch: ensured.record.branch,
+    },
+    relocate: { from: mainRepo, to: ensured.record.path },
+    errors: [],
+  };
 }
 
 function workerHomeErrors(home) {
@@ -333,9 +502,9 @@ async function run(args) {
   const requestedAllow = (args.allow ?? []).map((a) => a.replace(/^\.\//, ""));
   // 作業場所はリポジトリの中のサブディレクトリでもよい(最上位へ引き上げない)。symlink は実体パスへ
   // 解決する
-  const workspace = args.workspace ? canonical(path.resolve(args.workspace)) : root;
-  // 作業記録に残す作業場所(root と同じなら無し)
-  const loggedWorkspace = workspace === root ? null : workspace;
+  let workspace = args.workspace ? canonical(path.resolve(args.workspace)) : root;
+  let worktree = null;
+  let relocate = null;
   const home = workerHome();
   const timeoutSec = Number(args.timeout ?? DEFAULTS.timeout);
   const maxPacket = Number(args["max-packet"] ?? DEFAULTS.maxPacket);
@@ -343,8 +512,43 @@ async function run(args) {
   const peakThreshold = Number(args["peak-threshold"] ?? DEFAULTS.peakThreshold);
 
   const errors = [];
+  const validTask = /^T\d+$/.test(task ?? "");
+  if (args.worktree) {
+    if (!args.workspace) errors.push("--worktree を使うには --workspace が必要");
+    if (!root) errors.push(`git のリポジトリではない: ${requestedRoot}`);
+    if (!validTask) errors.push("--task は T<n>");
+    if (errors.length > 0) {
+      emit({ accepted: false, stage: "preflight", errors, warnings: [] }, null, 2);
+      return;
+    }
+
+    const prepared = prepareWorktreeRun({ root, task, workspace });
+    errors.push(...prepared.errors);
+    if (errors.length > 0) {
+      emit({ accepted: false, stage: "preflight", errors, warnings: [] }, null, 2);
+      return;
+    }
+    workspace = prepared.workspace;
+    worktree = prepared.worktree;
+    relocate = prepared.relocate;
+  } else if (root && validTask) {
+    const { record, errors: recordErrors } = readWorktreeRecordForRun(root, task);
+    errors.push(...recordErrors);
+    const sameRepository = record ? sameGitRepository(workspace, record.repo) : false;
+    if (record && (
+      sameRepository === true
+      || (sameRepository === null && workspaceIsInsideRepo(workspace, record.repo))
+    )) {
+      errors.push(
+        `worktree.json の本体リポジトリでは --worktree が必要: ${record.repo}`,
+      );
+    }
+  }
+
+  // 作業記録に残す作業場所(root と同じなら無し)
+  const loggedWorkspace = workspace === root ? null : workspace;
   if (!root) errors.push(`git のリポジトリではない: ${requestedRoot}`);
-  if (!/^T\d+$/.test(task ?? "")) errors.push("--task は T<n>");
+  if (!validTask) errors.push("--task は T<n>");
   if (!step) errors.push("--step が無い");
   if (!args.packet) errors.push("--packet が無い");
   let packet = "";
@@ -359,13 +563,14 @@ async function run(args) {
   errors.push(...workerHomeErrors(home));
   const workspaceProblems = root && args.workspace ? workspaceErrors(root, workspace) : [];
   errors.push(...workspaceProblems);
+  const workspaceOptions = { workspace, ...(relocate ? { relocate } : {}) };
   const normalized = root && workspaceProblems.length === 0
-    ? normalizeAllow(requestedAllow, { workspace })
+    ? normalizeAllow(requestedAllow, workspaceOptions)
     : { allow: requestedAllow, errors: [] };
   errors.push(...normalized.errors);
   const allow = normalized.allow;
   const allowCheck = root && /^T\d+$/.test(task ?? "") && workspaceProblems.length === 0
-    ? checkAllow(root, task, allow, maxAllow, { workspace })
+    ? checkAllow(root, task, allow, maxAllow, workspaceOptions)
     : { errors: [], warnings: [] };
   errors.push(...allowCheck.errors);
   const plan = root && /^T\d+$/.test(task ?? "") ? readPlan(root, task) : null;
@@ -390,8 +595,10 @@ async function run(args) {
   const id = runId(task, step);
   const runDir = path.join(runsDir(), id);
   fs.mkdirSync(runDir, { recursive: true, mode: 0o700 });
-  const snapshot = takeSnapshot(workspace, runDir);
-  const runMeta = { root, workspace, task, step, model, allow };
+  const snapshot = worktree
+    ? takeSnapshot(workspace, runDir, { refScope: [`refs/heads/${worktree.branch}`] })
+    : takeSnapshot(workspace, runDir);
+  const runMeta = { root, workspace, task, step, model, allow, ...(worktree ? { worktree } : {}) };
   fs.writeFileSync(path.join(runDir, "run.json"), JSON.stringify(runMeta, null, 2));
   fs.writeFileSync(path.join(runDir, "packet.md"), packet); // verify が検証節を読む
   try { fs.writeFileSync(path.join(taskDir(root, task), `s${step}.packet.md`), packet); } catch { /* 写しは人が読むためのもの */ }
@@ -424,10 +631,19 @@ async function run(args) {
       kind: "run", step, by: "runner",
       keys: {
         run: id, accepted: false, stage: "interrupted", ...(loggedWorkspace ? { workspace } : {}),
+        ...(worktree ? { branch: worktree.branch } : {}),
       },
       text: `runner が ${signal} で止められた。作業ツリーは戻していない`,
     });
-    emit({ accepted: false, stage: "interrupted", run_dir: runDir, reasons: [`runner が ${signal} で止められた。作業ツリーは戻していない(restore --run で戻す)`] }, runDir, 1);
+    const interruptionReason = `runner が ${signal} で止められた。`
+      + "作業ツリーは戻していない(restore --run で戻す)";
+    emit({
+      accepted: false,
+      stage: "interrupted",
+      run_dir: runDir,
+      ...(worktree ? { worktree } : {}),
+      reasons: [interruptionReason],
+    }, runDir, 1);
     process.exit(1);
   };
   const signals = ["SIGTERM", "SIGINT", "SIGHUP"];
@@ -435,7 +651,8 @@ async function run(args) {
 
   status(`started: ${plan.steps.find((s) => s.step === step).purpose}`);
   const workspaceLabel = workspace === root ? "" : ` workspace=${workspace}`;
-  status(`model=${model} allow=${allow.join(",")}${workspaceLabel} run=${runDir}`);
+  const branchLabel = worktree ? ` branch=${worktree.branch}` : "";
+  status(`model=${model} allow=${allow.join(",")}${workspaceLabel}${branchLabel} run=${runDir}`);
   const started = Date.now();
   let exec;
   let ended;
@@ -501,6 +718,7 @@ async function run(args) {
     task,
     step,
     workspace,
+    ...(worktree ? { worktree } : {}),
     model,
     model_family: resolved.family ?? null,
     accepted: reasons.length === 0,
@@ -550,6 +768,7 @@ async function run(args) {
     keys: {
       run: id, accepted: report.accepted, worker: result?.status ?? "none", changed: checked.changed,
       ...(loggedWorkspace ? { workspace } : {}),
+      ...(worktree ? { branch: worktree.branch } : {}),
       ...(firstRun ? { baseline: Object.entries(snapshot.files).filter(([, f]) => !f.ignored).map(([p]) => p) } : {}),
     },
     text: report.accepted ? `accepted: ${plan.steps.find((s) => s.step === step).purpose}` : reasons.join(" / "),
@@ -894,6 +1113,7 @@ try {
       "peak-threshold": { type: "string" }, run: { type: "string" }, keep: { type: "string", multiple: true },
       file: { type: "string" }, kind: { type: "string" }, text: { type: "string" }, from: { type: "string" },
       changed: { type: "string" }, json: { type: "boolean" }, workspace: { type: "string" },
+      worktree: { type: "boolean" },
     },
   });
 } catch (error) {
