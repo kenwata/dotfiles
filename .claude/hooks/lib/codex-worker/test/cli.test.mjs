@@ -230,6 +230,11 @@ function setup({ workspace = null } = {}) {
 
 const baseArgs = (root, packet) => ["run", "--root", root, "--task", "T7", "--step", "1", "--packet", packet, "--allow", "src/a/impl.ts"];
 
+const assertStatusLogLines = (log) => {
+  const statusLine = /^\[Codex [^\]]*\] \d{2}:\d{2}:\d{2} /;
+  assert.ok(log.trimEnd().split("\n").every((line) => statusLine.test(line)), log);
+};
+
 test("正常な run は exit 0 で、系統名から最新のモデルを解決し、ロックを外す", () => {
   const t = setup();
   try {
@@ -244,13 +249,15 @@ test("正常な run は exit 0 で、系統名から最新のモデルを解決�
     assert.ok(json.run_dir.startsWith(path.join(t.base, "state")), "run の記録は worker が書ける TMPDIR の外に置く");
     // 状態行は stderr と共有ログにだけ出る(stdout は report の JSON だけ。上の JSON.parse が通ることで確かめている)
     const expected = [
-      "[Codex T7 s1 1/2] $ npm test", "[Codex T7 s1 1/2]   ✓ npm test", "[Codex T7 s1 1/2] edit: src/a/impl.ts (add)",
-      "[Codex T7 s1 1/2] tokens: input=10 cached=0 output=5", "[Codex T7 s1 1/2] finished: accepted worker=done changed=1",
+      "$ npm test", "  ✓ npm test", "edit: src/a/impl.ts (add)",
+      "tokens: input=10 cached=0 output=5", "finished: accepted worker=done changed=1",
     ];
     for (const out of [stderr, fs.readFileSync(t.statusLog, "utf8")]) {
       for (const line of expected) assert.ok(out.includes(line), `${line} が無い:\n${out}`);
-      assert.match(out, /^\[Codex T7 s1 1\/2\] model=gpt-6-luna /m);
+      assert.match(out, /^\[Codex T7 s1 1\/2\] \d{2}:\d{2}:\d{2} model=gpt-6-luna /m);
     }
+    assertStatusLogLines(stderr);
+    assertStatusLogLines(fs.readFileSync(t.statusLog, "utf8"));
   } finally { t.cleanup(); }
 });
 
@@ -334,9 +341,11 @@ test("verify は packet の検証節のコマンドを 1 本ずつ打ち、コ�
     assert.equal(verified.json.commands[1].tail, "checked");
     assert.equal(fs.readFileSync(verified.json.commands[1].log, "utf8"), "checked\n");
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(json.run_dir, "verify.json"), "utf8")), verified.json);
-    for (const line of ["[Codex T7 s1 1/2] verify $ test -f src/a/impl.ts", "[Codex T7 s1 1/2] verify   ✗ exit 3", "[Codex T7 s1 1/2] verify finished: 1/2 ok"]) {
+    for (const line of ["verify $ test -f src/a/impl.ts", "verify   ✗ exit 3", "verify finished: 1/2 ok"]) {
       assert.ok(verified.stderr.includes(line), `${line} が無い:\n${verified.stderr}`);
     }
+    assertStatusLogLines(verified.stderr);
+    assertStatusLogLines(fs.readFileSync(t.statusLog, "utf8"));
 
     // 検証を打つ時点の作業ツリーを見る(worker の変更を戻せば 1 本目も落ちる)
     fs.writeFileSync(path.join(json.run_dir, "packet.md"), "## 検証\n- `test -f src/a/impl.ts`\n");
@@ -425,9 +434,11 @@ test("plan は計画を登録し、登録し直すと前の計画を残して、
     assert.deepEqual(revised.json.steps.map((s) => s.step), ["1", "2", "3"]);
     assert.equal(fs.readdirSync(t.taskDir).filter((n) => /^plan-.*\.md$/.test(n)).length, 1, "前の計画が残る");
     const log = fs.readFileSync(t.statusLog, "utf8");
-    assert.match(log, /^\[Codex T7\] plan registered: 2 steps /m);
-    assert.match(log, /^\[Codex T7\] plan revised: 3 steps /m);
-    assert.match(log, /^\[Codex T7\]   s3: 文書を直す$/m);
+    assert.match(log, /^\[Codex T7\] \d{2}:\d{2}:\d{2} plan registered: 2 steps /m);
+    assert.match(log, /^\[Codex T7\] \d{2}:\d{2}:\d{2} plan revised: 3 steps /m);
+    assert.match(log, /^\[Codex T7\] \d{2}:\d{2}:\d{2}   s3: 文書を直す$/m);
+    assertStatusLogLines(revised.stderr);
+    assertStatusLogLines(log);
 
     for (const bad of ["ステップは後で\n", "- s1: a\n- s1: b\n", "- s1:\n"]) {
       assert.equal(t.registerPlan(bad).code, 2, bad);
@@ -451,7 +462,7 @@ test("run は計画が無いタスクと計画に無いステップを起動せ�
     t.registerPlan(PLAN);
     result = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
     assert.equal(result.code, 0);
-    assert.match(result.stderr, /^\[Codex T7 s1 1\/2\] started: impl を書く$/m);
+    assert.match(result.stderr, /^\[Codex T7 s1 1\/2\] \d{2}:\d{2}:\d{2} started: impl を書く$/m);
     assert.equal(fs.readFileSync(path.join(t.taskDir, "s1.packet.md"), "utf8"), fs.readFileSync(t.packet, "utf8"));
   } finally { t.cleanup(); }
 });

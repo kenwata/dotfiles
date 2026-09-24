@@ -74,7 +74,7 @@ import {
   readRollout, resolveModelFamily, restore, sandboxProbeErrors, selectRules, takeSnapshot, trackedPaths, validateResult,
   normalizeAllow, workspaceErrors,
 } from "./core.mjs";
-import { renderEvent, renderSummary } from "./status.mjs";
+import { formatStatusLines, renderEvent, renderSummary } from "./status.mjs";
 import { stampReceivedAt, timingMetrics } from "./timing.mjs";
 import { NOTE_KINDS, appendWorklog, normalizeStep, readPlan, readWorklog, rootSlug, runsDir, stateDir, taskDir } from "./worklog.mjs";
 
@@ -117,7 +117,7 @@ function statusWriter(root, task, label) {
   const prefix = label ? `[Codex ${task} ${label}]` : `[Codex ${task}]`;
   return (text) => {
     if (!text) return;
-    const out = text.split("\n").map((line) => `${prefix} ${line}\n`).join("");
+    const out = formatStatusLines(prefix, text, new Date());
     try { process.stderr.write(out); } catch { /* 表示のみ */ }
     try { fs.appendFileSync(logFile, out); } catch { /* 表示のみ */ }
   };

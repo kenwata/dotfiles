@@ -60,6 +60,17 @@ export function renderEvent(event, { root } = {}) {
   return null;
 }
 
+// 状態文を前置きと時刻付きの行に整形して返す(時刻は date のローカル時刻)
+export function formatStatusLines(prefix, text, date) {
+  const time = [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+  return text
+    .split("\n")
+    .map((line) => `${prefix} ${time} ${line}\n`)
+    .join("");
+}
+
 // runner の判定を 1〜2 行にする。試験の件数は worker の申告(tests_run)であり、監督の再実行ではない
 export function renderSummary(report) {
   const worker = report.worker;
@@ -73,6 +84,14 @@ export function renderSummary(report) {
     `${report.metrics?.duration_s ?? "?"}s`,
   ];
   const lines = [`finished: ${parts.join(" ")}`];
+  if (typeof report.metrics?.check_s === "number") {
+    const timing = [
+      `  timing: check=${report.metrics.check_s}s`,
+      `other=${report.metrics.other_command_s}s`,
+      `model=${report.metrics.model_s}s`,
+    ].join(" ");
+    lines.push(timing);
+  }
   if (!report.accepted && report.reasons?.length) lines.push(`  reason: ${clip(report.reasons[0], 160)}`);
   return lines.join("\n");
 }

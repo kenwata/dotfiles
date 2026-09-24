@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { lineSplitter, renderEvent, renderSummary, unwrapCommand } from "../status.mjs";
+import { formatStatusLines } from "../status.mjs";
 
 const cmd = (type, command, extra = {}) => ({ type, item: { id: "item_1", type: "command_execution", command, ...extra } });
 
@@ -59,4 +60,45 @@ test("行の分割は断片をまたいだ行をつなぎ、末尾の改行の�
   s.push(":2}");
   s.end();
   assert.deepEqual(lines, ['{"a":1}', '{"b":2}']);
+});
+
+test("状態行は各本文行にローカル時刻を付ける", () => {
+  const date = new Date(2026, 8, 24, 20, 3, 45);
+
+  const lines = formatStatusLines("[Codex T7 s1 1/2]", "$ npm test\n✓ done", date);
+
+  assert.equal(
+    lines,
+    "[Codex T7 s1 1/2] 20:03:45 $ npm test\n" +
+      "[Codex T7 s1 1/2] 20:03:45 ✓ done\n",
+  );
+  assert.ok(lines.split("\n").filter(Boolean).every((line) =>
+    /^\[Codex [^\]]*\] \d{2}:\d{2}:\d{2} /.test(line),
+  ));
+});
+
+test("timing は check_s が数値の場合に finished と reason の間へ出す", () => {
+  const report = {
+    accepted: false,
+    reasons: ["reason"],
+    metrics: { check_s: 1.5, other_command_s: 2, model_s: 3 },
+  };
+
+  assert.equal(
+    renderSummary(report),
+    "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s\n" +
+      "  timing: check=1.5s other=2s model=3s\n  reason: reason",
+  );
+});
+
+test("timing を出さない summary は duration_s のみでも従来の出力を保つ", () => {
+  const report = { metrics: { duration_s: 42 } };
+
+  assert.equal(renderSummary(report), "finished: rejected worker=none changed=0 tests(申告)=0/0 ok 42s");
+});
+
+test("check_s が null の summary は timing を出さず従来の出力を保つ", () => {
+  const report = { metrics: { check_s: null, other_command_s: null, model_s: null } };
+
+  assert.equal(renderSummary(report), "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s");
 });
