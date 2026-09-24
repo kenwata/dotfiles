@@ -18,6 +18,18 @@
     }
   },
   "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/loop-turn.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
     "PostCompact": [
       {
         "hooks": [
@@ -47,6 +59,28 @@
         "hooks": [
           {
             "command": "~/.claude-bedrock/hooks/context-budget.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/loop-turn.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/loop-turn.sh",
             "timeout": 10,
             "type": "command"
           }
@@ -90,6 +124,16 @@
           }
         ],
         "matcher": "Write|Edit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/loop-turn.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "AskUserQuestion"
       }
     ],
     "SessionStart": [
@@ -132,6 +176,26 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/loop-turn.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/loop-turn.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
       }
     ],
     "SubagentStart": [
@@ -161,6 +225,16 @@
         "hooks": [
           {
             "command": "~/.claude-bedrock/hooks/check-task-scope.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "~/.claude-bedrock/hooks/loop-turn.sh",
+            "timeout": 10,
             "type": "command"
           }
         ],

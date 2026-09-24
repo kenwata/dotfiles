@@ -237,7 +237,8 @@ dotfiles リポジトリには第 2 プロファイル `.claude-bedrock/` もあ
 bedrock は独自の実体を持つため、hook を足したときは両方の `settings.json` に登録する**
 (片方だけだと、そのプロファイルでは hook が存在するのに発火しない)。予算停止の hook は
 `check-task-scope` が置く「/execute-task の実行中」の状態で発火するので、bedrock にも `check-task-scope` を
-登録している(2026-09-23)。
+登録している(2026-09-23)。task-loop の待ち方の判定の主である `loop-turn` も同じ理由で両方に登録する
+(2026-09-24。bedrock だけ登録が漏れ、Claude でも herdr の画面の判定だけで待っていた)。
 
 `projects/`(会話履歴・auto memory の実体)も同じ理由で `../.claude/projects` への
 symlink で共有する。設定(モデル ID・permissions・effort)は分離を維持したまま、
