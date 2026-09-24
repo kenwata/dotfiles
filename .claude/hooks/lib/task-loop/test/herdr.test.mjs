@@ -4,15 +4,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HerdrError, agentGet, agentPrompt, agentRead, agentWait, available, paneTitle } from "../herdr.mjs";
+import { HerdrError, agentGet, agentPrompt, agentRead, available, paneTitle } from "../herdr.mjs";
 
-// 偽の herdr: FAKE_HERDR_MODE で応答を切り替え、受け取った引数を FAKE_HERDR_LOG に残す
+// 偽の herdr: FAKE_HERDR_MODE で応答を切り替え、受け取った引数を FAKE_HERDR_LOG に残す。失敗の JSON は本物(0.9.1)と
+// 同じく stderr に出す(2026-09-24 実測。stdout に出す偽物で試していたため、コードの読み違いを見逃した)
 const FAKE = `#!/usr/bin/env node
 const fs = require("node:fs");
 fs.appendFileSync(process.env.FAKE_HERDR_LOG, JSON.stringify(process.argv.slice(2)) + "\\n");
 const mode = process.env.FAKE_HERDR_MODE || "ok";
 if (process.argv[2] === "--version") { console.log("herdr 0.9.1"); process.exit(mode === "broken" ? 1 : 0); }
-if (mode === "error") { process.stdout.write(JSON.stringify({ error: { code: "agent_not_found", message: "no such agent" }, id: "x" })); process.exit(1); }
+if (mode === "error") { process.stderr.write(JSON.stringify({ error: { code: "agent_not_found", message: "no such agent" }, id: "x" }) + "\\n"); process.exit(1); }
+if (mode === "stdout_error") { process.stdout.write(JSON.stringify({ error: { code: "timeout", message: "timed out" }, id: "x" })); process.exit(1); }
 if (mode === "crash") { process.stderr.write("boom"); process.exit(3); }
 if (mode === "noagent") { process.stdout.write(JSON.stringify({ id: "x", result: {} })); process.exit(0); }
 if (process.argv[3] === "read") { process.stdout.write("line1\\nline2\\n"); process.exit(0); }
@@ -48,27 +50,26 @@ test("available は HERDR_ENV=1 かつ herdr --version が通る時だけ真", (
   withFake("broken", () => assert.equal(available(), false));
 });
 
-test("get / prompt / wait は引数をそのまま herdr に渡し、result.agent を返す", () => {
+test("get / prompt は引数をそのまま herdr に渡し、result.agent を返す。prompt は herdr の --wait で待たない", () => {
   withFake("ok", (calls) => {
     assert.equal(agentGet("w1:p1").agent_status, "idle");
     agentPrompt("w1:p1", "/clear");
-    agentPrompt("w1:p1", "/execute-task T1", { wait: true, timeoutMs: 5000 });
-    agentWait("w1:p1", { until: ["idle", "done"], timeoutMs: 30000 });
+    agentPrompt("w1:p1", "/execute-task T1");
     assert.deepEqual(calls(), [
       ["agent", "get", "w1:p1"],
       ["agent", "prompt", "w1:p1", "/clear"],
-      ["agent", "prompt", "w1:p1", "/execute-task T1", "--wait", "--timeout", "5000"],
-      ["agent", "wait", "w1:p1", "--until", "idle", "--until", "done", "--timeout", "30000"],
+      ["agent", "prompt", "w1:p1", "/execute-task T1"],
     ]);
   });
 });
 
-test("失敗は種別付きの HerdrError: error.code / 非 0 終了 / 起動失敗 / agent 無し。read の失敗は空文字", () => {
+test("失敗は種別付きの HerdrError: error.code(stderr・stdout のどちらの JSON からも読む)/ 非 0 終了 / 起動失敗 / agent 無し。read の失敗は空文字", () => {
   withFake("error", () => {
     assert.throws(() => agentGet("x"), (e) => e instanceof HerdrError && e.code === "agent_not_found");
     assert.equal(agentRead("x"), "");
   });
-  withFake("crash", () => assert.throws(() => agentWait("x"), (e) => e.code === "exit_3" && /boom/.test(e.message)));
+  withFake("stdout_error", () => assert.throws(() => agentGet("x"), (e) => e.code === "timeout"));
+  withFake("crash", () => assert.throws(() => agentGet("x"), (e) => e.code === "exit_3" && /boom/.test(e.message)));
   withFake("noagent", () => assert.throws(() => agentGet("x"), (e) => e.code === "no_agent"));
   withFake("ok", () => {
     assert.equal(agentRead("x", 2), "line1\nline2\n");

@@ -12,7 +12,8 @@
 //     statusline.sh が描画のたびに書く。Claude の使用率の源(hook の入力には使用率が無い)
 //   turns/<session_id>.json      { state, event, at }
 //     ../../loop-turn.mjs が、sessions/<id>.json に loop があるセッション(Claude)でだけ書くターンの状態
-//     (値域と経緯は turn.mjs)。ループは送る前に消し(cli.mjs の openTurn)、settle で読む。sessions/<id>.json に
+//     (値域と経緯は turn.mjs)。ループは送る前に消し(cli.mjs の openTurn)、送信の受理の確かめ(waitAccepted)と
+//     settle で読む。sessions/<id>.json に
 //     入れないのは、PostToolUse で並行に走る予算停止の hook と読み書きが競合し、互いの書き込みを消すため
 //     (2026-09-24 のレビューで、並行 40 回のうち budget が 21 回・turn が 10 回消えることを確認)。このファイルは
 //     loop-turn だけが丸ごと置き換える

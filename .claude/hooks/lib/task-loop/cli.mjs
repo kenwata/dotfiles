@@ -11,7 +11,8 @@
 //                                    Claude / Codex のペインを herdr から探す(同じタブを優先)。無ければ隣にペインを作って
 //                                    起動する(--kind claude|codex、--model <ID> で起動時のモデル)
 //   その他: [--root <プロジェクトルート>] [--retry-max <回数>] [--task-timeout-min <分。既定 180>]
-//          [--clear-timeout-ms <既定 30000>] [--settle-sec <既定 90>] [--no-follow-up] [--dry-run]
+//          [--clear-timeout-ms <既定 30000>] [--settle-sec <既定 90>] [--answer-timeout-hours <既定 24>]
+//          [--no-follow-up] [--dry-run]
 //   1 回の起動は /follow-up の 1 区間: checkpoint 以後の完了が 5 件に達したら、次の作業の前に新しいセッションで
 //   /follow-up を送り、checkpoint のコミット(trailer Follow-Up-Checkpoint: true)が増えたら follow_up_done で終える
 //   (次の区間は打ち直して始める。範囲指定でも同じ)。/follow-up が利用者への問い(blocked)を出せば答えを待つ。
@@ -29,8 +30,8 @@
 // 作業ごとに、送る前に checkpoint 以後の完了数を見る(上限なら /follow-up で区間を閉じる)。
 // T ごとの流れ: 前提検査(T の状態・依存)→ /clear → session_id の変化を待つ →
 // sessions/<id>.json に loop を書く(check-stop-question.sh はこのセッションを差し戻さない)→ /execute-task を
-// --wait で送る → 落ち着くのを待つ(worker のロック中・working・hook が書いたターンの途中の間は待ち、idle が
-// --settle-sec 続いたら判定)→
+// 送り、hook の記録(または herdr の作業中)で受理を確かめる → 落ち着くのを待つ(hook が書いたターンの途中・herdr の
+// working・worker のロック中の間は待ち、落ち着いた状態が --settle-sec 続いたら判定)→
 // 判定(decide.mjs の judge)。Codex は /clear では session_id が変わらないので、$execute-task を送ってから変化を
 // 確かめて loop を書く(openTurn)。
 //   next  : TODO.md の T が [x] ∧ T を含むコミットが増えた ∧ 作業ツリーが clean
@@ -41,9 +42,10 @@
 //   stop  : それ以外(次の一手が /elaborate・timeout・compact など)。人の判断を待つ
 // 引数なしで T の間に読む次の一手が回せない時の停止理由: next_step_not_runnable(/elaborate・コマンド無し・引数の形が違う)/
 // next_step_not_open(済んだ T・廃止した T を指す)/ breakdown_repeated(同じ設計書の /breakdown が T の完了を挟まずに続いた)
-// 問い(AskUserQuestion・承認の画面)で blocked になっても止めず、人が答えて動き出すまで待つ(settle)。blocked の間は
-// タスクの制限時間に数えない。問いの画面とターンの途中は、herdr の画面の判定に加えて hook(../../loop-turn.mjs)が
-// turns/<id>.json に書いた状態でも見る(herdr は名前の罫線の下の問いの画面を idle と見逃す。turn.mjs)。/elaborate は対話で詰める工程なのでループに入れない(2026-09-24 利用者決定)。
+// 問い(AskUserQuestion・承認の画面)で止めず、人が答えて動き出すまで待つ(settle)。答え待ちの間はタスクの制限時間に
+// 数えず、--answer-timeout-hours で区切る。ターンの途中・答え待ち・終了は hook(../../loop-turn.mjs)が turns/<id>.json に
+// 書いた記録を先に見て、herdr の画面の判定は待つ方向の証拠を足すだけにする(herdr は画面を読んだ推測で、名前の罫線の
+// 下の問いの画面を idle と見逃す。turn.mjs)。herdr は送る手段として使い、見張りの間の失敗・unknown では猶予の後に止まる。/elaborate は対話で詰める工程なのでループに入れない(2026-09-24 利用者決定)。
 // 計画工程: 引数なしの時は、次の一手が /breakdown docs/design/<slug>.md なら送り(runBreakdown)、/amend T<n> なら送る。
 // T を位置引数・--tasks で指定した時は範囲を「ここまで」と読み、/breakdown を送らない(範囲が済めば all_done、次の一手は
 // next_step に出す)。/amend・/breakdown が途中で止まった時の再開は無い(人が片付けて打ち直す)
@@ -65,7 +67,7 @@ import {
   amendCount, amendOutcome, breakdownOutcome, checkpointSince, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge,
   loopStep, nextStep, openDependencies, openTasks, parseTaskList, planSlug,
 } from "./decide.mjs";
-import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, agentWait, available, paneSplit, paneTitle } from "./herdr.mjs";
+import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, available, paneSplit, paneTitle } from "./herdr.mjs";
 import { clearTurn, loopStateDir, readConfig, readSession, readTurn, sweep, updateSession } from "./session-state.mjs";
 import { waitPhase } from "./turn.mjs";
 
@@ -73,6 +75,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_CLI = path.join(here, "..", "codex-worker", "cli.mjs");
 // 状態を見直す間隔。TASK_LOOP_POLL_MS はテストで短くするためだけの上書き
 const POLL_MS = Number(process.env.TASK_LOOP_POLL_MS) > 0 ? Number(process.env.TASK_LOOP_POLL_MS) : 5_000;
+// 見張りの間に、hook の記録が待つ理由を示さず herdr の状態も取れない(失敗・unknown)のが続いたら止まるまでの猶予。
+// 画面の描き直しや herdr の一時的な失敗を止まる理由にしないため。TASK_LOOP_HERDR_GRACE_MS はテストで短くするためだけの上書き
+const HERDR_GRACE_MS = Number(process.env.TASK_LOOP_HERDR_GRACE_MS) > 0 ? Number(process.env.TASK_LOOP_HERDR_GRACE_MS) : 60_000;
 const CHECKPOINT_LIMIT = 5;
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -148,6 +153,10 @@ function agentErrors(target, agent) {
 function preflight(args, positionalTasks) {
   if (!available()) return { errors: ["herdr の中で実行していない(HERDR_ENV=1 と herdr が要る)"] };
   const errors = [];
+  // 数でない値は上限を NaN にし、答え待ちを無期限にするので受け付けない
+  if (args["answer-timeout-hours"] !== undefined && !(Number(args["answer-timeout-hours"]) > 0)) {
+    errors.push(`--answer-timeout-hours は正の数で指定する: ${args["answer-timeout-hours"]}`);
+  }
   let root = args.root ? gitRoot(path.resolve(args.root)) : null;
   let agent = null;
   let started = null;
@@ -213,75 +222,81 @@ function handoffTasks(root) {
   return { tasks: step.command === "execute-task" || step.command === "amend" ? [step.arg] : [], step, errors: [] };
 }
 
-// 利用者の答えを待つ。herdr が blocked を見ていれば、状態が変わるまで herdr agent wait --until で待つ。herdr が
-// 問いの画面を見逃して hook だけが答え待ち(turn の awaiting_user)を書いている時は、POLL_MS だけ待って呼び出し側の
-// 次の周回に任せる。戻り値は null(待った)か、止まる理由 { stop, detail }
-function waitForAnswer(ctx, agentStatus) {
-  if (agentStatus !== "blocked") { sleep(POLL_MS); return null; }
+// herdr の agent_status と session_id を読む。unknown(分類できない)と失敗は status を null にし、failure に止まる時の
+// 理由を入れる。session_id は SessionStart の hook(herdr-agent-state.sh)が herdr に届けた値
+function observe(ctx) {
   try {
-    for (;;) {
-      try { agentWait(ctx.target, { until: ["working", "idle", "done", "unknown"], timeoutMs: 10 * 60_000 }); return null; } catch (error) {
-        if (error.code !== "timeout") throw error;
-      }
-    }
-  } catch (error) { return { stop: "herdr_error", detail: error.message }; }
-}
-
-// ターンの途中を待つ。herdr が working を見ていれば状態が変わるまで(制限時間と 10 分の短い方まで)herdr agent wait で
-// 待つ。herdr が idle と見て hook だけがターンの途中(turn の running)を書いている時は POLL_MS だけ待つ。
-// 戻り値は null(待った)か、止まる理由 { stop, detail }
-function waitWhileBusy(ctx, agentStatus, limit) {
-  if (agentStatus !== "working") { sleep(POLL_MS); return null; }
-  try { agentWait(ctx.target, { timeoutMs: Math.max(1_000, Math.min(limit - Date.now(), 10 * 60_000)) }); } catch (error) {
-    if (error.code !== "timeout") return { stop: "herdr_error", detail: error.message };
+    const agent = agentGet(ctx.target);
+    const session = agent.agent_session?.value ?? null;
+    return agent.agent_status === "unknown" ? { status: null, session, failure: "unknown" } : { status: agent.agent_status, session };
+  } catch (error) {
+    return { status: null, failure: "herdr_error", detail: error.message };
   }
-  return null;
 }
 
-// 送った後、成果物の判定に進んでよいところまで待つ。待ち方は herdr の agent_status と、hook(../../loop-turn.mjs)が
-// turns/<session>.json に書いたターンの状態を併せて決める(turn.mjs の waitPhase。herdr は画面を読んで判定し、
-// 名前の罫線の下の問いの画面やシェルの待ちを idle と見逃すため。経緯は turn.mjs)。
-// - 答え待ち(AskUserQuestion・承認の画面): 人の答えを待ち、その間は制限時間に数えない。制限時間はエージェントの
-//   停滞を見るためのもので、人の応答の遅さは別物だから。待つ間の上限は設けない(窓の題名が <計画> T<n> / amend /
-//   breakdown のまま残り、何を待たれているかは見える)
-// - ターンの途中(working・turn の running)と Codex worker の実行中(ロック): 待つ
-// - それ以外: idle / done が settle の間続いたら落ち着いたとみなす(worker の完了通知で監督のターンが再開する間を空ける)
+// 送った後、成果物の判定に進んでよいところまで、POLL_MS ごとに見直して待つ。待ち方は hook(../../loop-turn.mjs)が
+// turns/<session>.json に書いたターンの状態を先に見て、herdr の agent_status は待つ方向の証拠を足すだけにする
+// (turn.mjs の waitPhase)。herdr の長い待ち(agent wait)は使わない(herdr.mjs 冒頭の経緯)。
+// - 答え待ち(AskUserQuestion・承認の画面): 人の答えを待ち、その間は作業の制限時間に数えない。制限時間はエージェントの
+//   停滞を見るためのもので、人の応答の遅さは別物だから。代わりに答え待ちが --answer-timeout-hours 続いたら止まる
+//   (中断で取り残された記録や herdr の読み違いで、無期限に待たないため)。窓の題名が <計画> T<n> / amend /
+//   breakdown のまま残り、何を待たれているかは見える
+// - ターンの途中(hook の running・herdr の working)と Codex worker の実行中(ロック): 待つ
+// - 判定できない(hook が待つ理由を示さず herdr も読めない): 静かな時間を数えずに待ち、HERDR_GRACE_MS 続いたら止まる
+// - それ以外: 落ち着いた状態が settle の間続いたら落ち着いたとみなす(worker の完了通知で監督のターンが再開する間を空ける)
+// 成果物の完了は毎周の最初に見るので、herdr が読めない間も完了したものは先へ進む。
+// 既知の穴: ターンが終わって(hook は stopped)バックグラウンド処理の完了通知で再開するまでの間は、herdr の working と
+// worker のロックしか待つ理由が無い。T106(2026-09-24)ではこの空白が 97〜810 秒で 11 回あり、--settle-sec の既定 90 秒より長い
 function settle(ctx, deadline, isComplete, logTask, session) {
   let quietSince = null;
+  let quietPausedAt = null; // 落ち着いた状態の途中で判定できなくなった時刻。読めない間は静かな時間に数えない
   let answerSince = null;
+  let answeredFrom = null; // 前の周が答え待ちなら、その周の始まり。周の全体を作業の制限時間から除く
+  let blindSince = null;
+  let blind = false;
   let limit = deadline;
   for (;;) {
-    if (Date.now() > limit) return { stop: "timeout" };
+    const roundAt = Date.now();
+    if (answeredFrom !== null) { limit += roundAt - answeredFrom; answeredFrom = null; }
+    if (roundAt > limit) return { stop: "timeout" };
     if (isComplete()) {
       if (answerSince !== null) log(logTask, "blocked: 答えを受けて再開");
       return {};
     }
-    let agent;
-    try { agent = agentGet(ctx.target); } catch (error) { return { stop: "herdr_error", detail: error.message }; }
-    if (agent.agent_status === "unknown") return { stop: "unknown" };
-    const phase = waitPhase(agent.agent_status, session ? readTurn(session) : null, Date.now());
+    const seen = observe(ctx);
+    // 送った時と別のセッションになったら、hook の記録(前のセッションのもの)では待つ理由を決められない。判定へ進む
+    // (runTask では judge が session_changed として止め、/follow-up・/amend・/breakdown では着地していないとして止まる)
+    if (session && seen.session && seen.session !== session) return {};
+    if (Boolean(seen.failure) !== blind) {
+      blind = !blind;
+      log(logTask, blind ? `herdr: 状態を読めない(${seen.detail ?? seen.failure})。hook の記録で判定を続ける` : "herdr: 状態を読めるようになった");
+    }
+    const phase = waitPhase(seen.status, session ? readTurn(session) : null, Date.now());
     if (phase !== "awaiting_user" && answerSince !== null) { log(logTask, "blocked: 答えを受けて再開"); answerSince = null; }
+    if (phase !== "no_evidence") blindSince = null;
     if (phase === "awaiting_user") {
       if (answerSince === null) log(logTask, "blocked: 利用者の答えを待つ");
       answerSince ??= Date.now();
-      quietSince = null;
-      const waitedFrom = Date.now();
-      const failed = waitForAnswer(ctx, agent.agent_status);
-      if (failed) return failed;
-      limit += Date.now() - waitedFrom;
-      continue;
-    }
-    if (phase === "busy") {
-      quietSince = null;
-      const failed = waitWhileBusy(ctx, agent.agent_status, limit);
-      if (failed) return failed;
-      continue;
-    }
-    if (activeWorkerLock(ctx.root)) {
-      quietSince = null;
+      if (Date.now() - answerSince > ctx.answerTimeoutMs) return { stop: "answer_timeout" };
+      quietSince = null; quietPausedAt = null;
+      answeredFrom = roundAt;
       sleep(POLL_MS);
       continue;
     }
+    // worker のロックは herdr によらない待つ理由なので、判定できない場合より先に見る
+    if (phase === "busy" || activeWorkerLock(ctx.root)) {
+      quietSince = null; quietPausedAt = null;
+      sleep(POLL_MS);
+      continue;
+    }
+    if (phase === "no_evidence") {
+      blindSince ??= Date.now();
+      if (Date.now() - blindSince > HERDR_GRACE_MS) return { stop: seen.failure, detail: seen.detail };
+      if (quietSince !== null) quietPausedAt ??= Date.now();
+      sleep(POLL_MS);
+      continue;
+    }
+    if (quietPausedAt !== null) { quietSince += Date.now() - quietPausedAt; quietPausedAt = null; }
     quietSince ??= Date.now();
     if (Date.now() - quietSince >= ctx.settleMs) return {};
     sleep(POLL_MS);
@@ -308,8 +323,9 @@ function nameSession(ctx, name, logTask) {
   }
 }
 
-const CLEAR_ERRORS = new Set(["blocked_after_clear", "clear_not_detected"]);
-const PROMPT_ERRORS = { agent_blocked: "blocked_before_send", agent_prompt_stalled: "stalled", timeout: "timeout" };
+const CLEAR_ERRORS = new Set(["blocked_after_clear", "busy_after_clear", "clear_not_detected"]);
+// herdr は送る前に承認・質問の画面で止まっていれば、何も送らずに agent_blocked を返す
+const PROMPT_ERRORS = { agent_blocked: "blocked_before_send" };
 
 // session_id が before 以外になるのを --clear-timeout-ms まで待つ。変わらなければ null
 function waitSessionChange(ctx, before) {
@@ -331,14 +347,42 @@ function clearSession(ctx, name, logTask) {
   agentPrompt(ctx.target, "/clear");
   const session = ctx.host === "codex" ? null : waitSessionChange(ctx, before);
   if (ctx.host !== "codex" && !session) throw new HerdrError("clear_not_detected", `${ctx.clearTimeoutMs}ms 待っても session_id が変わらない`);
-  const settled = agentWait(ctx.target, { timeoutMs: 30_000 });
-  if (settled?.agent_status === "blocked") throw new HerdrError("blocked_after_clear", "新しいセッションが承認・質問の画面で止まっている");
+  waitInputReady(ctx);
   nameSession(ctx, name, logTask);
   return { before, session };
 }
 
-// 新しいセッションで text を送り、送った後の最初の落ち着いた状態(idle / done / blocked)まで待つ。
-// 戻り値は { session, agent }、または止まる理由 { stop, session?, details? }。sessions/<id>.json の loop は、Claude なら
+// /clear の後、入力を受け付ける状態(idle / done)になるのを --clear-timeout-ms まで待つ。承認・質問の画面なら
+// blocked_after_clear、時間内に入力待ちにならなければ busy_after_clear(HerdrError)
+function waitInputReady(ctx) {
+  const deadline = Date.now() + ctx.clearTimeoutMs;
+  for (;;) {
+    const status = agentGet(ctx.target).agent_status;
+    if (status === "idle" || status === "done") return;
+    if (status === "blocked") throw new HerdrError("blocked_after_clear", "新しいセッションが承認・質問の画面で止まっている");
+    if (Date.now() > deadline) throw new HerdrError("busy_after_clear", `${ctx.clearTimeoutMs}ms 待っても入力待ちにならない(${status})`);
+    sleep(250);
+  }
+}
+
+// 送ったプロンプトが受理されたかを --clear-timeout-ms まで確かめる。主な証拠は、送った時刻以後の hook の記録
+// (UserPromptSubmit は /execute-task のような独自コマンドでも発火する。T106 では送信の 0.4 秒後に
+// check-task-scope.mjs が記録していた。2026-09-24 実測)。state は問わない(短いターンは最初の見直しの前に終わる)。
+// herdr の working・blocked も補助の証拠として受ける(hook を登録していない環境のため)
+function waitAccepted(ctx, session, sentAt) {
+  const deadline = Date.now() + ctx.clearTimeoutMs;
+  for (;;) {
+    const turn = readTurn(session);
+    if (turn && turn.at >= sentAt) return true;
+    const { status } = observe(ctx);
+    if (status === "working" || status === "blocked") return true;
+    if (Date.now() > deadline) return false;
+    sleep(250);
+  }
+}
+
+// 新しいセッションで text を送り、受理されたことを確かめる(待つのは settle)。
+// 戻り値は { session }、または止まる理由 { stop, session?, details? }。sessions/<id>.json の loop は、Claude なら
 // 送る前に書く(check-stop-question.sh がこのセッションを差し戻さないように)。Codex は送った後に session_id が
 // 変わったのを確かめてから書き、変わらなければ止める(送信が確定していないか、前の会話に届いている)。Codex の hook は
 // loop を読まないので、書くのが送った後でも差し戻しの扱いは変わらない
@@ -356,7 +400,12 @@ function openTurn(ctx, text, { task, attempt }, name, logTask) {
       updateSession(session, { ...state, budget: null, compact: null });
       clearTurn(session);
       log(logTask, `send "${text}" (session ${session.slice(0, 8)})`);
-      return { session, agent: agentPrompt(ctx.target, text, { wait: true, timeoutMs: ctx.taskTimeoutMs }) };
+      const sentAt = Date.now();
+      agentPrompt(ctx.target, text);
+      if (!waitAccepted(ctx, session, sentAt)) {
+        return { stop: "stalled", session, details: { error: `送った後 ${ctx.clearTimeoutMs}ms 待っても、hook の記録も herdr の作業中・答え待ちも無い(送信が確定していない)` } };
+      }
+      return { session };
     }
     log(logTask, `send "${text}"`);
     agentPrompt(ctx.target, text);
@@ -366,7 +415,7 @@ function openTurn(ctx, text, { task, attempt }, name, logTask) {
     }
     updateSession(session, state);
     log(logTask, `session ${session.slice(0, 8)}`);
-    return { session, agent: agentWait(ctx.target, { timeoutMs: ctx.taskTimeoutMs }) };
+    return { session };
   } catch (error) {
     return { stop: PROMPT_ERRORS[error.code] ?? "herdr_error", session, details: { error: error.message } };
   }
@@ -381,7 +430,6 @@ function runFollowUp(ctx, nextTask) {
   const turn = openTurn(ctx, `${ctx.host === "codex" ? "$" : "/"}follow-up`, { task: "follow-up", attempt: 1 }, sessionName(ctx.root, nextTask, "follow-up"), "follow-up");
   const { session } = turn;
   if (turn.stop) return { action: "stop", reason: turn.stop, session, details: turn.details };
-  if (turn.agent?.agent_status === "unknown") return { action: "stop", reason: "unknown", session };
   const settled = settle(ctx, deadline, () => checkpointSince(ctx.root, headBefore), "follow-up", session);
   if (settled.stop) return { action: "stop", reason: settled.stop, session, details: settled.detail ? { error: settled.detail } : undefined };
   if (!checkpointSince(ctx.root, headBefore)) return { action: "stop", reason: "follow_up_incomplete", session, details: { dirty: dirtyPaths(ctx.root) } };
@@ -397,7 +445,6 @@ function runPlanning(ctx, { label, text, loopTask, name, outcome }) {
   const turn = openTurn(ctx, text, { task: loopTask, attempt: 1 }, name, label);
   const { session } = turn;
   if (turn.stop) return { stop: turn.stop, session, details: turn.details };
-  if (turn.agent?.agent_status === "unknown") return { stop: "unknown", session };
   const settled = settle(ctx, deadline, () => outcome() === "done", label, session);
   if (settled.stop) return { stop: settled.stop, session, details: settled.detail ? { error: settled.detail } : undefined };
   const state = readSession(session);
@@ -446,7 +493,6 @@ function runTask(ctx, task, attempt, { amended = false } = {}) {
   const turn = openTurn(ctx, `${ctx.host === "codex" ? "$" : "/"}execute-task ${task}`, { task, attempt }, sessionName(ctx.root, task), task);
   const { session } = turn;
   if (turn.stop) return { action: "stop", reason: turn.stop, session, details: turn.details };
-  if (turn.agent?.agent_status === "unknown") return { action: "stop", reason: "unknown", session };
 
   const facts = () => {
     const state = readSession(session);
@@ -479,6 +525,7 @@ function main() {
       options: {
         target: { type: "string" }, tasks: { type: "string" }, root: { type: "string" }, "retry-max": { type: "string" },
         "task-timeout-min": { type: "string" }, "clear-timeout-ms": { type: "string" }, "settle-sec": { type: "string" },
+        "answer-timeout-hours": { type: "string" },
         "dry-run": { type: "boolean" }, kind: { type: "string" }, model: { type: "string" }, "no-follow-up": { type: "boolean" },
       },
     });
@@ -503,6 +550,7 @@ function main() {
     taskTimeoutMs: Number(values["task-timeout-min"] ?? 180) * 60_000,
     clearTimeoutMs: Number(values["clear-timeout-ms"] ?? 30_000),
     settleMs: Number(values["settle-sec"] ?? 90) * 1000,
+    answerTimeoutMs: Number(values["answer-timeout-hours"] ?? 24) * 3_600_000,
     followUp: !values["no-follow-up"],
   };
   const texts = checked.step ? [stepText(ctx.host, checked.step)] : checked.tasks.map((t) => stepText(ctx.host, { command: "execute-task", arg: t }));

@@ -38,32 +38,42 @@ test("turnFromHook はサブエージェントの発火と、扱わない event�
   assert.equal(turnFromHook({}, NOW), null);
 });
 
-test("waitPhase は herdr の blocked と、herdr が作業中でない時の hook の awaiting_user を答え待ちにする", () => {
+test("waitPhase は hook の awaiting_user と herdr の blocked のどちらかがあれば答え待ちにする", () => {
   assert.equal(waitPhase("blocked", null, NOW), "awaiting_user");
-  assert.equal(waitPhase("blocked", { state: "running", at: NOW }, NOW), "awaiting_user");
+  assert.equal(waitPhase("blocked", { state: "running", at: NOW }, NOW), "awaiting_user", "hook が記録しない問い(サブエージェント・elicitation)");
+  assert.equal(waitPhase("blocked", { state: "stopped", at: NOW }, NOW), "awaiting_user");
   assert.equal(waitPhase("idle", { state: "awaiting_user", at: NOW }, NOW), "awaiting_user");
   assert.equal(waitPhase("idle", { state: "awaiting_user", at: NOW - 10 * STALE_RUNNING_MS }, NOW), "awaiting_user");
+  assert.equal(waitPhase(null, { state: "awaiting_user", at: NOW }, NOW), "awaiting_user", "herdr が取れなくても hook で決まる");
 });
 
-test("waitPhase は herdr が working なら hook の awaiting_user より作業中を優先する(許可後の実行・拒否された問いの直後)", () => {
-  assert.equal(waitPhase("working", { state: "awaiting_user", at: NOW }, NOW), "busy");
-  assert.equal(waitPhase("working", { state: "stopped", at: NOW }, NOW), "busy");
+test("waitPhase は hook の awaiting_user を herdr の working より先に見る(herdr の読み違いで答え待ちを作業時間に数えない)", () => {
+  assert.equal(waitPhase("working", { state: "awaiting_user", at: NOW }, NOW), "awaiting_user");
 });
 
-test("waitPhase は herdr が idle でも hook が running なら busy にする(画面に出ない待ちを取りこぼさない)", () => {
-  assert.equal(waitPhase("idle", { state: "running", at: NOW }, NOW), "busy");
+test("waitPhase は hook の running と herdr の working のどちらかがあれば busy にする", () => {
+  assert.equal(waitPhase("idle", { state: "running", at: NOW }, NOW), "busy", "画面に出ない待ちを取りこぼさない");
   assert.equal(waitPhase("done", { state: "running", at: NOW - STALE_RUNNING_MS + 1 }, NOW), "busy");
+  assert.equal(waitPhase(null, { state: "running", at: NOW }, NOW), "busy", "herdr が取れなくても hook で決まる");
+  assert.equal(waitPhase("working", { state: "stopped", at: NOW }, NOW), "busy", "Stop の後にバックグラウンドの完了で再開した形");
+  assert.equal(waitPhase("working", null, NOW), "busy");
 });
 
-test("waitPhase は hook の running が STALE_RUNNING_MS より古ければ、中断で取り残された記録とみなして quiet にする", () => {
+test("waitPhase は hook の running が STALE_RUNNING_MS より古ければ、中断で取り残された記録とみなす", () => {
   assert.equal(waitPhase("idle", { state: "running", at: NOW - STALE_RUNNING_MS }, NOW), "quiet");
+  assert.equal(waitPhase("working", { state: "running", at: NOW - STALE_RUNNING_MS }, NOW), "busy");
+});
+
+test("waitPhase は hook の記録が待つ理由を示さず herdr の状態が取れない時、落ち着いたとはみなさない", () => {
+  assert.equal(waitPhase(null, { state: "stopped", at: NOW }, NOW), "no_evidence");
+  assert.equal(waitPhase(null, null, NOW), "no_evidence");
+  assert.equal(waitPhase(undefined, { state: "running", at: NOW - STALE_RUNNING_MS }, NOW), "no_evidence");
 });
 
 test("waitPhase は hook が stopped で herdr も入力待ちなら quiet、hook の記録が無ければ herdr だけで決める", () => {
   assert.equal(waitPhase("idle", { state: "stopped", at: NOW }, NOW), "quiet");
   assert.equal(waitPhase("idle", null, NOW), "quiet");
   assert.equal(waitPhase("done", undefined, NOW), "quiet");
-  assert.equal(waitPhase("working", null, NOW), "busy");
 });
 
 // XDG_STATE_HOME を一時ディレクトリへ向けて fn を実行する

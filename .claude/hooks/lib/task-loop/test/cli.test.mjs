@@ -19,11 +19,18 @@ const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.m
 //   hole_elaborate: HANDOFF.md の次の一手を /elaborate にする / stalled: 送信後に動かない / newsession: /clear なしに session が変わる /
 //   unknown: 状態を分類できない / working: 送信後の get で 2 回 working を返してから complete する(監督のターンが
 //   worker の完了通知で再開する間を再現)/ question: 問いの画面(blocked)で止まり、人が答えると complete する /
+//   flaky_work: turn は running のまま、get に herdr の失敗と unknown を交互に 5 回、working を 2 回返してから
+//   complete する(作業中に herdr が読めない場面と、読めるようになる場面)/ herdr_down: ターンを終え(stopped)、以後の get をすべて失敗させる /
+//   herdr_blip: ターンを終え、get を 3 回失敗させてから complete する / quick: running を書かずに stopped だけ書いて
+//   complete する(最初の見直しの前に終わる短いターン)/
 //   stage_end: complete に加えて HANDOFF.md の次の一手を /breakdown docs/design/plan.md にする /
 //   hidden_question: 画面は idle のまま、hook と同じく turn を awaiting_user と書き、get を 5 回受けたら人が答えた形にする
 //   (名前の罫線で herdr が問いの画面を見逃す場面)/ silent_work: 同じく idle のまま turn を running と書き、get を 5 回
 //   受けたら complete する(シェルの待ちなど画面に出ない作業)/ nothing: 何もしない
-// 問いの画面(blocked)で agent wait --until を受けたら、人が答えた形にする(s.onAnswer の動きをしてから idle)。
+// Claude への送信を受けたら、hook と同じく turns/<id>.json に running(UserPromptSubmit)を書き、ターンが終わる動きでは
+// stopped(Stop)を書く(stalled は何も書かない。Codex は hook の記録を書かない)。失敗は本物と同じく stderr に出す。
+// agent wait には応じない(ループは herdr の待ちを使わない)。問いの画面(blocked)は、get を HIDDEN_GETS 回受けるか
+// answerDelayMs が過ぎたら人が答えた形にする(s.onAnswer の動きをしてから idle)。
 // hidden_question・silent_work は /follow-up にも使える(答え・完了で checkpoint をコミットする)。
 // /amend T<n> には scenario.amend の先頭で応える: land(穴の記録を消し、次の一手を /execute-task T<n> に戻して amend:
 // でコミット)/ land_add(land に加えて T4 を足す)/ land_fix(是正タスク T4 を足し、次の一手を T4 にする)/ abolish(T<n> を廃止して置き換え先 T4 を立てる)/ question(承認の
@@ -43,7 +50,7 @@ fs.appendFileSync(process.env.FAKE_HERDR_LOG, JSON.stringify(args) + "\\n");
 const save = () => fs.writeFileSync(file, JSON.stringify(s));
 const agent = (pane = "w1:p1") => ({ agent: s.host, agent_status: s.status, agent_session: { value: s.session }, cwd: s.root, foreground_cwd: s.root, pane_id: pane, tab_id: "t1" });
 const ok = (a) => { process.stdout.write(JSON.stringify({ id: "x", result: { agent: a } })); process.exit(0); };
-const fail = (code) => { process.stdout.write(JSON.stringify({ error: { code, message: code }, id: "x" })); process.exit(1); };
+const fail = (code) => { process.stderr.write(JSON.stringify({ error: { code, message: code }, id: "x" }) + "\\n"); process.exit(1); };
 const git = (...a) => execFileSync("git", ["-C", s.root, "-c", "user.email=t@example.com", "-c", "user.name=t", ...a]);
 const sessionFile = () => path.join(process.env.XDG_STATE_HOME, "claude-task-loop", "sessions", s.session + ".json");
 const handoff = (step) => fs.writeFileSync(path.join(s.root, "HANDOFF.md"), "## 仕掛かり中\\n\\n- なし\\n\\n## 次セッションの最初の一手\\n\\n- \`" + step + "\`(説明)\\n");
@@ -84,9 +91,15 @@ const amend = (how, task) => {
 const HIDDEN_GETS = 5;
 // hook(loop-turn.mjs)と同じく、turns/<id>.json を丸ごと置き換える
 const turnFile = () => path.join(process.env.XDG_STATE_HOME, "claude-task-loop", "turns", s.session + ".json");
-const writeTurn = (state) => {
+const writeTurn = (state, event = "fake") => {
   fs.mkdirSync(path.dirname(turnFile()), { recursive: true });
-  fs.writeFileSync(turnFile(), JSON.stringify({ state, event: "fake", at: Date.now() }));
+  fs.writeFileSync(turnFile(), JSON.stringify({ state, event, at: Date.now() }));
+};
+const accept = () => { if (s.host !== "codex") writeTurn("running", "UserPromptSubmit"); };
+const endTurn = () => { if (s.host !== "codex") writeTurn("stopped", "Stop"); };
+const block = (onAnswer) => {
+  s.status = "blocked"; s.onAnswer = onAnswer; s.blockedGets = 0;
+  if (s.answerDelayMs) s.answerAt = Date.now() + s.answerDelayMs;
 };
 // answerDelayMs があれば、get の回数ではなく時刻で答える(時間はループが次の確認まで休む間に過ぎる)
 const hide = (turn, onAnswer) => {
@@ -95,10 +108,11 @@ const hide = (turn, onAnswer) => {
 };
 const answer = () => {
   const [kind, arg] = s.onAnswer;
-  s.onAnswer = null; s.status = "idle";
+  s.onAnswer = null; s.answerAt = null; s.status = "idle";
   if (kind === "complete") complete(arg);
   if (kind === "checkpoint") git("commit", "-q", "--allow-empty", "-m", "chore: follow-up checkpoint\\n\\nFollow-Up-Checkpoint: true");
   if (kind === "amend") amend("land", arg);
+  endTurn();
 };
 if (args[0] === "--version") { console.log("herdr 0.9.1"); process.exit(0); }
 if (args[0] === "pane" && args[1] === "split") {
@@ -119,14 +133,27 @@ if (args[1] === "start") {
   s.status = "idle"; save();
   ok(agent(s.started.pane));
 }
-if (args[1] === "wait" && s.status === "blocked" && args.includes("--until")) {
-  if (!s.onAnswer) fail("timeout");
-  s.waitedBlocked = (s.waitedBlocked || 0) + 1;
-  if (s.answerDelayMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, s.answerDelayMs); // 人が答えるまでの間
-  answer(); save();
-  ok(agent());
-}
-if (args[1] === "get" || args[1] === "wait") {
+if (args[1] === "get") {
+  if (s.down) fail("timeout");
+  if (s.downLeft > 0) {
+    s.downLeft -= 1;
+    if (s.downLeft === 0) complete(s.pending);
+    save();
+    fail("timeout");
+  }
+  if (s.flakyLeft > 0) {
+    s.flakyLeft -= 1;
+    if (s.flakyLeft === 0) { complete(s.pending); endTurn(); save(); ok(agent()); }
+    save();
+    if (s.flakyLeft <= 2) ok({ ...agent(), agent_status: "working" });
+    if (s.flakyLeft % 2 === 0) fail("timeout");
+    ok({ ...agent(), agent_status: "unknown" });
+  }
+  if (s.status === "blocked" && s.onAnswer) {
+    s.blockedGets += 1;
+    if (s.answerAt ? Date.now() >= s.answerAt : s.blockedGets >= HIDDEN_GETS) { s.answered = (s.answered || 0) + 1; answer(); }
+    save();
+  }
   if (s.hiddenLeft > 0) {
     s.hiddenLeft = s.answerAt ? (Date.now() >= s.answerAt ? 0 : s.hiddenLeft) : s.hiddenLeft - 1;
     s.hiddenGets = (s.hiddenGets || 0) + 1;
@@ -135,7 +162,7 @@ if (args[1] === "get" || args[1] === "wait") {
   }
   if (s.workingLeft > 0) {
     s.workingLeft -= 1;
-    if (s.workingLeft === 0) { s.status = "idle"; complete(s.pending); } else s.status = "working";
+    if (s.workingLeft === 0) { s.status = "idle"; complete(s.pending); endTurn(); } else s.status = "working";
     save();
   }
   ok(agent());
@@ -148,6 +175,7 @@ if (args[1] === "prompt") {
     if (s.host === "codex") s.fresh = !s.ignoreClear;
     else if (!s.ignoreClear) { s.n += 1; s.session = "sess-" + s.n; }
     if (s.blockOnClear) s.status = "blocked";
+    if (s.workOnClear) s.status = "working";
     save();
     ok(agent());
   }
@@ -160,9 +188,11 @@ if (args[1] === "prompt") {
   }
   if (/follow-up$/.test(text)) {
     const fu = (s.scenario["follow-up"] || []).shift() || "nothing";
+    accept();
     if (fu === "checkpoint") git("commit", "-q", "--allow-empty", "-m", "chore: follow-up checkpoint\\n\\nFollow-Up-Checkpoint: true");
-    if (fu === "question") { s.status = "blocked"; s.onAnswer = ["checkpoint"]; }
+    if (fu === "question") block(["checkpoint"]);
     if (fu === "hidden_question") hide("awaiting_user", ["checkpoint"]);
+    if (fu === "checkpoint" || fu === "nothing") endTurn();
     save();
     ok(agent());
   }
@@ -170,14 +200,18 @@ if (args[1] === "prompt") {
   if (amendTask) {
     const how = (s.scenario.amend || []).shift() || "nothing";
     s.amendSent = (s.amendSent || 0) + 1;
-    if (how === "question") { s.status = "blocked"; s.onAnswer = ["amend", amendTask]; }
+    accept();
+    if (how === "question") block(["amend", amendTask]);
     else if (how === "elaborate") handoff("/elaborate docs/design/plan.md");
     else if (how !== "nothing") amend(how, amendTask);
+    if (how !== "question") endTurn();
     save();
     ok(agent());
   }
   if (/breakdown docs\\/design\\//.test(text)) {
     const how = (s.scenario.breakdown || []).shift() || "nothing";
+    accept();
+    endTurn();
     if (how === "land" || how === "land_stay") {
       addTasks(["T4", "T5"]);
       if (how === "land") handoff("/execute-task T4");
@@ -189,9 +223,9 @@ if (args[1] === "prompt") {
   }
   const task = (text.match(/execute-task (T\\d+)/) || [])[1];
   const action = (s.scenario[task] || []).shift() || "nothing";
-  save();
-  if (action === "stalled") fail("agent_prompt_stalled");
-  if (action === "complete" || action === "dirty") complete(task);
+  if (action === "stalled") { save(); ok(agent()); } // 受け取っても動かない(hook も画面も変わらない)
+  if (action !== "quick") accept();
+  if (action === "complete" || action === "dirty" || action === "quick") complete(task);
   if (action === "dirty") fs.writeFileSync(path.join(s.root, "stray.txt"), "x");
   if (action === "mark_only") {
     const todo = path.join(s.root, "TODO.md");
@@ -207,13 +241,17 @@ if (args[1] === "prompt") {
   }
   if (action === "hole") handoff("/amend " + task);
   if (action === "hole_elaborate") handoff("/elaborate docs/design/plan.md");
-  if (action === "question") { s.status = "blocked"; s.onAnswer = ["complete", task]; }
+  if (action === "question") block(["complete", task]);
   if (action === "hidden_question") hide("awaiting_user", ["complete", task]);
   if (action === "silent_work") hide("running", ["complete", task]);
   if (action === "stage_end") complete(task, "/breakdown docs/design/plan.md");
   if (action === "unknown") s.status = "unknown";
   if (action === "newsession") s.session = "sess-x-" + s.n;
   if (action === "working") { s.workingLeft = 2; s.pending = task; }
+  if (action === "flaky_work") { s.flakyLeft = 8; s.pending = task; }
+  if (action === "herdr_down") s.down = true;
+  if (action === "herdr_blip") { s.downLeft = 3; s.pending = task; }
+  if (!["question", "hidden_question", "silent_work", "working", "flaky_work"].includes(action)) endTurn();
   save();
   ok(agent());
 }
@@ -228,7 +266,7 @@ function git(root, ...args) {
 const handoffText = (step) => `## 仕掛かり中\n\n- なし\n\n## 次セッションの最初の一手\n\n- \`${step}\`(説明)\n`;
 
 // next は HANDOFF.md の最初の次の一手(null なら HANDOFF.md を置かない)。after は偽のエージェントが T の完了時に書く次の一手
-function setup({ host = "claude", status = "idle", scenario = {}, todo, next = "/execute-task T1", after = {}, ignoreClear = false, blockOnClear = false, ignoreRename = false, agents = "one", answerDelayMs = 0 } = {}) {
+function setup({ host = "claude", status = "idle", scenario = {}, todo, next = "/execute-task T1", after = {}, ignoreClear = false, blockOnClear = false, workOnClear = false, ignoreRename = false, agents = "one", answerDelayMs = 0 } = {}) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "task-loop-cli-")));
   const root = path.join(base, "repo");
   fs.mkdirSync(root);
@@ -244,14 +282,14 @@ function setup({ host = "claude", status = "idle", scenario = {}, todo, next = "
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "herdr"), FAKE_HERDR, { mode: 0o755 });
   const stateFile = path.join(base, "herdr.json");
-  fs.writeFileSync(stateFile, JSON.stringify({ host, status, session: "sess-0", n: 0, root, scenario, after, ignoreClear, blockOnClear, ignoreRename, workingLeft: 0, agents, answerDelayMs }));
+  fs.writeFileSync(stateFile, JSON.stringify({ host, status, session: "sess-0", n: 0, root, scenario, after, ignoreClear, blockOnClear, workOnClear, ignoreRename, workingLeft: 0, agents, answerDelayMs }));
   const logFile = path.join(base, "herdr.log");
   fs.writeFileSync(logFile, "");
   fs.mkdirSync(path.join(base, "tmp"));
   const env = {
     ...process.env, PATH: `${bin}:${process.env.PATH}`, HERDR_ENV: "1", FAKE_HERDR_STATE: stateFile, FAKE_HERDR_LOG: logFile,
     XDG_STATE_HOME: path.join(base, "state"), XDG_CONFIG_HOME: path.join(base, "config"), TMPDIR: path.join(base, "tmp"), HERDR_TAB_ID: "t1",
-    TASK_LOOP_POLL_MS: "50",
+    TASK_LOOP_POLL_MS: "50", TASK_LOOP_HERDR_GRACE_MS: "2000",
   };
   const run = (...extra) => {
     const result = spawnSync("node", [cli, "run", "--target", "w1:p1", "--settle-sec", "0", ...extra], { env, encoding: "utf8", timeout: 60000 });
@@ -325,8 +363,8 @@ test("次の一手が /elaborate・依存の未完了・送信後に動かない
 
   t = setup({ scenario: { T1: ["stalled"] } });
   try {
-    const { json } = t.run("--tasks", "T1");
-    assert.equal(json.reason, "stalled");
+    const { json } = t.run("--tasks", "T1", "--clear-timeout-ms", "1200");
+    assert.equal(json.reason, "stalled", "hook の記録も herdr の作業中も無ければ、受理されていないとみなす");
     assert.deepEqual(t.prompts(), ["/clear", "/rename repo T1", "/execute-task T1"]);
   } finally { t.cleanup(); }
 });
@@ -417,6 +455,12 @@ test("compact・session の変化・分類できない状態は止まる(予算�
       assert.equal(t.run("--tasks", "T1").json.reason, reason, action);
     } finally { t.cleanup(); }
   }
+  const t = setup({ host: "codex", scenario: { T1: ["unknown"] } });
+  try {
+    const started = Date.now();
+    assert.equal(t.run("--tasks", "T1").json.reason, "unknown", "hook の記録が無い Codex でも");
+    assert.ok(Date.now() - started >= 2000, "unknown は猶予(TASK_LOOP_HERDR_GRACE_MS)の間は止まる理由にしない");
+  } finally { t.cleanup(); }
 });
 
 test("/clear で session が変わらない・/clear の後に blocked なら送らずに止まる", () => {
@@ -429,6 +473,11 @@ test("/clear で session が変わらない・/clear の後に blocked なら送
   t = setup({ blockOnClear: true });
   try {
     assert.equal(t.run("--tasks", "T1").json.reason, "blocked_after_clear");
+    assert.deepEqual(t.prompts(), ["/clear"]);
+  } finally { t.cleanup(); }
+  t = setup({ workOnClear: true });
+  try {
+    assert.equal(t.run("--tasks", "T1", "--clear-timeout-ms", "1200").json.reason, "busy_after_clear");
     assert.deepEqual(t.prompts(), ["/clear"]);
   } finally { t.cleanup(); }
 });
@@ -454,7 +503,8 @@ test("送った後に working へ戻る間は待ってから判定し、worker �
   try {
     const { code, json } = t.run("--tasks", "T1");
     assert.equal(code, 0, JSON.stringify(json));
-    assert.ok(t.calls().filter((a) => a[1] === "wait").length >= 1, "working を見たら agent wait で待つ");
+    assert.equal(t.state().workingLeft, 0, "working の間は get で見直して待った");
+    assert.equal(t.calls().filter((a) => a[1] === "wait" || a.includes("--wait")).length, 0, "herdr の待ち(agent wait・--wait)は使わない");
   } finally { t.cleanup(); }
 
   t = setup({ scenario: { T1: ["nothing"] } });
@@ -620,7 +670,7 @@ test("/follow-up があなたへの問いを出せば答えを待ってから終
     const { code, json } = t.runAuto();
     assert.equal(code, 0, JSON.stringify(json));
     assert.equal(json.reason, "follow_up_done");
-    assert.equal(t.state().waitedBlocked, 1, "問いの画面では答えを待った");
+    assert.equal(t.state().answered, 1, "問いの画面では答えを待った");
     assert.deepEqual(t.prompts(), ["/clear", "/rename repo follow-up", "/follow-up"]);
   } finally { t.cleanup(); }
   t = fiveDone({ "follow-up": ["nothing"] });
@@ -679,7 +729,7 @@ test("問いの画面(blocked)では止めずに答えを待ち、待った時�
   try {
     const { code, json, stderr } = t.run("--tasks", "T1");
     assert.equal(code, 0, JSON.stringify(json));
-    assert.equal(t.state().waitedBlocked, 1);
+    assert.equal(t.state().answered, 1);
     assert.match(stderr, /\[loop T1\] blocked: 利用者の答えを待つ/);
   } finally { t.cleanup(); }
   t = setup({ scenario: { T1: ["question"] }, answerDelayMs: 4000 });
@@ -731,7 +781,79 @@ test("/clear の後、送る前に前のターンの状態を消す", () => {
     const { code, json } = t.run("--tasks", "T1");
 
     assert.equal(code, 0, `残っていた答え待ちで待ち続けない: ${JSON.stringify(json)}`);
-    assert.equal(fs.existsSync(file), false);
+    assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).event, "Stop", "残っていた記録は消され、新しいターンの記録だけが残る");
+  } finally { t.cleanup(); }
+});
+
+test("作業中に herdr の状態が読めない(失敗・unknown)間も、hook が running なら止まらずに待ち、完了で進む", () => {
+  const t = setup({ scenario: { T1: ["flaky_work"] } });
+  try {
+    const { code, json, stderr } = t.run("--tasks", "T1");
+    assert.equal(code, 0, `2026-09-24 の T106: 作業中の herdr の失敗で見張りを止めない: ${JSON.stringify(json)}`);
+    assert.equal(json.reason, "all_done");
+    assert.equal(t.state().flakyLeft, 0);
+    assert.match(stderr, /\[loop T1\] herdr: 状態を読めない/);
+    assert.match(stderr, /\[loop T1\] herdr: 状態を読めるようになった/);
+  } finally { t.cleanup(); }
+});
+
+test("hook がターンの終わりを書き herdr が読めないままなら、猶予の後に herdr_error で止まる。猶予の間に完了すれば進む", () => {
+  let t = setup({ scenario: { T1: ["herdr_down"] } });
+  try {
+    const started = Date.now();
+    const { code, json } = t.run("--tasks", "T1");
+    assert.equal(code, 1);
+    assert.equal(json.reason, "herdr_error");
+    assert.match(json.details.error, /^timeout: /, "herdr が stderr に出した失敗のコードを読む");
+    assert.ok(Date.now() - started >= 2000, "猶予の間は止まらない");
+  } finally { t.cleanup(); }
+  t = setup({ scenario: { T1: ["herdr_blip"] } });
+  try {
+    const { code, json } = t.run("--tasks", "T1");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.equal(json.reason, "all_done");
+  } finally { t.cleanup(); }
+});
+
+test("worker のロックがある間は、herdr が猶予を超えて読めなくても止まらない", async () => {
+  const t = setup({ scenario: { T1: ["herdr_down"] } });
+  try {
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = path.join(t.base, "tmp");
+    const { workerLockPath } = await import("../../../check-task-scope.mjs");
+    const lock = workerLockPath(t.root);
+    process.env.TMPDIR = saved;
+    fs.mkdirSync(path.dirname(lock), { recursive: true });
+    fs.writeFileSync(lock, JSON.stringify({ root: t.root, task: "T9", step: "1", pid: process.pid, expiresAt: Date.now() + 4000 }));
+    const started = Date.now();
+    const { json } = t.run("--tasks", "T1");
+    assert.equal(json.reason, "herdr_error");
+    assert.ok(Date.now() - started >= 4000 + 2000, "ロックが失効してから猶予の後に止まる");
+  } finally { t.cleanup(); }
+});
+
+test("答え待ちが --answer-timeout-hours を超えたら answer_timeout で止まり、数でない値は前提検査で止まる", () => {
+  let t = setup({ scenario: { T1: ["question"] }, answerDelayMs: 60_000 });
+  try {
+    const { code, json } = t.run("--tasks", "T1", "--answer-timeout-hours", "0.0003");
+    assert.equal(code, 1);
+    assert.equal(json.reason, "answer_timeout");
+  } finally { t.cleanup(); }
+  t = setup();
+  try {
+    const { code, json } = t.run("--tasks", "T1", "--answer-timeout-hours", "abc");
+    assert.equal(code, 2);
+    assert.match(json.errors.join(), /--answer-timeout-hours/);
+    assert.deepEqual(t.prompts(), []);
+  } finally { t.cleanup(); }
+});
+
+test("送信の受理は、送った後の hook の記録なら state を問わない(最初の見直しの前に終わる短いターン)", () => {
+  const t = setup({ scenario: { T1: ["quick"] } });
+  try {
+    const { code, json } = t.run("--tasks", "T1", "--clear-timeout-ms", "1200");
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.equal(json.reason, "all_done");
   } finally { t.cleanup(); }
 });
 
@@ -752,7 +874,7 @@ test("穴の記録で止まったら /amend T を送り、着地したら同じ 
   try {
     const { code, json } = t.run("--tasks", "T1");
     assert.equal(code, 0, `amend の承認の問いは答えを待つ: ${JSON.stringify(json)}`);
-    assert.equal(t.state().waitedBlocked, 1);
+    assert.equal(t.state().answered, 1);
   } finally { t.cleanup(); }
 });
 

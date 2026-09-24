@@ -153,9 +153,11 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
     それ以外は止まって人へ渡す(2026-09-23。`claude -p` を使わないのは、最終応答の後にバックグラウンドの
     Bash が殺され Codex worker の待機と衝突するため)。穴の記録で止まった T には `/amend T<n>` を、次の一手が
     次の段階の分解なら `/breakdown` を同じループが送り、着地を成果物で確かめて続ける。`/elaborate` は送らない。
-    問いの画面(blocked)では止まらず答えを待つ(2026-09-24)。問いの画面とターンの途中は herdr の画面の判定だけでなく、
-    hook(`hooks/loop-turn.sh`)が書くターンの状態でも見る(herdr が名前の罫線の下の問いの画面を idle と見逃し、
-    /follow-up の問いの最中にループが終わった実例による。同日)。引数なしの時に次に回す T は HANDOFF.md の次の一手だけで決め、
+    問いの画面(blocked)では止まらず答えを待つ(2026-09-24。上限 24 時間)。ターンの途中・答え待ち・終了は
+    hook(`hooks/loop-turn.sh`)が書くターンの状態を判定の主にし、herdr の画面の判定は待つ方向の証拠を足すだけにする
+    (herdr が名前の罫線の下の問いの画面を idle と見逃し、/follow-up の問いの最中にループが終わった実例と、herdr の
+    agent wait の失敗を読み違えて作業中の T の見張りを止めた実例による。同日)。herdr は送る手段として使い、長い待ち
+    (agent wait)は使わない。引数なしの時に次に回す T は HANDOFF.md の次の一手だけで決め、
     1 回の起動は /follow-up の 1 区間で終える(同日。TODO.md の並びから凍結中の T を拾って止まった実例による)
 18. **下流の各段は plan.md の該当フェーズに照らして反証する** — `plan.md` を読むのが `/elaborate` だけで、
     `/breakdown`・`/amend`・`/follow-up` は直前の中間文書(設計書・完了条件)だけに照らしていた。これでは
@@ -176,7 +178,7 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   ├── check-handoff-stale.sh   # SessionStart hook — HANDOFF.md の未コミット変更と、未決の要確認(件数・回収点の無い行)を通知(設計方針 7)
 │   ├── check-stop-question.sh   # Stop hook — 問いかけ・依頼で応答を終えようとしたら 1 回だけ差し戻す自律判断ゲート(task-loop が駆動するセッションは素通し)
 │   ├── context-budget.sh/.mjs   # PostToolUse + Stop + PostCompact + SessionStart hook — /execute-task の実行中、compact の前に作業記録を書かせてターンを終えさせる予算停止(Codex と本体を共有。設計方針 17)
-│   ├── loop-turn.sh/.mjs        # UserPromptSubmit + PreToolUse(AskUserQuestion) + PermissionRequest + PostToolUse(+Failure) + Stop(+Failure) hook — task-loop が駆動するセッションのターンの状態(実行中・答え待ち・終了)を記録し、ループが herdr の画面の判定の取りこぼしを補う(設計方針 17)
+│   ├── loop-turn.sh/.mjs        # UserPromptSubmit + PreToolUse(AskUserQuestion) + PermissionRequest + PostToolUse(+Failure) + Stop(+Failure) hook — task-loop が駆動するセッションのターンの状態(実行中・答え待ち・終了)を記録する。ループの待ち方の判定の主で、herdr の画面の判定は補助(設計方針 17)
 │   ├── check-new-directory.sh   # PreToolUse(Write) hook — 新規ディレクトリ作成時の確認促し(設計方針 10)
 │   ├── check-task-scope.sh/.mjs # UserPromptSubmit + PreToolUse(Write|Edit) + SubagentStart/Stop hook — /execute-task 実行中に TODO.md の対象パス外への編集を拒否し、レビュー役の返答待ち中は主文脈の編集を、Codex worker の実行中はそのリポジトリへの編集を拒否(Codex と本体を共有)
 │   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認の要否・推奨の向き・可読性のゲート(呼び出しごとに1回 deny→取りやめ or 書き直し。設計方針 12)
@@ -313,7 +315,7 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
    (回す作業が尽きた時も含めて)/follow-up を送り、checkpoint が増えたらそこで終える。送る先は同じプロジェクトで入力待ちのペインを自動で選び、無ければ
    隣に作って起動する(T ごとに /clear。引数なしの時は工程を 1 つ終えるたびに HANDOFF.md の次の一手を読み直し、TODO.md の並びからは選ばない。
    穴の記録なら /amend T<n> を送って次の一手の T へ戻る。次の一手が /breakdown なら送って続ける(/breakdown は引数なしの時だけ)。
-   承認・関門・要確認の問いは答えるまで待つ。次の一手が /elaborate・コマンド無し・済んだ T、同じ T で 2 回目の穴・依存の未完了・compact などで止まり、
+   承認・関門・要確認の問いは答えるまで待つ(上限は --answer-timeout-hours、既定 24 時間)。次の一手が /elaborate・コマンド無し・済んだ T、同じ T で 2 回目の穴・依存の未完了・compact などで止まり、
    理由と次の一手を JSON で出す)。
    Claude のペインは窓の題名で何をしているか分かるよう、起動時に `--name "<計画> loop"`、/clear の後に毎回
    `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`、/amend は `<計画> T<n> amend`、/breakdown は `<設計書の slug> breakdown`)で名前を付け直す。<計画> は T が属する TODO.md の
