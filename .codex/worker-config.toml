@@ -10,7 +10,7 @@
 # Codex は実行したプロジェクトの信頼設定([projects."<path>"])をこのファイルへ書き足す。install.sh はその表を
 # 比較から除く。
 
-model_reasoning_effort = "xhigh"
+model_reasoning_effort = "max"
 approval_policy = "never"
 sandbox_mode = "workspace-write"
 # プロジェクトの AGENTS.md / CLAUDE.md を注入しない。プロジェクトの規約(.claude/rules・.codex/rules)は、
