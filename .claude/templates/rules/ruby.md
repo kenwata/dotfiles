@@ -19,6 +19,7 @@ paths:
 - Run RuboCop (or `standard`) in CI with zero offenses. Store configuration in `.rubocop.yml`. Disable a cop only with an inline `# rubocop:disable` comment that names the reason.
 - Enable `rubocop-rspec`, `rubocop-rails`, or other extension gems that match the project stack.
 - Do not format code by hand; rely entirely on RuboCop's auto-correct (`--autocorrect`).
+- Set `Layout/LineLength` to `Max: 100` in `.rubocop.yml` (`coding-principles.md` §14). Auto-correct cannot break every long line; restructure what it reports (extract a local, split the argument list) rather than disabling the cop.
 
 ## Immutability and Safe Patterns
 

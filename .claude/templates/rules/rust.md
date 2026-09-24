@@ -35,7 +35,7 @@ paths:
 
 ## Code Style and Tooling
 
-- Run `rustfmt` before every commit. Configuration lives in `rustfmt.toml`; do not format by hand.
+- Run `rustfmt` before every commit, keeping `max_width` at its default of 100 (`coding-principles.md` §14). Configuration lives in `rustfmt.toml`; do not format by hand.
 - Run `cargo clippy -- -D warnings` in CI. Zero warnings is the bar; suppress a lint only with `#[allow(...)]` accompanied by a comment.
 - Enable `#![deny(missing_docs)]` for library crates.
 - Specify a `rust-edition` in `Cargo.toml`; default to `2021` or `2024` for new projects.

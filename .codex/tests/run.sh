@@ -129,6 +129,8 @@ node --test "$repo_root/.claude/hooks/lib/codex-worker/test/cli.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/worklog.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/status.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/task-loop/test/"*.test.mjs
+node --test "$repo_root/.claude/hooks/lib/code-layout/test/"*.test.mjs
+bash "$repo_root/.claude/hooks/tests/test-check-code-layout.sh" >/dev/null
 bash "$repo_root/.claude/hooks/tests/test-context-budget.sh" >/dev/null
 
 safe_git_output="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git status"}}' \
@@ -164,6 +166,7 @@ safe_read_output="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"gi
 rg -q -- '--rules-dir=\.codex --rules-dir=\.claude' \
   "$repo_root/.codex/skills/markdown-cleanup/SKILL.md"
 rg -q -- '--rules-dir=\.codex' "$repo_root/.codex/hooks/format-markdown.mjs"
+rg -q -- '--rules-dir=\.codex' "$repo_root/.codex/hooks/check-code-layout.mjs"
 
 question_session="codex-test-$$"
 question_input="$(jq -nc --arg id "$question_session" \

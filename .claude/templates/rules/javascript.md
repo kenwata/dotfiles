@@ -64,7 +64,7 @@ paths:
 
 ## Code Style & Tooling
 
-- Delegate all formatting to Prettier. Manual formatting is forbidden.
+- Delegate all formatting to Prettier with `printWidth: 100` in the Prettier config (`coding-principles.md` §14). Prettier is a devDependency and CI runs `prettier --check .`. Manual formatting is forbidden.
 - Use ESLint with flat config (`eslint.config.js`); for TypeScript add `typescript-eslint`. Required: `eqeqeq`, `no-var`, `no-unused-vars` (`@typescript-eslint/no-unused-vars` in TS), `@typescript-eslint/no-floating-promises` (type-aware; needs `projectService`), `no-param-reassign` (`props: true`; framework-owned objects go in `ignorePropertyModificationsFor`, never an `eslint-disable`), `max-lines-per-function` (50, `skipBlankLines` / `skipComments`), `max-params` (5), `max-depth` (3), `complexity` (10). Size rules are `coding-principles.md` §3 gates: split, never disable.
 - Run `tsc --noEmit` (TS) or `checkJs` (JS) plus ESLint in CI. Zero errors and zero lint warnings is the bar.
 - Auto-sort imports with the `import/order` ESLint rule or a Prettier plugin. Do not maintain import order by hand.

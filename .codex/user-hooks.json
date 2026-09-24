@@ -85,6 +85,11 @@
             "command": "bash ~/.codex/hooks/format-markdown.sh",
             "timeout": 30,
             "type": "command"
+          },
+          {
+            "command": "bash ~/.codex/hooks/check-code-layout.sh",
+            "timeout": 30,
+            "type": "command"
           }
         ]
       },

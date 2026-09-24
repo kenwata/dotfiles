@@ -12,6 +12,7 @@ Write Lua so that the efficient path is also the obvious path: precise names, sh
 - Target the Lua runtime declared by the project. Do not use syntax or APIs unavailable in that runtime.
 - Treat LuaJIT as a distinct target where applicable; do not assume that features from newer standard Lua versions are available.
 - Follow the repository's established naming and formatting conventions rather than introducing a competing style.
+- Format with StyLua, with `column_width = 100` in `stylua.toml` (`coding-principles.md` §14).
 
 ## Scope and Lifetime
 

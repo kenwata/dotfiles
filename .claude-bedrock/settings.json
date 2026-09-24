@@ -35,6 +35,10 @@
           {
             "command": "~/.claude-bedrock/hooks/format-markdown.sh",
             "type": "command"
+          },
+          {
+            "command": "~/.claude-bedrock/hooks/check-code-layout.sh",
+            "type": "command"
           }
         ],
         "matcher": "Write|Edit"

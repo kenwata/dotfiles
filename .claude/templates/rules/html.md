@@ -157,8 +157,8 @@ paths:
 
 - All element names and attribute names must be **lowercase**.
 - All attribute values must be wrapped in **double quotes** (`""`).
-- Delegate all formatting (indentation, line length, trailing whitespace) to **Prettier**.
-  Do not format HTML by hand.
+- Delegate all formatting (indentation, line length, trailing whitespace) to **Prettier**
+  with `printWidth: 100` (`coding-principles.md` §14). Do not format HTML by hand.
 - Void elements (`<br>`, `<hr>`, `<img>`, `<input>`, `<link>`, `<meta>`, etc.) do not
   need a self-closing slash. Let Prettier decide based on the project config.
 - Do not rely on optional tag omission (e.g., omitting `</li>` or `</td>`). Write all

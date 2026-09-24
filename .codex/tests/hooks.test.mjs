@@ -264,3 +264,68 @@ test("leaves both copies unchanged when an added Markdown run is ambiguous", () 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+const layoutHookPath = join(testDir, "..", "hooks", "check-code-layout.mjs");
+
+function runLayoutHook(input) {
+  return spawnSync(process.execPath, [layoutHookPath], {
+    input,
+    encoding: "utf8",
+    env: { ...process.env, HOME: FIXTURE_HOME },
+  });
+}
+
+function layoutPatchInput(root, file, addedLines) {
+  return JSON.stringify({
+    cwd: root,
+    tool_name: "apply_patch",
+    tool_input: {
+      command: [
+        "*** Begin Patch",
+        `*** Update File: ${file}`,
+        "@@",
+        ...addedLines.map((line) => `+${line}`),
+        "*** End Patch",
+      ].join("\n"),
+    },
+  });
+}
+
+test("code-layout adapter reports a glued block added by apply_patch in a Codex-native project", () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-layout-hook-"));
+  try {
+    mkdirSync(join(root, ".codex", "rules"), { recursive: true });
+    writeFileSync(join(root, ".codex", "rules", "coding-principles.md"), "# Coding Principles\n");
+    mkdirSync(join(root, "src"), { recursive: true });
+    const added = ["  if (x) {", "    run(x);", "  }", "  finish();"];
+    writeFileSync(join(root, "src", "a.ts"), ["function f(x) {", ...added, "}", ""].join("\n"));
+
+    const result = runLayoutHook(layoutPatchInput(root, "src/a.ts", added));
+
+    assert.equal(result.status, 0);
+    assert.match(
+      JSON.parse(result.stdout).hookSpecificOutput.additionalContext,
+      /statement glued to the block/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("code-layout adapter stays silent without coding-principles.md and for untouched lines", () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-layout-hook-"));
+  try {
+    mkdirSync(join(root, "src"), { recursive: true });
+    const glued = ["function f(x) {", "  if (x) {", "    run(x);", "  }", "  finish();", "}", "", "const y = 1;"];
+    writeFileSync(join(root, "src", "a.ts"), `${glued.join("\n")}\n`);
+
+    assert.equal(runLayoutHook(layoutPatchInput(root, "src/a.ts", ["  finish();"])).stdout, "");
+
+    mkdirSync(join(root, ".claude", "rules"), { recursive: true });
+    writeFileSync(join(root, ".claude", "rules", "coding-principles.md"), "# Coding Principles\n");
+
+    assert.equal(runLayoutHook(layoutPatchInput(root, "src/a.ts", ["const y = 1;"])).stdout, "");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

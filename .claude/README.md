@@ -182,10 +182,12 @@ Claude Code には自動ロードされない(コンテキストコストゼロ)
 │   ├── check-question-legibility.sh  # PreToolUse(AskUserQuestion) hook — 確認の要否・推奨の向き・可読性のゲート(呼び出しごとに1回 deny→取りやめ or 書き直し。設計方針 12)
 │   ├── deny-subagent-git-write.sh  # PreToolUse(Bash) hook — サブエージェントの git 履歴・リモート変更を拒否(設計方針 11)
 │   ├── format-markdown.sh       # PostToolUse(Write|Edit) hook — 保存された .md を markdown-format CLI に通す(編集行のみ。全体整形は /markdown-cleanup)
+│   ├── check-code-layout.sh     # PostToolUse(Write|Edit) hook — 保存されたコードを code-layout CLI に通し、coding-principles.md §14 の最低限(行幅 100・段落の空行)の抜けを差し戻す(編集行のみ。Codex と本体を共有)
 │   ├── lib/codex-worker/        # /execute-task が実装ステップを Codex worker へ委譲する runner(ステップ計画(plan・show)・起動・範囲のゲート・restore・監督の検証(verify)・規約の添付・実行中の状態行・タスク単位の作業記録(worklog・note・resume)。node。テストは test/)
 │   ├── lib/task-loop/           # /execute-task の連続実行ループ(herdr 経由で /clear → /execute-task を送り、成果物で進む・再送・停止を決める)と予算停止の計算・セッションの状態(node。テストは test/。設計方針 17)
 │   ├── lib/mainline-gauge/      # 本流の計器(/breakdown が支線の分解の前に呼ぶ。node。テストは test/)
-│   └── lib/markdown-format/     # 上記 hook が呼ぶ formatter/linter 本体(依存ゼロ・ビルドなし。cli/format/lint/scope 等 + test/。詳細は同所の README.md)
+│   ├── lib/code-layout/         # check-code-layout.sh が呼ぶレイアウト検査の本体(依存ゼロ・ビルドなし。言語の表 + test/。詳細は同所の README.md)
+│   └── lib/markdown-format/     # format-markdown.sh が呼ぶ formatter/linter 本体(依存ゼロ・ビルドなし。cli/format/lint/scope 等 + test/。詳細は同所の README.md)
 ├── agents/                      # サブエージェント定義(全プロジェクト共通。CLAUDE.md を継承する。設計方針 11)
 │   ├── codebase-explorer.md     # 広域探索 — 読み取り専用
 │   ├── log-test-analyst.md      # ログ・テスト出力の解析 — 読み取り専用

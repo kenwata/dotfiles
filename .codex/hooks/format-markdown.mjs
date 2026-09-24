@@ -6,7 +6,9 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-export function changedMarkdownRuns(patch) {
+// Added-line runs of every file in an apply_patch payload whose path satisfies accept().
+// check-code-layout.mjs reuses this for code files; the Markdown hook keeps its own wrapper.
+export function changedRuns(patch, accept) {
   const result = [];
   let current = null;
   let run = [];
@@ -20,7 +22,7 @@ export function changedMarkdownRuns(patch) {
     const header = line.match(/^\*\*\* (?:Add|Update) File: (.+)$/);
     if (header) {
       flush();
-      current = header[1].endsWith(".md") ? header[1] : null;
+      current = accept(header[1]) ? header[1] : null;
       continue;
     }
     if (line.startsWith("*** ") || line.startsWith("@@")) {
@@ -36,6 +38,10 @@ export function changedMarkdownRuns(patch) {
   }
   flush();
   return result.filter(({ text }) => text.length > 0);
+}
+
+export function changedMarkdownRuns(patch) {
+  return changedRuns(patch, (file) => file.endsWith(".md"));
 }
 
 export function occursExactlyOnce(source, text) {

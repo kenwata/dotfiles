@@ -19,7 +19,7 @@ paths:
 ## Code Style
 
 - Conform to PEP 8.
-- Run `black` or `ruff format` before every commit and in CI to enforce consistent formatting automatically.
+- Run `black` or `ruff format` before every commit and in CI to enforce consistent formatting automatically, with `line-length = 100` in `pyproject.toml` (`coding-principles.md` §14).
 - Lint with `ruff check`. `pyproject.toml` selects at least `E, W, F, I, N, UP, B, ANN, D, T20, PL, C90, SIM` with `pydocstyle.convention = "google"` and the default thresholds (`max-args = 5`, `max-statements = 50`, `max-branches = 12`, `max-complexity = 10`). Sanctioned escapes live in `per-file-ignores`, nowhere else: `T201` for the entry module's result output, `PLR2004, D` under `tests/**` (see Docstrings). `ANN401` is the mechanical form of the `Any` ban above; `B905` requires `zip(strict=)`; `PLR2004` flags magic numbers (magic strings are governed by `coding-principles.md` §2 and the `Enum` rule below). Size rules (§3 gates) are never `# noqa`'d — split the function.
 - Order imports as: standard library → third-party → project-local. Auto-sort with `ruff` or `isort`.
 

@@ -44,7 +44,7 @@ paths:
 
 ## Code Style and Tooling
 
-- Format all code with `scalafmt`. Configuration lives in `.scalafmt.conf`; do not format manually.
+- Format all code with `scalafmt`, with `maxColumn = 100` (`coding-principles.md` §14). Configuration lives in `.scalafmt.conf`; do not format manually.
 - Run `scalafix` with `OrganizeImports` and semantic rewrites in CI.
 - Enable Wartremover (or Scala 3 linting via `-Wunused`, `-Wvalue-discard`, etc.) and treat all warnings as errors (`-Werror`). Suppress a warning only with a `@SuppressWarnings` annotation and a comment.
 - Target Scala 3 for new projects. Document the Scala version in `build.sbt`.

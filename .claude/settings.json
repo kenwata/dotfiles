@@ -95,6 +95,10 @@
           {
             "command": "~/.claude/hooks/format-markdown.sh",
             "type": "command"
+          },
+          {
+            "command": "~/.claude/hooks/check-code-layout.sh",
+            "type": "command"
           }
         ],
         "matcher": "Write|Edit"

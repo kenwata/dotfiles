@@ -50,6 +50,10 @@ Write Vimscript so that editor state, scope, and side effects are immediately vi
 - When passing values to a shell, use `shellescape()` rather than manual quoting.
 - Never interpolate untrusted or externally derived text into an Ex or shell command without the appropriate escaping.
 
+## Layout
+
+- No formatter wraps Vimscript: keep lines within 100 columns (`coding-principles.md` §14) by splitting them with `\` line continuation, and paragraph function bodies as §14 describes.
+
 ## Comments
 
 - Comment behavior that is non-obvious because of Vimscript semantics: scope, editor-state dependencies, mapping recursion, autocommand timing, mutation, escaping, or compatibility constraints.

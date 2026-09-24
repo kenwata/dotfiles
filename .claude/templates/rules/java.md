@@ -50,7 +50,7 @@ paths:
 
 ## Code Style and Tooling
 
-- Conform to the Google Java Style Guide. Enforce with `google-java-format` via a Spotless or similar Gradle/Maven plugin; formatting is automatic, never manual.
+- Conform to the Google Java Style Guide. Enforce with `google-java-format` via a Spotless or similar Gradle/Maven plugin; formatting is automatic, never manual. Its line width is fixed at 100, matching `coding-principles.md` §14.
 - Run Checkstyle and Error Prone in CI. Zero violations is the bar.
 - Disable rules with inline suppression comments only when necessary, and always explain why.
 

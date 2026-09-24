@@ -36,7 +36,7 @@ paths:
 
 ## Code Style and Tooling
 
-- Format all code with `fourmolu` (preferred) or `ormolu`. Configuration lives in `fourmolu.yaml`; do not format by hand.
+- Format all code with `fourmolu` (preferred) or `ormolu`, with `column-limit: 100` in `fourmolu.yaml` (`coding-principles.md` §14; `ormolu` has no width setting). Do not format by hand.
 - Run `hlint` in CI. Address suggestions or explicitly ignore them with `{-# ANN ... HLint.ignore #-}` and a comment.
 - Compile with `-Wall -Wcompat` in CI, and promote warnings to errors with `-Werror`. Never suppress a warning without a documented reason.
 - Organize module exports explicitly in the `where` clause of each module header. Avoid `module Foo where` with no export list — it exports everything.
