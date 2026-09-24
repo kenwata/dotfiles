@@ -128,6 +128,7 @@ node --test "$repo_root/.claude/hooks/lib/codex-worker/test/core.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/cli.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/worklog.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/status.test.mjs"
+node --test "$repo_root/.claude/hooks/lib/codex-worker/test/timing.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/task-loop/test/"*.test.mjs
 node --test "$repo_root/.claude/hooks/lib/code-layout/test/"*.test.mjs
 bash "$repo_root/.claude/hooks/tests/test-check-code-layout.sh" >/dev/null
