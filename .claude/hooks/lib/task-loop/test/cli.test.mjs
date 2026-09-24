@@ -745,6 +745,17 @@ test("名前が題名に反映されなくても止めずに次へ進み、stder
   } finally { t.cleanup(); }
 });
 
+test("stderr の進行行はどれも先頭にローカル時刻 [YYYY/MM/DD HH:MM:SS] を付ける", () => {
+  const t = setup({ scenario: { T1: ["complete"] } });
+  try {
+    const { code, json, stderr } = t.run("--tasks", "T1");
+    assert.equal(code, 0, JSON.stringify(json));
+    const lines = stderr.split("\n").filter((l) => l.includes("[loop"));
+    assert.ok(lines.length > 0, stderr);
+    for (const l of lines) assert.match(l, /^\[\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}\] \[loop[ \]]/);
+  } finally { t.cleanup(); }
+});
+
 test("問いの画面(blocked)では止めずに答えを待ち、待った時間は制限時間に数えない", () => {
   let t = setup({ scenario: { T1: ["question"] } });
   try {

@@ -81,7 +81,14 @@ const HERDR_GRACE_MS = Number(process.env.TASK_LOOP_HERDR_GRACE_MS) > 0 ? Number
 const CHECKPOINT_LIMIT = 5;
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-const log = (task, text) => process.stderr.write(`[loop${task ? " " + task : ""}] ${text}\n`);
+// 左ペインで各行がいつ起きたかを読めるよう、先頭にローカル時刻を [YYYY/MM/DD HH:MM:SS] で付ける
+const stamp = (d = new Date()) => {
+  const p = (n) => String(n).padStart(2, "0");
+  const date = `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`;
+  return `${date} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+};
+const log = (task, text) =>
+  process.stderr.write(`[${stamp()}] [loop${task ? " " + task : ""}] ${text}\n`);
 
 function finish(result, code) {
   const out = { ...result, at: new Date().toISOString() };
