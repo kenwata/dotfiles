@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 
 // 検証節: 1 本目は worker の変更があれば通り、2 本目は必ず落ちる。束ねて打つと 1 本目の成否が分からなくなる組み合わせ
 const VERIFY_SECTION = "## 検証\n- `test -f src/a/impl.ts` (worker の変更がある)\n- `echo checked; exit 3`\n";
@@ -61,6 +61,11 @@ console.log(JSON.stringify({ type: "item.completed", item: { type: "command_exec
 fs.writeFileSync(path.join(root, "src/a/impl.ts"), "impl\\n");
 console.log(JSON.stringify({ type: "item.completed", item: { type: "file_change", changes: [{ path: path.join(root, "src/a/impl.ts"), kind: "add" }] } }));
 if (mode === "violate") fs.writeFileSync(path.join(root, "other/y.ts"), "changed by worker\\n");
+if (mode === "outside") {
+  fs.appendFileSync(path.join(root, "..", "live.log"), "written by another process\\n");
+  fs.writeFileSync(path.join(root, "..", "top.ts"), "edited by another session\\n");
+}
+if (mode === "ignored") fs.writeFileSync(path.join(root, ".env"), "SECRET=changed\\n");
 fs.writeFileSync(out, JSON.stringify({ status: "done", changed_files: ["src/a/impl.ts"], tests_run: [], criteria: [], holes: [], reference_errors: [], notes: "" }));
 console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5 } }));
 `;
@@ -69,16 +74,52 @@ function git(root, ...args) {
   return execFileSync("git", ["-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", ...args], { encoding: "utf8" });
 }
 
-function setup() {
+// src/a/ と other/y.ts を持つリポジトリを作る(worker が書く側)
+function initCodeRepo(dir) {
+  fs.mkdirSync(path.join(dir, "src/a"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "other"), { recursive: true });
+  git(dir, "init", "-q");
+  fs.writeFileSync(path.join(dir, "other/y.ts"), "y1\n");
+}
+
+// T7 の行と、対象が target の完了条件ブロックを持つ TODO.md
+const todoWithTarget = (target) =>
+  `| #1-1 | T7 | x | 中 | — | [ ] |\n\n**#1-1 / T7** — 完了条件: 対象: \`${target}\`。\n`;
+
+// 作業場所のリポジトリ wsrepo: .gitignore(*.log と .env)・追跡中の top.ts・ほかのプロセスが
+// 書き続ける live.log を最上位に持つ(dotfiles の history.jsonl などを写す)。コードは codeDir に置く
+function initWorkspaceRepo(wsRepo, codeDir) {
+  initCodeRepo(wsRepo);
+
+  fs.mkdirSync(path.join(codeDir, "src/a"), { recursive: true });
+  fs.mkdirSync(path.join(codeDir, "other"), { recursive: true });
+  fs.writeFileSync(path.join(codeDir, "other/y.ts"), "y1\n");
+  fs.writeFileSync(path.join(wsRepo, ".gitignore"), "*.log\n.env\n");
+  fs.writeFileSync(path.join(wsRepo, "top.ts"), "t1\n");
+  git(wsRepo, "add", "-A");
+  git(wsRepo, "commit", "-qm", "init");
+
+  fs.writeFileSync(path.join(wsRepo, "live.log"), "line1\n");
+  fs.writeFileSync(path.join(codeDir, ".env"), "SECRET=original\n");
+}
+
+// workspace: "repo" なら、帳簿(TODO.md)の root とは別のリポジトリ wsrepo を worker の
+// 作業場所にする。
+// "subdir" なら wsrepo の中の pkg を作業場所にする。どちらも T の対象を HOME からの ~ で書く
+// (~/.claude が dotfiles を指す構成を写す)
+function setup({ workspace = null } = {}) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "codex-worker-cli-")));
   const root = path.join(base, "repo");
-  fs.mkdirSync(path.join(root, "src/a"), { recursive: true });
-  fs.mkdirSync(path.join(root, "other"), { recursive: true });
-  git(root, "init", "-q");
-  fs.writeFileSync(path.join(root, "other/y.ts"), "y1\n");
-  fs.writeFileSync(path.join(root, "TODO.md"), "| #1-1 | T7 | x | 中 | — | [ ] |\n\n**#1-1 / T7** — 完了条件: 対象: `src/a/`。\n");
+  const wsRepo = path.join(base, "wsrepo");
+  const ws = { repo: wsRepo, subdir: path.join(wsRepo, "pkg") }[workspace] ?? root;
+
+  initCodeRepo(root);
+  const target = workspace ? `~/${path.relative(base, ws)}/src/a/` : "src/a/";
+  fs.writeFileSync(path.join(root, "TODO.md"), todoWithTarget(target));
   git(root, "add", "-A");
   git(root, "commit", "-qm", "init");
+
+  if (workspace) initWorkspaceRepo(wsRepo, ws);
 
   const bin = path.join(base, "bin");
   fs.mkdirSync(bin);
@@ -94,12 +135,15 @@ function setup() {
   fs.mkdirSync(tmp);
   const env = {
     ...process.env, PATH: `${bin}:${process.env.PATH}`, CODEX_WORKER_HOME: home, TMPDIR: tmp,
-    XDG_STATE_HOME: path.join(base, "state"),
+    XDG_STATE_HOME: path.join(base, "state"), ...(workspace ? { HOME: base } : {}),
   };
   const run = (args, extraEnv = {}) => {
     const result = spawnSync("node", [cli, ...args], { env: { ...env, ...extraEnv }, encoding: "utf8", timeout: 60000 });
     return { code: result.status, json: JSON.parse(result.stdout), stderr: result.stderr };
   };
+  // 終わるのを待たずに起動する(シグナルで止める試験のため)
+  const spawnRun = (args, extraEnv = {}) =>
+    spawn("node", [cli, ...args], { env: { ...env, ...extraEnv }, stdio: "ignore" });
   const lockDir = path.join(tmp, "claude-task-scope");
   const locks = () => (fs.existsSync(lockDir) ? fs.readdirSync(lockDir).filter((n) => n.startsWith("worker-lock-")) : []);
   const statusLog = path.join(base, "state", "claude-codex-worker", "status", `${root.replace(/[^A-Za-z0-9]/g, "-")}.log`);
@@ -120,7 +164,9 @@ function setup() {
     return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
   };
   return {
-    base, root, packet, run, locks, statusLog, taskDir, registerPlan, show, tmp, sandboxCalls, execEnv,
+    base, root, ws, wsRepo, packet, run, spawnRun, locks, statusLog, taskDir, registerPlan, show,
+    tmp, sandboxCalls,
+    execEnv,
     cleanup: () => fs.rmSync(base, { recursive: true, force: true }),
   };
 }
@@ -462,5 +508,209 @@ test("不採用の run の変更は説明に使わない", () => {
     t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "violate" }); // 許可外だけ戻し、許可内の impl.ts は残る(不採用)
     const resumed = t.run(["resume", "--root", t.root, "--task", "T7"]);
     assert.deepEqual(resumed.json.unexplained_dirty, ["src/a/impl.ts"]);
+  } finally { t.cleanup(); }
+});
+
+// 条件が真になるまで 50ms ごとに確かめる。timeoutMs を過ぎたら失敗させる
+async function waitFor(condition, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("waitFor: 条件が満たされないまま時間切れ");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+const wsArgs = (t) => [...baseArgs(t.root, t.packet), "--workspace", t.ws];
+
+const worklogEntries = (t, kind) => fs.readFileSync(path.join(t.taskDir, "worklog.md"), "utf8")
+  .split("\n")
+  .filter((line) => line.includes(`kind=${kind} `));
+
+test("run --workspace は worker の起動とゲートを作業場所で行い、記録を帳簿の root に残す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { code, json } = t.run(wsArgs(t), { FAKE_MODE: "ok" });
+
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.equal(json.accepted, true);
+    assert.equal(json.workspace, t.ws);
+    assert.deepEqual(json.gate.changed, ["src/a/impl.ts"]);
+    assert.equal(fs.readFileSync(path.join(t.ws, "src/a/impl.ts"), "utf8"), "impl\n");
+    assert.equal(fs.existsSync(path.join(t.root, "src/a/impl.ts")), false);
+
+    const meta = JSON.parse(fs.readFileSync(path.join(json.run_dir, "run.json"), "utf8"));
+    assert.equal(meta.root, t.root);
+    assert.equal(meta.workspace, t.ws);
+    assert.ok(worklogEntries(t, "run").some((line) => line.includes(`workspace=${t.ws} `)));
+    assert.deepEqual(t.locks(), []);
+  } finally { t.cleanup(); }
+});
+
+test("run --workspace は作業場所の許可外の変更を戻し、帳簿の root には触らない", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { code, json } = t.run(wsArgs(t), { FAKE_MODE: "violate" });
+
+    assert.equal(code, 1);
+    assert.deepEqual(json.gate.violations, ["other/y.ts"]);
+    assert.equal(fs.readFileSync(path.join(t.ws, "other/y.ts"), "utf8"), "y1\n");
+    assert.equal(git(t.root, "status", "--porcelain"), "");
+  } finally { t.cleanup(); }
+});
+
+test("run --workspace は git でない作業場所と、root と入れ子の作業場所を起動前に拒否する", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const runIn = (workspace) =>
+      t.run([...baseArgs(t.root, t.packet), "--workspace", workspace], { FAKE_MODE: "ok" });
+
+    let result = runIn(path.join(t.base, "bin"));
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join(), /git のリポジトリではない/);
+
+    fs.mkdirSync(path.join(t.root, "inner"));
+    git(path.join(t.root, "inner"), "init", "-q");
+    result = runIn(path.join(t.root, "inner"));
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join(), /入れ子/);
+  } finally { t.cleanup(); }
+});
+
+test("verify は作業場所で検証節のコマンドを打ち、結果を帳簿の root の作業記録に残す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const ran = t.run(wsArgs(t), { FAKE_MODE: "ok" });
+
+    const verified = t.run(["verify", "--run", ran.json.run_dir]);
+
+    assert.equal(verified.json.commands[0].exit_code, 0, "作業場所に worker の変更がある");
+    assert.equal(verified.json.root, t.root);
+    assert.equal(verified.json.workspace, t.ws);
+    assert.equal(t.sandboxCalls().at(-1).cwd, t.ws);
+    assert.equal(worklogEntries(t, "verify").length, 1);
+  } finally { t.cleanup(); }
+});
+
+test("resume は作業場所の未コミットの変更も照合し、説明できないものを絶対パスで挙げる", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    fs.appendFileSync(path.join(t.ws, "other/y.ts"), "起動前からの変更\n");
+    t.run(wsArgs(t), { FAKE_MODE: "ok" });
+    let resumed = t.run(["resume", "--root", t.root, "--task", "T7"]);
+    assert.deepEqual(resumed.json.unexplained_dirty, []);
+    assert.deepEqual(resumed.json.workspaces, [
+      { workspace: t.ws, dirty: ["other/y.ts", "src/a/impl.ts"], unexplained_dirty: [] },
+    ]);
+
+    fs.writeFileSync(path.join(t.ws, "src/a/stray.ts"), "誰の変更か分からない\n");
+    resumed = t.run(["resume", "--root", t.root, "--task", "T7"]);
+
+    assert.deepEqual(resumed.json.unexplained_dirty, [path.join(t.ws, "src/a/stray.ts")]);
+  } finally { t.cleanup(); }
+});
+
+test("run --workspace のサブディレクトリでは、ゲートはその中だけを見て外を戻さない", () => {
+  const t = setup({ workspace: "subdir" });
+  try {
+    const { code, json } = t.run(wsArgs(t), { FAKE_MODE: "outside" });
+
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(json.gate.changed, ["src/a/impl.ts"]);
+    const read = (file) => fs.readFileSync(path.join(t.wsRepo, file), "utf8");
+    assert.equal(read("live.log"), "line1\nwritten by another process\n");
+    assert.equal(read("top.ts"), "edited by another session\n");
+  } finally { t.cleanup(); }
+});
+
+test("run --workspace は .gitignore 対象のファイルの変化を違反にせず警告に出し、戻さない", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { code, json } = t.run(wsArgs(t), { FAKE_MODE: "ignored" });
+
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(json.gate.ignored_files, [".env"]);
+    assert.match(json.warnings.join(), /\.gitignore 対象のファイルが変わった.*\.env/);
+    assert.equal(fs.readFileSync(path.join(t.ws, ".env"), "utf8"), "SECRET=changed\n");
+  } finally { t.cleanup(); }
+});
+
+test("run は --workspace が無ければ .gitignore 対象のファイルの変化を従来どおり違反にする", () => {
+  const t = setup();
+  try {
+    fs.writeFileSync(path.join(t.root, ".gitignore"), ".env\n");
+    git(t.root, "add", ".gitignore");
+    git(t.root, "commit", "-qm", "ignore");
+
+    const { code, json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ignored" });
+
+    assert.equal(code, 1);
+    assert.deepEqual(json.gate.violations, [".env"]);
+    const envExists = fs.existsSync(path.join(t.root, ".env"));
+    assert.equal(envExists, false, "許可外の新しいファイルは消して戻す");
+  } finally { t.cleanup(); }
+});
+
+test("run --workspace は ~ と絶対パスの --allow を作業場所からの相対に直して使う", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const args = ["run", "--root", t.root, "--task", "T7", "--step", "1", "--packet", t.packet,
+      "--allow", path.join(t.ws, "src/a/impl.ts"), "--workspace", t.ws];
+
+    const { code, json } = t.run(args, { FAKE_MODE: "ok" });
+
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(json.gate.changed, ["src/a/impl.ts"]);
+    const meta = JSON.parse(fs.readFileSync(path.join(json.run_dir, "run.json"), "utf8"));
+    assert.deepEqual(meta.allow, ["src/a/impl.ts"]);
+  } finally { t.cleanup(); }
+});
+
+test("シグナルで止められた --workspace の run も作業場所を記録し、resume が照合する", async () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const pidFile = path.join(t.base, "grandchild.pid");
+    const child = t.spawnRun(wsArgs(t), { FAKE_MODE: "sleep", FAKE_PID_FILE: pidFile });
+    await waitFor(() => t.locks().length > 0 && fs.existsSync(pidFile));
+    fs.writeFileSync(path.join(t.ws, "src/a/half.ts"), "途中まで書いた\n");
+
+    child.kill("SIGTERM");
+    await new Promise((resolve) => child.on("close", resolve));
+
+    assert.ok(worklogEntries(t, "run").some((line) => line.includes(`workspace=${t.ws} `)));
+    const resumed = t.run(["resume", "--root", t.root, "--task", "T7"]);
+    assert.deepEqual(resumed.json.unexplained_dirty, [path.join(t.ws, "src/a/half.ts")]);
+  } finally { t.cleanup(); }
+});
+
+test("同じリポジトリの worker は、作業場所が違っても同時に走らせない", async () => {
+  const t = setup({ workspace: "subdir" });
+  try {
+    const pidFile = path.join(t.base, "grandchild.pid");
+    const child = t.spawnRun(wsArgs(t), { FAKE_MODE: "sleep", FAKE_PID_FILE: pidFile });
+    await waitFor(() => t.locks().length > 0 && fs.existsSync(pidFile));
+
+    // 別の帳簿として、作業場所のリポジトリ自身を root にした run(dotfiles の中のタスクに当たる)
+    fs.writeFileSync(path.join(t.wsRepo, "TODO.md"), todoWithTarget("pkg/src/a/"));
+    const args = ["run", "--root", t.wsRepo, "--task", "T7", "--step", "1", "--packet", t.packet,
+      "--allow", "pkg/src/a/impl.ts"];
+    const second = t.run(args, { FAKE_MODE: "ok" });
+
+    child.kill("SIGTERM");
+    await new Promise((resolve) => child.on("close", resolve));
+    assert.equal(second.code, 2);
+    assert.match(second.json.errors.join(), /別の worker が実行中/);
+  } finally { t.cleanup(); }
+});
+
+test("run は --root が git でなく --allow が絶対パスでも、JSON の誤りを出して exit 2", () => {
+  const t = setup();
+  try {
+    const args = ["run", "--root", t.base, "--task", "T7", "--step", "1", "--packet", t.packet,
+      "--allow", path.join(t.root, "src/a/impl.ts")];
+
+    const result = t.run(args);
+
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join(), /git のリポジトリではない/);
   } finally { t.cleanup(); }
 });

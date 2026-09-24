@@ -131,8 +131,26 @@ node ~/.claude/hooks/lib/codex-worker/cli.mjs resume --root <プロジェクト�
 
 ````bash
 node ~/.claude/hooks/lib/codex-worker/cli.mjs run --root <プロジェクトルート> --task T<n> --step <番号> \
-  --packet <packet.md> --allow <パス> [--allow <パス> ...]
+  --packet <packet.md> --allow <パス> [--allow <パス> ...] [--workspace <リポジトリ>]
 ````
+
+T の対象がプロジェクトの外のリポジトリにある時(`対象:` が `~/.claude/...` のように dotfiles の中を指す、など)は、
+`--workspace` にそのリポジトリの中で T の対象をすべて含む最も狭いディレクトリを渡す(例 `~/.claude/hooks`)。
+worker の sandbox は作業ツリー(`-C` の先)にしか書けないので、`--root` のままではプロジェクトの外へ書けない。
+リポジトリの最上位を渡さないのは、dotfiles のように Claude Code・herdr などが動いている間ずっと書き込むファイル
+(`.claude/history.jsonl` など)を含むリポジトリで、worker に書ける範囲とゲートが見る範囲を広げないためである。
+`--root` は帳簿(`TODO.md`・ステップ計画・作業記録・状態行)の場所のまま変えず、worker の起動・snapshot・
+ゲート・restore・ロック・`verify` が作業場所の中だけで行われる。`--allow` は作業場所からの相対で書く
+(`~/…` や絶対パスで渡しても、runner が作業場所からの相対に直す)。runner は T の対象の `~/…` と絶対パスも
+実体パスへ解決して作業場所の中へ読み替え、包含を照合する。packet の検証節のコマンドは作業場所を cwd として
+打たれる。規約は作業場所 → そのリポジトリの最上位 → プロジェクトの順に `.claude/rules`・`.codex/rules` から
+選ぶ(`paths:` は各規約の置き場所からの相対で照合する)。作業場所とプロジェクトが入れ子のもの、.gitignore 対象の
+ディレクトリの中のものは起動前に拒否する。作業場所では、起動前からあった .gitignore 対象のファイルの変更・
+削除を違反にせず警告(`gate.ignored_files`)に分け、復元もしない(ほかのプロセスの書き込みを巻き戻さないため)。
+新しく作られたファイルは .gitignore 対象でも違反のまま。実行中ロックは作業場所のリポジトリ単位なので、同じ
+リポジトリの worker は作業場所が違っても同時に 1 つだけ(2 つ目は起動前に拒否される)。`resume` は作業場所の
+未コミットの変更も照合し、説明できないものを絶対パスで `unexplained_dirty` に足す。作業場所のコミットは監督が、
+自分が変えたファイルだけをパス指定で行う。
 
 Bash ツールの `run_in_background` で起動し、完了通知を待つ(Bash の 10 分上限を超え得るため。runner 自身が
 既定 20 分で worker をプロセスグループごと止める)。出力をファイルへリダイレクト(`> file 2>&1` など)しない —
@@ -177,7 +195,7 @@ worker の主張である。受け入れる前に、監督が `git diff` と `ve
 node ~/.claude/hooks/lib/codex-worker/cli.mjs verify --run <run_dir> [--timeout <1 本あたりの秒。既定 900>]
 ````
 
-`verify` は packet の「検証」節のコマンドを、run のルートで 1 本ずつ別々に打ち、コマンドごとの終了コードと出力の末尾を
+`verify` は packet の「検証」節のコマンドを、run の作業場所(`--workspace`、無ければルート)で 1 本ずつ別々に打ち、コマンドごとの終了コードと出力の末尾を
 JSON で stdout と `<run_dir>/verify.json` に出す(全文は `<run_dir>/verify-<時刻>/<番号>.log`)。exit 0 は全部 0、
 exit 1 は 0 でないものがある。コマンドは worker と同じ sandbox(`codex sandbox`、worker 用 CODEX_HOME の設定、
 専用の `UV_CACHE_DIR`)の中で打つ。worker が書いたコード(ゲートが見ない `.venv/` などの中身を含む)を、API キーと
@@ -225,8 +243,13 @@ run の後に監督が書いた状態文書には触れない)。
   内容と実行権限、.gitignore 対象のファイル(`.env` など)の内容、入れ子のリポジトリ・サブモジュールの HEAD と
   作業ツリー。snapshot の前から未コミットだったファイルへの追記も、内容の比較で捕まる。
 - 違反にせず警告にする: .gitignore 対象のディレクトリの出入り(試験の生成物など。`gate.ignored_dirs`)。
+  `--workspace` の run では、起動前からあった .gitignore 対象のファイルの変更・削除も(`gate.ignored_files`。
+  復元もしない)。新しく作られたファイルは違反。
 - 見ない: .gitignore 対象のディレクトリの中身の変更、作業ツリーの外(worker の sandbox はリポジトリと TMPDIR・
-  /tmp にしか書けない)。TMPDIR にある hook の状態とロックは worker が書き換えうるが、ロックを消されても失うのは
+  /tmp にしか書けない)。`--workspace` の run では作業場所の外(リポジトリの中でも、作業場所のディレクトリの外)。
+  HEAD・ref はリポジトリ全体で(index は作業場所の中で)見るので、run 中にほかのセッションが同じリポジトリで
+  コミットすると
+  不採用になる(worker の変更は戻さない。監督が確かめて打ち直す)。TMPDIR にある hook の状態とロックは worker が書き換えうるが、ロックを消されても失うのは
   監督の編集の抑止だけで、ゲートの判定には使わない。
 
 ## 記録と計測

@@ -11,8 +11,14 @@
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs resume --root <プロジェクトルート> --task T<n>
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs run --root <プロジェクトルート> --task T<n> --step <番号>
 //        --packet <packet.md> --allow <パス> [--allow <パス> ...(既定で 3 件まで)]
+//        [--workspace <リポジトリ>]
 //        [--model-family <luna|terra|sol ...> | --model <モデル ID>] [--timeout <秒>]
 //        [--max-packet <バイト>] [--max-allow <件数>] [--peak-threshold <0〜1>]
+//   --workspace は worker が書くリポジトリ(既定は --root)。T の対象がプロジェクトの外の
+//   リポジトリ(dotfiles など)にある時に使う。--root は帳簿(TODO.md・ステップ計画・作業記録・
+//   状態行)の場所のまま、worker の起動(codex exec -C)・snapshot・ゲート・restore・ロック・verify は
+//   作業場所で行う。--allow は作業場所からの相対で書き、T の対象の `~/…` と絶対パスは作業場所の中へ
+//   読み替えて照合する。規約は作業場所 → --root の順に選ぶ
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs restore --run <run ディレクトリ> [--keep <残すパス> ...]
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs verify --run <run ディレクトリ> [--timeout <1 本あたりの秒>]
 //   worker 用 CODEX_HOME は環境変数 CODEX_WORKER_HOME(既定 ~/.codex-worker、.codex/install.sh が作る)。
@@ -60,10 +66,13 @@ import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { StringDecoder } from "node:string_decoder";
-import { ALWAYS_ALLOWED, activeWorkerLock, isInside, workerLockPath } from "../../check-task-scope.mjs";
+import {
+  ALWAYS_ALLOWED, activeWorkerLock, canonical, isInside, workerLockPath,
+} from "../../check-task-scope.mjs";
 import {
   SANDBOX_PREFIX, SANDBOX_PROBE_SCRIPT, buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, findRollout, packetVerifyCommands, parsePlan, gate,
   readRollout, resolveModelFamily, restore, sandboxProbeErrors, selectRules, takeSnapshot, trackedPaths, validateResult,
+  normalizeAllow, workspaceErrors,
 } from "./core.mjs";
 import { lineSplitter, renderEvent, renderSummary } from "./status.mjs";
 import { NOTE_KINDS, appendWorklog, normalizeStep, readPlan, readWorklog, rootSlug, runsDir, stateDir, taskDir } from "./worklog.mjs";
@@ -153,6 +162,13 @@ function workerHomeErrors(home) {
   } else if (!fs.existsSync(path.join(home, "auth.json"))) errors.push("worker 用ホームの auth.json のリンク先が無い");
   if (fs.existsSync(path.join(home, "AGENTS.md"))) errors.push(`worker 用ホームに AGENTS.md がある(worker が開始手順で文書を読み直す): ${home}`);
   return errors;
+}
+
+// 実行中ロックの単位。作業場所を含む git リポジトリの最上位にする。作業場所はリポジトリの中の
+// サブディレクトリでもよいので、作業場所そのものを単位にすると、範囲の重なる 2 つの worker(同じ
+// リポジトリの別のサブディレクトリや最上位)が同時に走り、互いの変更をゲートの違反として巻き戻す
+function lockRoot(workspace) {
+  return gitRoot(workspace) ?? workspace;
 }
 
 function workerHome() {
@@ -283,7 +299,12 @@ async function run(args) {
   const root = gitRoot(requestedRoot);
   const task = args.task;
   const step = args.step;
-  const allow = (args.allow ?? []).map((a) => a.replace(/^\.\//, ""));
+  const requestedAllow = (args.allow ?? []).map((a) => a.replace(/^\.\//, ""));
+  // 作業場所はリポジトリの中のサブディレクトリでもよい(最上位へ引き上げない)。symlink は実体パスへ
+  // 解決する
+  const workspace = args.workspace ? canonical(path.resolve(args.workspace)) : root;
+  // 作業記録に残す作業場所(root と同じなら無し)
+  const loggedWorkspace = workspace === root ? null : workspace;
   const home = workerHome();
   const timeoutSec = Number(args.timeout ?? DEFAULTS.timeout);
   const maxPacket = Number(args["max-packet"] ?? DEFAULTS.maxPacket);
@@ -305,7 +326,16 @@ async function run(args) {
   }
   if (args.packet && packet !== "") errors.push(...checkPacketCrossCheck(packet), ...checkPacketVerify(packet));
   errors.push(...workerHomeErrors(home));
-  const allowCheck = root && /^T\d+$/.test(task ?? "") ? checkAllow(root, task, allow, maxAllow) : { errors: [], warnings: [] };
+  const workspaceProblems = root && args.workspace ? workspaceErrors(root, workspace) : [];
+  errors.push(...workspaceProblems);
+  const normalized = root && workspaceProblems.length === 0
+    ? normalizeAllow(requestedAllow, { workspace })
+    : { allow: requestedAllow, errors: [] };
+  errors.push(...normalized.errors);
+  const allow = normalized.allow;
+  const allowCheck = root && /^T\d+$/.test(task ?? "") && workspaceProblems.length === 0
+    ? checkAllow(root, task, allow, maxAllow, { workspace })
+    : { errors: [], warnings: [] };
   errors.push(...allowCheck.errors);
   const plan = root && /^T\d+$/.test(task ?? "") ? readPlan(root, task) : null;
   if (root && /^T\d+$/.test(task ?? "") && step) {
@@ -314,9 +344,9 @@ async function run(args) {
       errors.push(`ステップ ${step} が ${task} の計画(${plan.file})に無い。ステップを切り直したなら cli.mjs plan で計画を登録し直す`);
     }
   }
-  const running = root ? activeWorkerLock(root) : null;
+  const running = root ? activeWorkerLock(lockRoot(workspace)) ?? activeWorkerLock(root) : null;
   if (running) errors.push(`別の worker が実行中: ${running.task} ステップ ${running.step}`);
-  if (errors.length === 0) errors.push(...sandboxErrors(home, root));
+  if (errors.length === 0) errors.push(...sandboxErrors(home, workspace));
   const resolved = errors.length === 0 ? resolveModel(args, home) : { model: null };
   if (resolved.error) errors.push(resolved.error);
   if (errors.length > 0) {
@@ -329,11 +359,14 @@ async function run(args) {
   const id = runId(task, step);
   const runDir = path.join(runsDir(), id);
   fs.mkdirSync(runDir, { recursive: true, mode: 0o700 });
-  const snapshot = takeSnapshot(root, runDir);
-  fs.writeFileSync(path.join(runDir, "run.json"), JSON.stringify({ root, task, step, model, allow }, null, 2));
+  const snapshot = takeSnapshot(workspace, runDir);
+  const runMeta = { root, workspace, task, step, model, allow };
+  fs.writeFileSync(path.join(runDir, "run.json"), JSON.stringify(runMeta, null, 2));
   fs.writeFileSync(path.join(runDir, "packet.md"), packet); // verify が検証節を読む
   try { fs.writeFileSync(path.join(taskDir(root, task), `s${step}.packet.md`), packet); } catch { /* 写しは人が読むためのもの */ }
-  const { rules, conservative } = selectRules(root, allow);
+  // 作業場所 → そのリポジトリの最上位 → 帳簿の root の順(重なりは除く)
+  const ruleRoots = [...new Set([workspace, gitRoot(workspace) ?? workspace, root])];
+  const { rules, conservative } = selectRules(workspace, allow, ruleRoots);
   const contract = fs.readFileSync(path.join(here, "worker-contract.md"), "utf8");
   const prompt = buildPrompt({ contract, allow, packet, rules });
   fs.writeFileSync(path.join(runDir, "prompt.md"), prompt);
@@ -342,8 +375,12 @@ async function run(args) {
   const uvCache = privateUvCache(id);
 
   // ロックとシグナル: runner が止められても codex を孤児にせず、ロックを残さない
-  const lockFile = workerLockPath(root);
-  const lock = { root, task, step, runDir, pid: process.pid, expiresAt: Date.now() + (timeoutSec + 60) * 1000 };
+  // ロックのファイルは作業場所のリポジトリの最上位の単位(lockRoot)で置き、lock.root には作業場所を
+  // 書く(check-task-scope.mjs は lock.root の中の Claude 側の編集を止める)。taskRoot は、帳簿の
+  // root しか知らない task-loop と resume が activeWorkerLock(root) で見つけるため
+  const lockFile = workerLockPath(lockRoot(workspace));
+  const expiresAt = Date.now() + (timeoutSec + 60) * 1000;
+  const lock = { root: workspace, taskRoot: root, task, step, runDir, pid: process.pid, expiresAt };
   fs.mkdirSync(path.dirname(lockFile), { recursive: true, mode: 0o700 });
   fs.writeFileSync(lockFile, JSON.stringify(lock));
   let child = null;
@@ -353,7 +390,10 @@ async function run(args) {
     fs.rmSync(uvCache, { recursive: true, force: true });
     status(`interrupted by ${signal}(作業ツリーは戻していない)`);
     recordWorklog(root, task, {
-      kind: "run", step, by: "runner", keys: { run: id, accepted: false, stage: "interrupted" },
+      kind: "run", step, by: "runner",
+      keys: {
+        run: id, accepted: false, stage: "interrupted", ...(loggedWorkspace ? { workspace } : {}),
+      },
       text: `runner が ${signal} で止められた。作業ツリーは戻していない`,
     });
     emit({ accepted: false, stage: "interrupted", run_dir: runDir, reasons: [`runner が ${signal} で止められた。作業ツリーは戻していない(restore --run で戻す)`] }, runDir, 1);
@@ -363,12 +403,13 @@ async function run(args) {
   for (const signal of signals) process.on(signal, onSignal);
 
   status(`started: ${plan.steps.find((s) => s.step === step).purpose}`);
-  status(`model=${model} allow=${allow.join(",")} run=${runDir}`);
+  const workspaceLabel = workspace === root ? "" : ` workspace=${workspace}`;
+  status(`model=${model} allow=${allow.join(",")}${workspaceLabel} run=${runDir}`);
   const started = Date.now();
   let exec;
   try {
     exec = await execWorker({
-      home, model, root, prompt, runDir, timeoutSec, uvCache, status,
+      home, model, root: workspace, prompt, runDir, timeoutSec, uvCache, status,
       onStart: (c) => {
         child = c;
         fs.writeFileSync(lockFile, JSON.stringify({ ...lock, childPid: c.pid }));
@@ -382,7 +423,7 @@ async function run(args) {
   const durationSec = Math.round((Date.now() - started) / 1000);
 
   const reasons = [];
-  let checked = { changed: [], violations: [], repoChanges: [], ignoredDirs: [] };
+  let checked = { changed: [], violations: [], repoChanges: [], ignoredDirs: [], ignoredFiles: [] };
   let restoreResult = { restored: [], unrestorable: [], backups: {} };
   let result = null;
   let context = { peakRatio: null, contextWindow: null, compacted: null };
@@ -395,7 +436,10 @@ async function run(args) {
     if (rolloutFile) context = readRollout(rolloutFile);
     try { result = JSON.parse(fs.readFileSync(path.join(runDir, "result.json"), "utf8")); } catch { /* 欠落 */ }
 
-    checked = gate(snapshot, allow);
+    // 作業場所がプロジェクトの外の共有リポジトリなら、.gitignore 対象のファイル(ほかのプロセスの
+    // ログや履歴)の変化は worker の違反に数えず、巻き戻さない
+    checked = gate(snapshot, allow, { ignoredFiles: loggedWorkspace ? "warn" : "violation" });
+
     if (exec.spawnError) reasons.push(`codex を起動できない: ${exec.spawnError}`);
     if (exec.timedOut) reasons.push(`タイムアウト(${timeoutSec} 秒)`);
     else if (exec.code !== 0 && !exec.spawnError) reasons.push(`codex exec の終了コード ${exec.code}`);
@@ -407,7 +451,10 @@ async function run(args) {
 
     // 機構上の失敗はステップの変更をすべて戻す。許可外の変更だけなら、その分だけ戻す。git の状態が変わったら触らない
     const mechanical = reasons.length > 0 && !(reasons.length === 1 && checked.violations.length > 0);
-    const targets = mechanical ? checked.changed.filter((p) => !checked.ignoredDirs.includes(p)) : checked.violations;
+    const unowned = new Set([...checked.ignoredDirs, ...checked.ignoredFiles]);
+    const targets = mechanical
+      ? checked.changed.filter((p) => !unowned.has(p))
+      : checked.violations;
     if (targets.length > 0 && checked.repoChanges.length === 0) {
       restoreResult = restore(snapshot, targets, path.join(runDir, "overwritten"));
     }
@@ -420,6 +467,7 @@ async function run(args) {
     run_dir: runDir,
     task,
     step,
+    workspace,
     model,
     model_family: resolved.family ?? null,
     accepted: reasons.length === 0,
@@ -428,10 +476,17 @@ async function run(args) {
       ...allowCheck.warnings,
       ...(conservative ? ["許可パスに中身の無いディレクトリがあり、paths 付きの規約も全部付けた"] : []),
       ...(checked.ignoredDirs.length > 0 ? [`.gitignore 対象のディレクトリが出入りした(違反にはしていない): ${checked.ignoredDirs.join(", ")}`] : []),
+      ...(checked.ignoredFiles.length > 0
+        ? [`.gitignore 対象のファイルが変わった(違反にも復元もしていない): ${
+          checked.ignoredFiles.join(", ")}`]
+        : []),
     ],
     slice_too_large: context.peakRatio !== null && context.peakRatio > peakThreshold,
     worker: result,
-    gate: { changed: checked.changed, violations: checked.violations, repo_changes: checked.repoChanges, ignored_dirs: checked.ignoredDirs },
+    gate: {
+      changed: checked.changed, violations: checked.violations, repo_changes: checked.repoChanges,
+      ignored_dirs: checked.ignoredDirs, ignored_files: checked.ignoredFiles,
+    },
     restore: restoreResult,
     rules: rules.map((r) => r.file),
     metrics: {
@@ -446,13 +501,16 @@ async function run(args) {
     rollout: rolloutFile,
   };
   status(renderSummary(report));
-  // 再開の照合の材料を run の記録(7 日で消える)の外に残す。その T で最初の run には、worker の起動前から
-  // 未コミットだったパス(利用者や監督の変更)を baseline として添える
-  const firstRun = !(readWorklog(root, task)?.entries ?? []).some((e) => e.kind === "run");
+  // 再開の照合の材料を run の記録(7 日で消える)の外に残す。その T のその作業場所で最初の run には、
+  // worker の起動前から未コミットだったパス(利用者や監督の変更)を baseline として添える。
+  // 作業場所が root と違えば workspace に残す
+  const pastRuns = (readWorklog(root, task)?.entries ?? []).filter((e) => e.kind === "run");
+  const firstRun = !pastRuns.some((e) => runWorkspace(e) === loggedWorkspace);
   recordWorklog(root, task, {
     kind: "run", step, by: "runner",
     keys: {
       run: id, accepted: report.accepted, worker: result?.status ?? "none", changed: checked.changed,
+      ...(loggedWorkspace ? { workspace } : {}),
       ...(firstRun ? { baseline: Object.entries(snapshot.files).filter(([, f]) => !f.ignored).map(([p]) => p) } : {}),
     },
     text: report.accepted ? `accepted: ${plan.steps.find((s) => s.step === step).purpose}` : reasons.join(" / "),
@@ -527,15 +585,17 @@ async function verifyRun(args) {
     emit({ errors: [`run の記録を読めない: ${args.run ?? "(--run が無い)"}: ${error.message}`] }, null, 2);
     return;
   }
-  const root = snapshot.root;
+  // snapshot.root は作業場所(コマンドを打つ場所)、meta.root は帳簿(状態行・計画・作業記録)の root
+  const workspace = snapshot.root;
+  const root = meta.root ?? workspace;
   const commands = packetVerifyCommands(packet);
   const errors = [...checkPacketVerify(packet)];
-  const running = activeWorkerLock(root);
+  const running = activeWorkerLock(lockRoot(workspace));
   if (running) errors.push(`worker が実行中: ${running.task} ステップ ${running.step}(終わってから打つ)`);
   const timeoutSec = Number(args.timeout ?? VERIFY_TIMEOUT_SEC);
   if (!(timeoutSec > 0)) errors.push("--timeout は正の秒数");
   const home = workerHome();
-  if (errors.length === 0) errors.push(...sandboxErrors(home, root));
+  if (errors.length === 0) errors.push(...sandboxErrors(home, workspace));
   if (errors.length > 0) {
     emit({ run_dir: args.run, errors }, null, 2);
     return;
@@ -550,7 +610,9 @@ async function verifyRun(args) {
   try {
     for (const [index, command] of commands.entries()) {
       status(`verify $ ${command}`);
-      const result = await runVerifyCommand(command, { root, home, uvCache, logFile: path.join(logDir, `${index + 1}.log`), timeoutSec });
+      const logFile = path.join(logDir, `${index + 1}.log`);
+      const options = { root: workspace, home, uvCache, logFile, timeoutSec };
+      const result = await runVerifyCommand(command, options);
       status(result.exit_code === 0 ? "verify   ✓" : `verify   ✗ exit ${result.exit_code ?? result.signal ?? "?"}${result.timed_out ? "(タイムアウト)" : ""}`);
       results.push(result);
     }
@@ -560,7 +622,8 @@ async function verifyRun(args) {
   const failed = results.filter((r) => r.exit_code !== 0).length;
   status(`verify finished: ${results.length - failed}/${results.length} ok`);
   const report = {
-    run_dir: args.run, task: meta.task, step: meta.step, root, verified_at: new Date().toISOString(),
+    run_dir: args.run, task: meta.task, step: meta.step, root, workspace,
+    verified_at: new Date().toISOString(),
     all_passed: failed === 0, passed: results.length - failed, failed, commands: results,
   };
   const text = JSON.stringify(report, null, 2);
@@ -696,6 +759,43 @@ function noteTask(args) {
   emit({ task, root, worklog: file, entry: line }, null, 0);
 }
 
+// run の行の作業場所。帳簿の root で動いた run は null
+function runWorkspace(entry) {
+  return entry.kind === "run" ? entry.keys.workspace ?? null : null;
+}
+
+// 作業記録で説明できるパス(workspace が null なら帳簿の root の、そうでなければその作業場所の):
+// 最初の run の前から未コミットだったパス・受け入れた run の変更・Codex ホストが step で
+// 記録した変更(step は root のみ)
+function explainedPaths(entries, workspace) {
+  const paths = [];
+  for (const e of entries) {
+    const own = e.kind === "run" && runWorkspace(e) === workspace;
+    if (own && e.keys.baseline) paths.push(...e.keys.baseline);
+    if (own && e.keys.accepted === "true" && e.keys.changed) paths.push(...e.keys.changed);
+    if (workspace === null && e.kind === "step" && e.keys.changed) paths.push(...e.keys.changed);
+  }
+
+  return paths;
+}
+
+// 作業場所の未コミットの変更と、作業記録で説明できないもの。作業場所を読めなければ error に理由を
+// 入れる(呼び出し元が説明できない変更に数え、再開を止める)
+function workspaceDirt(entries, workspace) {
+  let dirty;
+  try {
+    dirty = dirtyWorktree(workspace);
+  } catch (error) {
+    const reason = `作業場所を読めない: ${error.message.split("\n")[0]}`;
+    return { workspace, dirty: [], unexplained_dirty: [], error: reason };
+  }
+
+  const explained = explainedPaths(entries, workspace);
+  const unexplained = dirty.filter((p) => !explained.some((a) => isInside(p, a, workspace)));
+
+  return { workspace, dirty, unexplained_dirty: unexplained };
+}
+
 // 同じ T の再開の照合。未コミットの変更が、作業記録で説明できるもの(最初の run の前から未コミットだったパス・
 // 受け入れた run の変更・Codex ホストが step で記録した変更・状態文書)だけかを確かめる
 function resumeTask(args) {
@@ -711,14 +811,20 @@ function resumeTask(args) {
   const log = readWorklog(root, task);
   const entries = log?.entries ?? [];
   const plan = readPlan(root, task);
-  const explained = [...ALWAYS_ALLOWED];
-  for (const e of entries) {
-    if (e.kind === "run" && e.keys.baseline) explained.push(...e.keys.baseline);
-    if (e.kind === "run" && e.keys.accepted === "true" && e.keys.changed) explained.push(...e.keys.changed);
-    if (e.kind === "step" && e.keys.changed) explained.push(...e.keys.changed);
-  }
+
   const dirty = dirtyWorktree(root);
+  const explained = [...ALWAYS_ALLOWED, ...explainedPaths(entries, null)];
   const unexplained = dirty.filter((p) => !explained.some((a) => isInside(p, a, root)));
+
+  const workspaceNames = [...new Set(entries.map(runWorkspace).filter(Boolean))];
+  const workspaces = workspaceNames.map((workspace) => workspaceDirt(entries, workspace));
+  // 作業場所の説明できない変更は絶対パスで足す(空でなければ再開しない、という読み手の規則を
+  // 変えないため)
+  const unexplainedInWorkspaces = workspaces
+    .flatMap((w) => (w.error
+      ? [`${w.workspace}(${w.error})`]
+      : w.unexplained_dirty.map((p) => path.join(w.workspace, p))));
+
   const last = (kind) => entries.filter((e) => e.kind === kind).at(-1) ?? null;
   const lock = activeWorkerLock(root);
   emit({
@@ -733,7 +839,8 @@ function resumeTask(args) {
     compacted: entries.some((e) => e.kind === "compact"),
     worker_running: lock ? { task: lock.task, step: lock.step } : null,
     dirty,
-    unexplained_dirty: unexplained,
+    unexplained_dirty: [...unexplained, ...unexplainedInWorkspaces],
+    workspaces,
   }, null, 0);
 }
 
@@ -747,7 +854,7 @@ try {
       timeout: { type: "string" }, "max-packet": { type: "string" }, "max-allow": { type: "string" },
       "peak-threshold": { type: "string" }, run: { type: "string" }, keep: { type: "string", multiple: true },
       file: { type: "string" }, kind: { type: "string" }, text: { type: "string" }, from: { type: "string" },
-      changed: { type: "string" }, json: { type: "boolean" },
+      changed: { type: "string" }, json: { type: "boolean" }, workspace: { type: "string" },
     },
   });
 } catch (error) {

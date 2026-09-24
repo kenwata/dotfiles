@@ -6,7 +6,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   buildPrompt, changedSince, checkAllow, checkPacketCrossCheck, checkPacketVerify, gate, packetVerifyCommands, parsePlan, readRollout, resolveModelFamily, restore, sandboxProbeErrors, selectRules,
-  takeSnapshot, validateResult,
+  normalizeAllow, takeSnapshot, validateResult, workspaceErrors,
 } from "../core.mjs";
 
 function git(root, ...args) {
@@ -300,4 +300,205 @@ test("sandboxProbeErrors は loopback が通り外部が拒否された時だけ
   assert.match(sandboxProbeErrors("LOOPBACK=ok\nEXTERNAL=reached\n").join(), /外部/);
   assert.match(sandboxProbeErrors("").join(), /判定できない/);
   assert.match(sandboxProbeErrors("LOOPBACK=ok\n").join(), /判定できない/);
+});
+
+// タスクの帳簿(TODO.md)を持つ root と、worker が書く別のリポジトリ ws。home/.cfg は ws への symlink
+// (~/.claude が dotfiles/.claude への symlink である構成を写す)
+function workspaceFixture() {
+  const { base, root, cleanup } = fixture();
+  const ws = path.join(base, "ws");
+  fs.mkdirSync(ws);
+  git(ws, "init", "-q");
+
+  write(ws, "src/a/x.ts", "x1\n");
+  write(ws, "other/y.ts", "y1\n");
+  git(ws, "add", "-A");
+  git(ws, "commit", "-qm", "init");
+
+  const home = path.join(base, "home");
+  fs.mkdirSync(home);
+  fs.symlinkSync(ws, path.join(home, ".cfg"));
+
+  return { base, root, ws, home, cleanup };
+}
+
+test("作業場所を分けると、許可パスを作業場所から読み、対象の ~ と絶対パスを読み替える", () => {
+  const { root, ws, home, cleanup } = workspaceFixture();
+  try {
+    const targets = ["~/.cfg/src/a/", `${ws}/tests/a/`, "src/b/"].map((t) => `\`${t}\``).join("、");
+    withTodo(root, `**#1-1 / T7** — 完了条件: 対象: ${targets}。`);
+    const errorsFor = (allow) => checkAllow(root, "T7", allow, 3, { workspace: ws, home }).errors;
+
+    assert.deepEqual(errorsFor(["src/a/x.ts", "tests/a/"]), []);
+    assert.match(errorsFor(["other/"]).join(), /T の対象の外: other\//);
+    const relativeTarget = errorsFor(["src/b/"]).join();
+    assert.match(relativeTarget, /T の対象の外: src\/b\//, "相対の対象は帳簿の root の中を指す");
+    assert.match(errorsFor(["../repo/src/b/"]).join(), /作業場所の外のパス/);
+  } finally { cleanup(); }
+});
+
+test("作業場所を分けない時は、~ の対象は root の中を指さない限り許可パスに当たらない", () => {
+  const { root, home, cleanup } = workspaceFixture();
+  try {
+    withTodo(root, "**#1-1 / T7** — 完了条件: 対象: `~/.cfg/src/a/`。");
+
+    const result = checkAllow(root, "T7", ["src/a/x.ts"], 3, { home });
+
+    assert.match(result.errors.join(), /T の対象の外: src\/a\/x\.ts/);
+  } finally { cleanup(); }
+});
+
+test("作業場所は git のリポジトリで、帳簿の root と入れ子にならない", () => {
+  const { base, root, ws, cleanup } = workspaceFixture();
+  try {
+    assert.deepEqual(workspaceErrors(root, root), []);
+    assert.deepEqual(workspaceErrors(root, ws), []);
+    assert.match(workspaceErrors(root, path.join(base, "home")).join(), /git のリポジトリではない/);
+
+    fs.mkdirSync(path.join(root, "inner"));
+    git(path.join(root, "inner"), "init", "-q");
+    assert.match(workspaceErrors(root, path.join(root, "inner")).join(), /入れ子/);
+    assert.match(workspaceErrors(path.join(root, "inner"), root).join(), /入れ子/);
+  } finally { cleanup(); }
+});
+
+test("規約は作業場所のものを先に、帳簿の root のものを後に選び、同じ名前は先を採る", () => {
+  const { root, ws, cleanup } = workspaceFixture();
+  try {
+    write(ws, ".claude/rules/lua.md", '---\npaths:\n  - "**/*.lua"\n---\n\n# Lua\n');
+    write(ws, ".claude/rules/testing.md", "---\n---\n\n# Testing (ws)\n");
+    write(root, ".claude/rules/testing.md", "---\n---\n\n# Testing (root)\n");
+    write(root, ".claude/rules/coding.md", "---\n---\n\n# Coding (root)\n");
+
+    const { rules } = selectRules(ws, ["src/a/x.ts"], [ws, root]);
+
+    const expected = [".claude/rules/testing.md", path.join(root, ".claude/rules/coding.md")];
+    assert.deepEqual(rules.map((r) => r.file), expected);
+    assert.match(rules[0].text, /# Testing \(ws\)/);
+  } finally { cleanup(); }
+});
+
+// リポジトリ ws の中のサブディレクトリ pkg を作業場所にする。ws の最上位には、ほかのプロセスが
+// 書き続ける .gitignore 対象の live.log と、追跡中の top.ts がある(dotfiles の history.jsonl などを
+// 写す)
+function subdirFixture() {
+  const { base, root, ws, home, cleanup } = workspaceFixture();
+  write(ws, ".gitignore", "*.log\n");
+  write(ws, "top.ts", "t1\n");
+  write(ws, "pkg/src/a/x.ts", "x1\n");
+  git(ws, "add", "-A");
+  git(ws, "commit", "-qm", "pkg");
+  write(ws, "live.log", "line1\n");
+
+  const pkg = path.join(ws, "pkg");
+  return { base, root, ws, pkg, home, runDir: path.join(base, "run"), cleanup };
+}
+
+test("作業場所がサブディレクトリなら、snapshot とゲートはその中だけを見る", () => {
+  const { pkg, ws, runDir, cleanup } = subdirFixture();
+  try {
+    const snapshot = takeSnapshot(pkg, runDir);
+    fs.appendFileSync(path.join(ws, "live.log"), "line2\n");
+    write(ws, "top.ts", "t2\n");
+    write(pkg, "src/a/x.ts", "x2\n");
+
+    const result = gate(snapshot, ["src/a/"]);
+
+    assert.equal(result.passed, true, JSON.stringify(result));
+    assert.deepEqual(result.changed, ["src/a/x.ts"]);
+    assert.equal(fs.readFileSync(path.join(ws, "live.log"), "utf8"), "line1\nline2\n");
+  } finally { cleanup(); }
+});
+
+test("作業場所がサブディレクトリでも、restore はその中を HEAD と snapshot の状態へ戻す", () => {
+  const { pkg, runDir, cleanup } = subdirFixture();
+  try {
+    const snapshot = takeSnapshot(pkg, runDir);
+    write(pkg, "src/a/x.ts", "x2\n");
+    write(pkg, "src/a/new.ts", "n\n");
+
+    const paths = ["src/a/x.ts", "src/a/new.ts"];
+    const result = restore(snapshot, paths, path.join(runDir, "overwritten"));
+
+    assert.deepEqual(result.restored, ["src/a/x.ts", "src/a/new.ts"]);
+    assert.equal(fs.readFileSync(path.join(pkg, "src/a/x.ts"), "utf8"), "x1\n");
+    assert.equal(fs.existsSync(path.join(pkg, "src/a/new.ts")), false);
+  } finally { cleanup(); }
+});
+
+test("ignoredFiles: warn のゲートは .gitignore 対象のファイルの変化を別に分ける", () => {
+  const { ws, runDir, cleanup } = subdirFixture();
+  try {
+    const snapshot = takeSnapshot(ws, runDir);
+    fs.appendFileSync(path.join(ws, "live.log"), "line2\n");
+    write(ws, "new.log", "n\n");
+
+    const warned = gate(snapshot, ["pkg/src/a/"], { ignoredFiles: "warn" });
+    const strict = gate(snapshot, ["pkg/src/a/"]);
+
+    assert.deepEqual(warned.ignoredFiles, ["live.log"], "起動前からあり、中身が変わっただけのもの");
+    assert.deepEqual(warned.violations, ["new.log"], "新しく作られた無視対象のファイルは違反");
+    assert.deepEqual(strict.violations, ["live.log", "new.log"], "既定は従来どおり違反");
+  } finally { cleanup(); }
+});
+
+test("許可パスの ~ と絶対パスは作業場所からの相対に直し、作業場所の外は誤りにする", () => {
+  const { ws, home, cleanup } = workspaceFixture();
+  try {
+    const options = { workspace: ws, home };
+
+    const inside = normalizeAllow(["~/.cfg/src/a/x.ts", `${ws}/other/`, "src/b/"], options);
+    const outside = normalizeAllow(["~/elsewhere/x.ts"], options);
+
+    assert.deepEqual(inside, { allow: ["src/a/x.ts", "other/", "src/b/"], errors: [] });
+    assert.match(outside.errors.join(), /作業場所の外のパス: ~\/elsewhere\/x\.ts/);
+  } finally { cleanup(); }
+});
+
+test("作業場所はリポジトリの中のサブディレクトリでもよく、root の中なら入れ子で拒否する", () => {
+  const { root, ws, cleanup } = workspaceFixture();
+  try {
+    fs.mkdirSync(path.join(ws, "src/b"), { recursive: true });
+
+    assert.deepEqual(workspaceErrors(root, path.join(ws, "src")), []);
+    assert.match(workspaceErrors(root, path.join(root, "src")).join(), /入れ子/);
+    assert.match(workspaceErrors(root, path.join(ws, "missing")).join(), /ディレクトリではない/);
+  } finally { cleanup(); }
+});
+
+test("warn でも、.gitignore を足して新しいファイルを無視させる書き込みは違反にする", () => {
+  const { pkg, runDir, cleanup } = subdirFixture();
+  try {
+    const snapshot = takeSnapshot(pkg, runDir);
+    write(pkg, "src/a/.gitignore", "*\n");
+    write(pkg, "src/a/evil.mjs", "evil\n");
+
+    const result = gate(snapshot, ["src/a/x.ts"], { ignoredFiles: "warn" });
+
+    assert.equal(result.passed, false);
+    assert.deepEqual(result.ignoredFiles, []);
+    assert.deepEqual(result.violations, ["src/a/.gitignore", "src/a/evil.mjs"]);
+  } finally { cleanup(); }
+});
+
+test("作業場所に .gitignore 対象のディレクトリは渡せない", () => {
+  const { root, ws, cleanup } = subdirFixture();
+  try {
+    fs.mkdirSync(path.join(ws, "logs.log"));
+
+    assert.match(workspaceErrors(root, path.join(ws, "logs.log")).join(), /\.gitignore 対象/);
+  } finally { cleanup(); }
+});
+
+test("規約はリポジトリの最上位のものも選び、paths はその規約の置き場所からの相対で照合する", () => {
+  const { root, ws, pkg, cleanup } = subdirFixture();
+  try {
+    write(ws, ".claude/rules/pkg.md", '---\npaths:\n  - "pkg/src/**"\n---\n\n# Pkg\n');
+    write(pkg, ".claude/rules/local.md", '---\npaths:\n  - "src/**"\n---\n\n# Local\n');
+
+    const { rules } = selectRules(pkg, ["src/a/x.ts"], [pkg, ws, root]);
+
+    const expected = [".claude/rules/local.md", path.join(ws, ".claude/rules/pkg.md")];
+    assert.deepEqual(rules.map((r) => r.file), expected);
+  } finally { cleanup(); }
 });

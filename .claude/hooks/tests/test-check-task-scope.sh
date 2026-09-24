@@ -127,6 +127,25 @@ run_case "worker_lock_with_dead_process_is_ignored" silent "$(write_input s13 "$
 write_lock -1000
 run_case "expired_worker_lock_is_ignored" silent "$(write_input s13 "$repo/src/ai-workflows/contracts/a.ts")"
 
+# 作業場所を帳簿の root と分けた run(runner の --workspace)のロックは作業場所に置かれ、止めるのは作業場所の編集だけ。
+# 帳簿の root を渡した activeWorkerLock でも見つかる(task-loop と resume が worker の実行中を知るため)
+workspace_dir="$work_dir/ws"
+mkdir -p "$workspace_dir"
+workspace_lock_task="$(node --input-type=module -e "
+  import fs from 'node:fs';
+  import path from 'node:path';
+  import { activeWorkerLock, workerLockPath } from '$(cd "$(dirname "$0")/.." && pwd)/check-task-scope.mjs';
+  const [workspace, taskRoot, pid] = process.argv.slice(1);
+  const file = workerLockPath(workspace);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ root: workspace, taskRoot, task: 'T44', step: 1, expiresAt: Date.now() + 60000, pid: Number(pid) }));
+  console.log(activeWorkerLock(taskRoot)?.task ?? 'none');
+" "$workspace_dir" "$repo" "$$")"
+if [ "$workspace_lock_task" = "T44" ]; then echo "ok   worker_lock_is_found_by_task_root"
+else echo "FAIL worker_lock_is_found_by_task_root: got $workspace_lock_task"; failures=$((failures + 1)); fi
+run_case "workspace_lock_denies_edit_in_workspace" deny "$(write_input s13 "$workspace_dir/src/a.ts")"
+run_case "workspace_lock_allows_edit_in_task_root" silent "$(write_input s13 "$repo/TODO.md")"
+
 run_case "silent_on_invalid_json" silent "not json"
 run_case "silent_on_empty_input" silent ""
 

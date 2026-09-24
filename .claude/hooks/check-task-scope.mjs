@@ -287,8 +287,17 @@ function readWorkerLock(file) {
   return null;
 }
 
+// root で動いている worker のロック。作業場所を帳簿の root と分けた run(runner の --workspace)の
+// ロックは作業場所に置かれ、内容の taskRoot に帳簿の root を持つので、root を taskRoot に持つ
+// ロックも返す(task-loop と resume は帳簿の root しか知らないまま、worker の実行中を知る必要が
+// あるため)
 export function activeWorkerLock(root) {
-  return readWorkerLock(workerLockPath(root));
+  const own = readWorkerLock(workerLockPath(root));
+  if (own) return own;
+
+  const realRoot = canonical(root);
+  const forTaskRoot = (lock) => Boolean(lock.taskRoot) && canonical(lock.taskRoot) === realRoot;
+  return activeWorkerLocks().find(forTaskRoot) ?? null;
 }
 
 function activeWorkerLocks() {

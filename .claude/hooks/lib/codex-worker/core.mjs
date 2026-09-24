@@ -3,6 +3,7 @@
 // 判定の正本(対象パスの読み方・包含判定)は ../../check-task-scope.mjs を共用する。
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -27,14 +28,21 @@ function sha1(text) {
 
 // snapshot とゲートが追うパス: 未コミット(変更・削除・untracked。rename は削除と追加に分ける)と、
 // .gitignore 対象の項目。ignored は -u normal で取り、無視されたディレクトリは 1 項目(中身の変更までは追わない。
-// 存在の出入りだけを見る)にまとめる。-u all で取ると node_modules などを全ファイル列挙してしまう
+// 存在の出入りだけを見る)にまとめる。-u all で取ると node_modules などを全ファイル列挙してしまう。
+// root はリポジトリの中のサブディレクトリでもよく、その時はサブディレクトリの中だけを、そこからの
+// 相対で返す(--porcelain のパスは常にリポジトリの最上位からの相対なので、root の接頭辞を外す)
 export function trackedPaths(root) {
+  const prefix = git(root, ["rev-parse", "--show-prefix"]).trim();
   const parse = (out) => out.split("\0").filter(Boolean).map((entry) => ({
-    path: entry.slice(3).replace(/\/$/, ""), ignored: entry.startsWith("!!"),
+    path: entry.slice(3 + prefix.length).replace(/\/$/, ""), ignored: entry.startsWith("!!"),
   }));
-  const dirty = parse(git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames"]));
-  const ignored = parse(git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=normal", "--ignored=traditional", "--no-renames"]))
+  const status = (options) =>
+    git(root, ["status", "--porcelain=v1", "-z", ...options, "--no-renames", "--", "."]);
+
+  const dirty = parse(status(["--untracked-files=all"]));
+  const ignored = parse(status(["--untracked-files=normal", "--ignored=traditional"]))
     .filter((e) => e.ignored);
+
   return [...dirty, ...ignored];
 }
 
@@ -72,7 +80,10 @@ function worktreeStates(root, paths) {
     else result.set(p, "other");
   }
   if (files.length > 0) {
-    const hashes = git(root, ["hash-object", "--stdin-paths"], files.map(([p]) => p).join("\n") + "\n").trim().split("\n");
+    // --stdin-paths はパスをリポジトリの最上位からの相対で読む(root がサブディレクトリでも)ので、
+    // 絶対パスで渡す
+    const input = files.map(([p]) => path.join(root, p)).join("\n") + "\n";
+    const hashes = git(root, ["hash-object", "--stdin-paths"], input).trim().split("\n");
     files.forEach(([p, mode], i) => result.set(p, `${hashes[i]}:${mode}`));
   }
   return result;
@@ -144,18 +155,32 @@ export function changedSince(snapshot) {
 }
 
 // ゲート: HEAD・ref・index が不変で、変更がステップの許可パスの中だけにあること。
-// .gitignore 対象のディレクトリの出入り(試験の生成物など)は違反にせず ignoredDirs として報告する
-export function gate(snapshot, allow) {
+// .gitignore 対象のディレクトリの出入り(試験の生成物など)は違反にせず ignoredDirs として報告する。
+// ignoredFiles: "warn" なら、許可パスの外の .gitignore 対象のファイルのうち、snapshot の時点で
+// 既に無視されて存在していたものの変更・削除を違反にせず ignoredFiles に分ける(作業場所が
+// プロジェクトの外の共有リポジトリの時。ほかのプロセスが書き続けるログや履歴を worker の違反に
+// 数えて巻き戻さないため)。新しく作られたファイルは、.gitignore 対象でも違反のまま(worker が
+// .gitignore を足して新しいファイルを隠す、無視されるパスに設定ファイルを置く、を捕まえる)。
+// 既定の "violation" は従来どおりすべて違反にする
+export function gate(snapshot, allow, { ignoredFiles: ignoredFilesPolicy = "violation" } = {}) {
   const now = repoFingerprint(snapshot.root);
   const before = snapshot.fingerprint;
   const repoChanges = ["head", "symbolic", "refs", "index"].filter((key) => before[key] !== now[key]);
   const changed = changedSince(snapshot);
   const current = worktreeStates(snapshot.root, changed);
+
   const isIgnoredDir = (p) => current.get(p) === "dir" || snapshot.files[p]?.state === "dir";
+  const existedIgnored = (p) =>
+    snapshot.files[p]?.ignored === true && snapshot.files[p].state !== null;
+  const isWarnedFile = (p) =>
+    ignoredFilesPolicy === "warn" && existedIgnored(p) && !isIgnoredDir(p);
+
   const outside = changed.filter((p) => !allow.some((a) => isInside(p, a, snapshot.root)));
   const ignoredDirs = outside.filter(isIgnoredDir);
-  const violations = outside.filter((p) => !isIgnoredDir(p));
-  return { passed: repoChanges.length === 0 && violations.length === 0, repoChanges, changed, violations, ignoredDirs };
+  const ignoredFiles = outside.filter(isWarnedFile);
+  const violations = outside.filter((p) => !isIgnoredDir(p) && !isWarnedFile(p));
+  const passed = repoChanges.length === 0 && violations.length === 0;
+  return { passed, repoChanges, changed, violations, ignoredDirs, ignoredFiles };
 }
 
 // 指定パスを snapshot 時点の状態へ戻す(snapshot 時に未コミット・ignored だったものは退避コピーから、それ以外は
@@ -277,16 +302,109 @@ export function checkPacketVerify(packet) {
   ];
 }
 
+function gitTopLevel(dir) {
+  try {
+    const options = { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] };
+    return execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], options).trim();
+  } catch {
+    return null;
+  }
+}
+
+// dir(またはその祖先)が .gitignore 対象か。git check-ignore は対象なら 0、対象外なら 1 で終わる
+function isGitIgnored(dir) {
+  try {
+    execFileSync("git", ["-C", dir, "check-ignore", "-q", "."], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// root からの相対パス(/ 区切り)。root の外なら null
+function relativeInside(root, absolute) {
+  const relative = path.relative(canonical(root), canonical(absolute)).split(path.sep).join("/");
+  return relative.startsWith("..") || path.isAbsolute(relative) ? null : relative;
+}
+
+// worker の作業場所の検査。帳簿(TODO.md・ステップ計画・作業記録)の root と同じか、root と入れ子に
+// ならない、git リポジトリの中のディレクトリであること(リポジトリの最上位でも、その中の
+// サブディレクトリでもよい)。入れ子だと、帳簿の状態文書が worker の書ける範囲に入るか、作業場所の
+// ゲートが帳簿の変更を worker の違反に数える
+export function workspaceErrors(root, workspace) {
+  let isDirectory = false;
+  try { isDirectory = fs.statSync(workspace).isDirectory(); } catch { isDirectory = false; }
+  if (!isDirectory) return [`作業場所がディレクトリではない: ${workspace}`];
+  if (!gitTopLevel(workspace)) return [`作業場所が git のリポジトリではない: ${workspace}`];
+  // 無視されたディレクトリの中は git status が 1 項目にまとめるので、ゲートが何も見なくなる
+  if (isGitIgnored(workspace)) {
+    return [`作業場所が .gitignore 対象のディレクトリの中にある: ${workspace}`];
+  }
+
+  const [realRoot, realWorkspace] = [canonical(root), canonical(workspace)];
+  if (realRoot === realWorkspace) return [];
+  const nested = relativeInside(realRoot, realWorkspace) !== null
+    || relativeInside(realWorkspace, realRoot) !== null;
+  if (nested) {
+    return [`作業場所と帳簿の root が入れ子になっている: ${workspace} / ${root}`];
+  }
+
+  return [];
+}
+
+// T の対象の 1 項目を、作業場所からの相対パスに読み替える。~/ で始まる項目と絶対パスは実体パスへ
+// 解決し(~/.claude が dotfiles への symlink である構成で、dotfiles の中のパスになる)、相対パスは
+// 帳簿の root からのパスとして読む。作業場所の外を指すなら null(その項目はどの許可パスにも
+// 当たらない)。作業場所が root と同じ時の相対パスは、書かれたまま返す(従来の判定を変えない)
+function scopeInWorkspace(scopePath, { root, workspace, home }) {
+  const fromHome = scopePath === "~" || scopePath.startsWith("~/");
+  if (!fromHome && !path.isAbsolute(scopePath) && workspace === root) return scopePath;
+
+  const absolute = fromHome ? path.join(home, scopePath.slice(2)) : path.resolve(root, scopePath);
+  const relative = relativeInside(workspace, absolute);
+  if (relative === null) return null;
+  return scopePath.endsWith("/") && relative !== "" ? `${relative}/` : relative;
+}
+
+// 許可パスを作業場所からの相対にそろえる。~/ で始まるパスと絶対パスは実体パスへ解決して読み替え
+// (監督が T の対象の `~/…` をそのまま渡しても、ゲートとプロンプトが作業場所からの相対で
+// 照合できるように)、相対パスは書かれたまま残す。作業場所の外を指すものは errors に挙げる
+export function normalizeAllow(allow, { workspace, home = os.homedir() }) {
+  const errors = [];
+  const normalized = [];
+  for (const a of allow) {
+    const fromHome = a === "~" || a.startsWith("~/");
+    if (!fromHome && !path.isAbsolute(a)) {
+      normalized.push(a);
+      continue;
+    }
+
+    const relative = relativeInside(workspace, fromHome ? path.join(home, a.slice(2)) : a);
+    if (relative === null) errors.push(`作業場所の外のパス: ${a}`);
+    else normalized.push(a.endsWith("/") && relative !== "" ? `${relative}/` : relative);
+  }
+
+  return { allow: normalized, errors };
+}
+
 // ステップの許可パスを検査する。errors があれば起動しない
 // maxAllow: 1 ステップの許可パスの上限。対象パスをまとめて渡すと 1 回の起動の文脈量を抑えられないため、機械で制限する
-export function checkAllow(root, task, allow, maxAllow = 3) {
+// workspace: worker が書くリポジトリ(既定は root)。許可パスはここからの相対で読む。
+// T の対象は root の TODO.md から読み、scopeInWorkspace で作業場所の中へ読み替えて比べる。
+// home は対象の ~ の展開先
+export function checkAllow(root, task, allow, maxAllow = 3, options = {}) {
+  const { workspace = root, home = os.homedir() } = options;
   const errors = [];
   const warnings = [];
   if (allow.length === 0) errors.push("変更してよいパス(--allow)が 1 つも無い");
   if (allow.length > maxAllow) errors.push(`許可パスが ${allow.length} 件で上限 ${maxAllow} を超える。ステップを小さく切る`);
   for (const a of allow) {
-    const relative = path.relative(canonical(root), canonical(path.resolve(root, a))).split(path.sep).join("/");
-    if (relative.startsWith("..") || path.isAbsolute(relative)) errors.push(`プロジェクト外のパス: ${a}`);
+    const relative = relativeInside(workspace, path.resolve(workspace, a));
+    if (relative === null) {
+      errors.push(`作業場所の外のパス: ${a}`);
+      continue;
+    }
+
     // 許可パスが禁止パスの中にある、または禁止パスを含む上位ディレクトリである(未作成でも判定できるよう文字列で比べる)
     const nests = (inner, outer) => inner === outer || inner.startsWith(`${outer}/`);
     const bareRelative = relative.replace(/\/$/, "");
@@ -302,7 +420,11 @@ export function checkAllow(root, task, allow, maxAllow = 3) {
   else if (!scope.declared) warnings.push(`${task} に「対象:」が無い。ステップの許可パスと T の対象の包含は検査していない`);
   else {
     const bare = (p) => p.replace(/^\.\//, "").replace(/\/$/, "");
-    const outside = allow.filter((a) => !scope.paths.some((p) => bare(a) === bare(p) || isInside(bare(a), p, root)));
+    const scopePaths = scope.paths
+      .map((p) => scopeInWorkspace(p, { root, workspace, home }))
+      .filter((p) => p !== null);
+    const covers = (a, p) => p === "" || bare(a) === bare(p) || isInside(bare(a), p, workspace);
+    const outside = allow.filter((a) => !scopePaths.some((p) => covers(a, p)));
     if (outside.length > 0) {
       const message = `T の対象の外: ${outside.join(", ")}`;
       if (scope.prose.length === 0) errors.push(message);
@@ -328,10 +450,13 @@ function ruleGlobs(text) {
   return globs;
 }
 
-// 許可パスに当てはまるプロジェクトの規約(.claude/rules → .codex/rules の順、下位ディレクトリも含む。
-// 同じ相対パスの規約は先を採る)。
+// 許可パスに当てはまるプロジェクトの規約(ruleRoots の順に、各々 .claude/rules → .codex/rules の順、
+// 下位ディレクトリも含む。同じ相対パスの規約は先を採る)。許可パスは root からの相対で、
+// paths: の照合もそれで行う。ruleRoots は既定で root だけ。作業場所を帳簿の root と分けた run は
+// [作業場所, 帳簿の root] を渡す(コードのリポジトリの規約を先に、タスクを持つプロジェクトの規約を
+// 後に)。root 以外の規約の file は絶対パスで返す。
 // paths: の無い規約は常に適用。許可パスが中身の無いディレクトリなら照合できないので paths 付きも全部含める
-export function selectRules(root, allow) {
+export function selectRules(root, allow, ruleRoots = [root]) {
   const candidates = [];
   let conservative = false;
   for (const a of allow) {
@@ -345,20 +470,33 @@ export function selectRules(root, allow) {
   }
   const seen = new Set();
   const rules = [];
-  for (const dir of RULE_DIRS) {
+  // paths: は規約の置き場所(ruleRoot)からの相対で書かれるので、root が ruleRoot の中にあれば
+  // 候補を ruleRoot からの相対に直して照合する(リポジトリの最上位の規約を、その中の
+  // サブディレクトリの作業場所に当てる時)。ruleRoot の外なら root からの相対のまま照合する
+  const candidatesFor = (ruleRoot) => {
+    const prefix = relativeInside(ruleRoot, root);
+    if (prefix === null || prefix === "") return candidates;
+    return candidates.map((c) => `${prefix}/${c}`);
+  };
+  const sources = ruleRoots.flatMap((ruleRoot) => RULE_DIRS.map((dir) => ({ ruleRoot, dir })));
+  for (const { ruleRoot, dir } of sources) {
     let names;
     try {
-      names = fs.readdirSync(path.join(root, dir), { recursive: true }).map(String).filter((n) => n.endsWith(".md")).sort();
+      names = fs.readdirSync(path.join(ruleRoot, dir), { recursive: true })
+        .map(String)
+        .filter((n) => n.endsWith(".md"))
+        .sort();
     } catch { continue; }
     for (const name of names) {
       if (seen.has(name)) continue;
-      const file = `${dir}/${name}`;
-      const text = fs.readFileSync(path.join(root, file), "utf8");
+      const absolute = path.join(ruleRoot, dir, name);
+      const text = fs.readFileSync(absolute, "utf8");
       const globs = ruleGlobs(text);
       const applies = globs.length === 0 || conservative
-        || candidates.some((c) => globs.some((g) => path.matchesGlob(c, g)));
+        || candidatesFor(ruleRoot).some((c) => globs.some((g) => path.matchesGlob(c, g)));
       if (!applies) continue;
       seen.add(name);
+      const file = ruleRoot === root ? `${dir}/${name}` : absolute;
       rules.push({ file, text: text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim() });
     }
   }
