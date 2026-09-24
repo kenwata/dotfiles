@@ -210,6 +210,44 @@ vim.keymap.set("n", "sl", "<C-w>l", { silent = true, desc = "Go to the right win
 vim.keymap.set("n", "sj", "<C-w>j", { silent = true, desc = "Go to the window below" })
 vim.keymap.set("n", "sk", "<C-w>k", { silent = true, desc = "Go to the window above" })
 
+-- Buffer cycling
+-- [[ / ]] step through the buffer list, whose entries lua/plugins/minitabline.lua draws as tabs.
+-- They exist because the built-in [b / ]b put the bracket and b too far apart to press
+-- comfortably. They take the same count as [b / ]b (2]] skips one buffer); [b / ]b themselves
+-- are left as they are.
+-- What this costs: the built-in Normal-mode section motions [[ / ]] (jump to a { in the first
+-- column), and the buffer-local [[ / ]] several of Neovim's own ftplugins add -- markdown's jump
+-- between headings among them, plus python, rust, go, vim, help and others. Visual and
+-- Operator-pending [[ / ]] are untouched, so d]] and markdown's Visual heading jump still work.
+local BUFFER_CYCLE_KEYS = {
+  { lhs = "[[", command = "bprevious", desc = "Previous buffer" },
+  { lhs = "]]", command = "bnext", desc = "Next buffer" },
+}
+
+---Map the buffer-cycling keys, globally or for one buffer.
+---@param buf integer? Buffer to map them in; nil maps them globally.
+local function map_buffer_cycle_keys(buf)
+  for _, key in ipairs(BUFFER_CYCLE_KEYS) do
+    vim.keymap.set("n", key.lhs, function()
+      vim.cmd({ cmd = key.command, count = vim.v.count1 })
+    end, { buf = buf, silent = true, desc = key.desc })
+  end
+end
+
+map_buffer_cycle_keys(nil)
+
+-- A buffer-local mapping beats a global one, so the global mapping alone loses in every buffer
+-- whose ftplugin defines [[ / ]]. Mapping them again buffer-locally puts them back. No
+-- vim.schedule is needed: Neovim registers its ftplugin loader (augroup filetypeplugin) before
+-- init.lua runs, so this autocommand fires after the ftplugin has mapped its own keys
+-- (nvim_get_autocmds lists it third, after filetypeplugin and filetypeindent -- measured).
+vim.api.nvim_create_autocmd("FileType", {
+  desc = "Keep [[ / ]] on buffer cycling over ftplugin mappings",
+  callback = function(args)
+    map_buffer_cycle_keys(args.buf)
+  end,
+})
+
 -- LSP display toggles
 -- Inlay hints stay off by default and are switched on for the moment they are wanted. They
 -- render parameter names inline (nvim_create_autocmd(event: "...", opts: {...})), which reads

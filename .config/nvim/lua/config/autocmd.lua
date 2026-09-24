@@ -19,9 +19,9 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 
 -- Terminal buffers start out 'buflisted', so every :terminal and every terminal a plugin opens
 -- would join the buffer list. Dropping them is a decision about the buffer list as a whole, not
--- about any one plugin: it also takes terminals out of [b / ]b and out of <Leader>fb
--- (mini.pick's buffer picker), and only then out of the tabline that lua/plugins/minitabline.lua
--- draws. :ls stops listing them; :ls! still does.
+-- about any one plugin: it also takes terminals out of [b / ]b (and the [[ / ]] config.keybind
+-- adds) and out of <Leader>fb (mini.pick's buffer picker), and only then out of the tabline that
+-- lua/plugins/minitabline.lua draws. :ls stops listing them; :ls! still does.
 vim.api.nvim_create_autocmd("TermOpen", {
   desc = "Keep terminal buffers out of the buffer list",
   callback = function()
