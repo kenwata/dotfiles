@@ -19,7 +19,9 @@ import { parsePlan } from "./core.mjs";
 // 監督(Claude Code)または Codex ホスト本人が cli.mjs note で書く種別
 export const NOTE_KINDS = ["fact", "decision", "rejected", "intent", "step", "handoff", "resume"];
 // runner と hook が書く種別を含む全体
-export const WORKLOG_KINDS = ["plan", "run", "verify", ...NOTE_KINDS, "budget", "compact"];
+export const WORKLOG_KINDS = [
+  "plan", "run", "verify", "integrate", ...NOTE_KINDS, "budget", "compact",
+];
 const LIST_KEYS = new Set(["changed", "baseline"]);
 
 export function stateDir() {

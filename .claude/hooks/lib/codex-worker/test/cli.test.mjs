@@ -1,6 +1,7 @@
 // runner(cli.mjs)の run / restore の流れを、偽の codex で確かめる(本物の codex は起動しない)
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -1307,6 +1308,278 @@ test(
         assert.ok(startLine, output);
         assert.doesNotMatch(startLine, / branch=/);
       }
+    } finally { t.cleanup(); }
+  },
+);
+
+test("integrate は worktree の commit を本体へ fast-forward して片付ける", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+    git(t.wsRepo, "add", "src/a/fixture.ts");
+    git(t.wsRepo, "commit", "-qm", "track workspace target");
+
+    const ran = t.run([...wsArgs(t), "--worktree"], { FAKE_MODE: "ok" });
+
+    assert.equal(ran.code, 0, JSON.stringify(ran.json));
+    const recordPath = path.join(t.taskDir, "worktree.json");
+    const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+    const worktreePath = fs.realpathSync(record.path);
+    git(worktreePath, "add", "src/a/impl.ts");
+    git(worktreePath, "commit", "-qm", "supervisor commit");
+    const branchTip = git(worktreePath, "rev-parse", "HEAD").trim();
+
+    const integrated = t.run(["integrate", "--root", t.root, "--task", "T7"]);
+
+    assert.equal(integrated.code, 0, JSON.stringify(integrated.json));
+    assert.deepEqual(
+      Object.keys(integrated.json).sort(),
+      ["branch", "commits", "head", "repo", "task"],
+    );
+    assert.equal(integrated.json.task, "T7");
+    assert.equal(integrated.json.repo, fs.realpathSync(t.wsRepo));
+    assert.equal(integrated.json.branch, record.branch);
+    assert.equal(integrated.json.commits, 1);
+    assert.equal(integrated.json.head, branchTip);
+    assert.equal(git(t.wsRepo, "rev-parse", "HEAD").trim(), branchTip);
+    assert.equal(fs.existsSync(worktreePath), false);
+    assert.equal(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+    assert.equal(fs.existsSync(recordPath), false);
+
+    const lines = worklogEntries(t, "integrate");
+    assert.equal(lines.length, 1);
+    assert.ok(lines[0].includes(`branch=${record.branch}`), lines[0]);
+    assert.ok(lines[0].includes("commits=1"), lines[0]);
+  } finally { t.cleanup(); }
+});
+
+test("integrate は先行 commit が 0 件でも worktree を片付けて exit 0", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+    git(t.wsRepo, "add", "src/a/fixture.ts");
+    git(t.wsRepo, "commit", "-qm", "track workspace target");
+    const createArgs = [...baseArgs(t.root, t.packet)];
+    createArgs.splice(createArgs.indexOf("--allow"), 2, "--allow", "other/y.ts");
+    createArgs.push("--workspace", t.ws, "--worktree");
+
+    const created = t.run(createArgs, { FAKE_MODE: "ok" });
+
+    assert.equal(created.code, 2);
+    assert.equal(t.execEnv(), null, "前提検査で worker を起動しない");
+    const recordPath = path.join(t.taskDir, "worktree.json");
+    const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+    const worktreePath = fs.realpathSync(record.path);
+    const mainHead = git(t.wsRepo, "rev-parse", "HEAD").trim();
+
+    const integrated = t.run(["integrate", "--root", t.root, "--task", "T7"]);
+
+    assert.equal(integrated.code, 0, JSON.stringify(integrated.json));
+    assert.equal(integrated.json.commits, 0);
+    assert.equal(integrated.json.head, mainHead);
+    assert.equal(git(t.wsRepo, "rev-parse", "HEAD").trim(), mainHead);
+    assert.equal(fs.existsSync(worktreePath), false);
+    assert.equal(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+    assert.equal(fs.existsSync(recordPath), false);
+
+    const lines = worklogEntries(t, "integrate");
+    assert.equal(lines.length, 1);
+    assert.ok(lines[0].includes(`branch=${record.branch}`), lines[0]);
+    assert.ok(lines[0].includes("commits=0"), lines[0]);
+  } finally { t.cleanup(); }
+});
+
+/** Create a clean registered worktree without starting the fake worker.
+ * @param {ReturnType<typeof setup>} t Test fixture.
+ * @returns {{
+ *   record: { repo: string, path: string, branch: string, base: string,
+ *     base_ref: string, created_at: string },
+ *   worktreePath: string
+ * }} Worktree state.
+ */
+function createCleanRecordedWorktree(t) {
+  fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+  git(t.wsRepo, "add", "src/a/fixture.ts");
+  git(t.wsRepo, "commit", "-qm", "track workspace target");
+
+  const createArgs = [...baseArgs(t.root, t.packet)];
+  createArgs.splice(createArgs.indexOf("--allow"), 2, "--allow", "other/y.ts");
+  createArgs.push("--workspace", t.ws, "--worktree");
+  const created = t.run(createArgs, { FAKE_MODE: "ok" });
+
+  assert.equal(created.code, 2, JSON.stringify(created.json));
+  assert.equal(t.execEnv(), null, "前提検査で worker を起動しない");
+  const recordPath = path.join(t.taskDir, "worktree.json");
+  const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+  const worktreePath = fs.realpathSync(record.path);
+  assert.equal(git(worktreePath, "status", "--porcelain"), "");
+
+  return { record, worktreePath };
+}
+
+/** Write a live worker lock under the fixture's TMPDIR.
+ * @param {ReturnType<typeof setup>} t Test fixture.
+ * @param {string} root Repository root protected by the lock.
+ * @returns {void}
+ */
+function writeLiveWorkerLock(t, root) {
+  const canonicalRoot = fs.realpathSync(root);
+  const digest = createHash("sha1").update(canonicalRoot).digest("hex").slice(0, 16);
+  const lockDir = path.join(t.tmp, "claude-task-scope");
+  const lockPath = path.join(lockDir, `worker-lock-${digest}.json`);
+  fs.mkdirSync(lockDir, { recursive: true });
+  fs.writeFileSync(lockPath, JSON.stringify({
+    root: canonicalRoot,
+    taskRoot: t.root,
+    task: "T7",
+    step: "1",
+    pid: process.pid,
+    expiresAt: Date.now() + 60_000,
+  }));
+}
+
+/** Refuse integration and prove the main repository state was preserved.
+ * @param {ReturnType<typeof setup>} t Test fixture.
+ * @param {RegExp} expectedError Expected precondition message.
+ * @returns {void}
+ */
+function assertIntegrationRefusalLeavesMainUnchanged(t, expectedError) {
+  const before = {
+    head: git(t.wsRepo, "rev-parse", "HEAD").trim(),
+    status: git(t.wsRepo, "status", "--porcelain"),
+  };
+
+  const result = t.run(["integrate", "--root", t.root, "--task", "T7"]);
+
+  assert.equal(result.code, 2, JSON.stringify(result.json));
+  assert.deepEqual(Object.keys(result.json), ["errors"]);
+  assert.match(result.json.errors.join("\n"), expectedError);
+  assert.deepEqual({
+    head: git(t.wsRepo, "rev-parse", "HEAD").trim(),
+    status: git(t.wsRepo, "status", "--porcelain"),
+  }, before);
+}
+
+/** Refuse integration with exit 1 and prove the canonical main repository state was preserved.
+ * @param {ReturnType<typeof setup>} t Test fixture.
+ * @param {string} expectedError Expected message fragment.
+ * @returns {void}
+ */
+function assertIntegrationFailureLeavesMainUnchanged(t, expectedError) {
+  const repo = fs.realpathSync(t.wsRepo);
+  /** Read the canonical main repository's HEAD and porcelain status.
+   * @returns {{ head: string, status: string }} Current main repository state.
+   */
+  const readMainState = () => ({
+    head: git(repo, "rev-parse", "HEAD").trim(),
+    status: git(repo, "status", "--porcelain"),
+  });
+  const before = readMainState();
+
+  const result = t.run(["integrate", "--root", t.root, "--task", "T7"]);
+
+  assert.equal(result.code, 1, JSON.stringify(result.json));
+  assert.deepEqual(Object.keys(result.json), ["errors"]);
+  assert.ok(result.json.errors.join("\n").includes(expectedError), JSON.stringify(result.json));
+  assert.deepEqual(readMainState(), before);
+}
+
+test("integrate は記録が無いと exit 2 で本体を変えない", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    assertIntegrationRefusalLeavesMainUnchanged(t, /記録がありません/);
+  } finally { t.cleanup(); }
+});
+
+test("integrate は worktree list に無い記録を exit 2 で拒否して本体を変えない", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { worktreePath } = createCleanRecordedWorktree(t);
+    fs.rmSync(worktreePath, { recursive: true, force: true });
+    git(t.wsRepo, "worktree", "prune");
+
+    assertIntegrationRefusalLeavesMainUnchanged(t, /worktree list にありません/);
+  } finally { t.cleanup(); }
+});
+
+test("integrate は worktree の生きたロックを exit 2 で拒否して本体を変えない", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { record } = createCleanRecordedWorktree(t);
+    writeLiveWorkerLock(t, record.path);
+
+    assertIntegrationRefusalLeavesMainUnchanged(t, /別の worker が実行中/);
+  } finally { t.cleanup(); }
+});
+
+test("integrate は本体の生きたロックを exit 2 で拒否して本体を変えない", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    createCleanRecordedWorktree(t);
+    writeLiveWorkerLock(t, t.wsRepo);
+
+    assertIntegrationRefusalLeavesMainUnchanged(t, /別の worker が実行中/);
+  } finally { t.cleanup(); }
+});
+
+test("integrate は clean でない worktree を exit 2 で拒否して本体を変えない", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { worktreePath } = createCleanRecordedWorktree(t);
+    fs.writeFileSync(path.join(worktreePath, "untracked.txt"), "uncommitted\n");
+
+    assertIntegrationRefusalLeavesMainUnchanged(t, /監督が自分の変えたファイルをパス指定でコミットしてから/);
+  } finally { t.cleanup(); }
+});
+
+test("integrate は本体ブランチが base_ref と違うと exit 2 で本体を変えない", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { record } = createCleanRecordedWorktree(t);
+    git(t.wsRepo, "checkout", "-q", "-b", "different-base");
+    assert.notEqual(
+      git(t.wsRepo, "symbolic-ref", "HEAD").trim(),
+      record.base_ref,
+    );
+
+    assertIntegrationRefusalLeavesMainUnchanged(t, /本体のブランチが記録時の base_ref と一致しません/);
+  } finally { t.cleanup(); }
+});
+
+test(
+  "integrate は本体が先に進んだ時 exit 1 で rebase を案内して本体を変えない",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      const { record, worktreePath } = createCleanRecordedWorktree(t);
+      fs.writeFileSync(path.join(worktreePath, "src/a/impl.ts"), "worktree change\n");
+      git(worktreePath, "add", "src/a/impl.ts");
+      git(worktreePath, "commit", "-qm", "worktree change");
+
+      fs.writeFileSync(path.join(t.wsRepo, "main-only.ts"), "main change\n");
+      git(t.wsRepo, "add", "main-only.ts");
+      git(t.wsRepo, "commit", "-qm", "main advanced");
+
+      const baseBranch = record.base_ref.slice("refs/heads/".length);
+      const expectedRebase = `git -C ${fs.realpathSync(worktreePath)} rebase ${baseBranch}`;
+      assertIntegrationFailureLeavesMainUnchanged(t, expectedRebase);
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "integrate は本体の未コミット重複変更で exit 1 となり本体を変えない",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      const { worktreePath } = createCleanRecordedWorktree(t);
+      fs.writeFileSync(path.join(worktreePath, "src/a/fixture.ts"), "worktree change\n");
+      git(worktreePath, "add", "src/a/fixture.ts");
+      git(worktreePath, "commit", "-qm", "worktree change");
+
+      fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "uncommitted main change\n");
+
+      assertIntegrationFailureLeavesMainUnchanged(t, "would be overwritten by merge");
     } finally { t.cleanup(); }
   },
 );

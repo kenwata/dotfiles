@@ -14,6 +14,7 @@
 //        [--workspace <リポジトリ>] [--worktree]
 //        [--model-family <luna|terra|sol ...> | --model <モデル ID>] [--timeout <秒>]
 //        [--max-packet <バイト>] [--max-allow <件数>] [--peak-threshold <0〜1>]
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs integrate --root <root> --task T<n>
 //   --workspace は worker が書くリポジトリ(既定は --root)。T の対象がプロジェクトの外の
 //   リポジトリ(dotfiles など)にある時に使う。--root は帳簿(TODO.md・ステップ計画・作業記録・
 //   状態行)の場所のまま、worker の起動(codex exec -C)・snapshot・ゲート・restore・ロック・verify は
@@ -39,7 +40,8 @@
 //
 // 出力規約: どの経路でも JSON を 1 つ stdout に出す(run は <run ディレクトリ>/report.json にも保存)。
 //   exit 0 = accepted(機構上の失敗なし。worker の status が blocked / failed でも監督の判断材料として有効)
-//   exit 1 = 不採用(reasons に理由。restore.restored は snapshot 時点へ戻したパス、restore.unrestorable は
+//   exit 1 = 不採用(run)・統合不可(integrate)。run の reasons に理由。
+//            restore.restored は snapshot 時点へ戻したパス、restore.unrestorable は
 //            自動では戻せなかったパス、restore.backups は上書き前の内容の退避先)
 //   exit 2 = 起動前に拒否、または引数・記録の誤り(worker を起動していない / 何も変更していない)
 // restore は、監督が accepted の結果を採らないと決めた時に、そのステップの許可パスの中の変更を snapshot 時点へ
@@ -53,9 +55,11 @@
 // worker が書いたコードを、API キーとネットワークのある sandbox の外で走らせないため。UV_CACHE_DIR は verify 専用。
 //   exit 0 = 全部 0、exit 1 = 0 でないものがある、exit 2 = 記録の誤り・worker の実行中・sandbox の疎通の不一致
 //   (何も打っていない)
-// 作業記録(worklog.md、書式の正は worklog.mjs): plan / run / verify は結果をタスクの置き場の worklog.md にも 1 行ずつ
-// 追記する(run の記録は 7 日で消えるが、worklog は消えない)。note は監督(Codex ホストでは本人)がステップの境目の
-// 結論を追記する。resume は同じ T の再開の照合を JSON で返す: 計画の各ステップの状態、最後の handoff、
+// 作業記録(worklog.md、書式の正は worklog.mjs): plan / run / verify / integrate は結果を
+// タスクの置き場の worklog.md にも 1 行ずつ追記する(run の記録は 7 日で消えるが、worklog は消えない)。
+// note は監督(Codex ホストでは本人)がステップの境目の結論を追記する。integrate は成功時に
+// ブランチと本体へ進めたコミット数を記録する。resume は同じ T の再開の照合を JSON で返す:
+// 計画の各ステップの状態、最後の handoff、
 // 作業記録で説明できない未コミットの変更(unexplained_dirty。空でなければ再開せず止まる)。show は runs/ が
 // 消えたステップを worklog から埋める。--json で同じ内容を JSON で出す。
 
@@ -77,7 +81,7 @@ import {
 import { formatStatusLines, renderEvent, renderSummary } from "./status.mjs";
 import { stampReceivedAt, timingMetrics } from "./timing.mjs";
 import { NOTE_KINDS, appendWorklog, normalizeStep, readPlan, readWorklog, rootSlug, runsDir, stateDir, taskDir } from "./worklog.mjs";
-import { ensureWorktree, readWorktreeRecord } from "./worktree.mjs";
+import { ensureWorktree, integrateWorktree, readWorktreeRecord } from "./worktree.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULTS = { timeout: 1200, maxPacket: 12 * 1024, maxAllow: 3, peakThreshold: 0.6, family: "luna" };
@@ -1017,6 +1021,54 @@ function noteTask(args) {
   emit({ task, root, worklog: file, entry: line }, null, 0);
 }
 
+/** Fast-forward a task worktree after checking its worktree and main repository locks.
+ * @param {{ root?: string, task?: string }} args Ledger root and task identifier.
+ * @returns {void} Emits the integration report and sets the command exit code.
+ * @throws {Error} If an unexpected record, lock, or integration operation fails.
+ */
+function integrateTask(args) {
+  const requestedRoot = path.resolve(args.root ?? ".");
+  const root = gitRoot(requestedRoot);
+  const task = args.task;
+  const errors = [];
+  if (!root) errors.push(`git のリポジトリではない: ${requestedRoot}`);
+  if (!/^T\d+$/.test(task ?? "")) errors.push("--task は T<n>");
+  if (errors.length > 0) {
+    emit({ errors }, null, 2);
+    return;
+  }
+
+  const { record, errors: recordErrors } = readWorktreeRecordForRun(root, task);
+  if (recordErrors.length > 0) {
+    emit({ errors: recordErrors }, null, 2);
+    return;
+  }
+
+  if (record) {
+    const worktreeLock = activeWorkerLock(lockRoot(record.path));
+    const mainLock = activeWorkerLock(lockRoot(record.repo));
+    const running = worktreeLock ?? mainLock;
+    if (running) {
+      emit({ errors: [`別の worker が実行中: ${running.task} ステップ ${running.step}`] }, null, 2);
+      return;
+    }
+  }
+
+  const result = integrateWorktree({ root, task });
+  if (!result.ok) {
+    emit({ errors: result.errors }, null, result.code);
+    return;
+  }
+
+  recordWorklog(root, task, {
+    kind: "integrate",
+    by: "runner",
+    keys: { branch: result.report.branch, commits: result.report.commits },
+    text: "worktree を本体へ統合",
+  });
+  emit(result.report, null, 0);
+}
+
 // run の行の作業場所。帳簿の root で動いた run は null
 function runWorkspace(entry) {
   return entry.kind === "run" ? entry.keys.workspace ?? null : null;
@@ -1127,6 +1179,18 @@ if (parsed) {
   else if (command === "plan") registerPlan(parsed.values);
   else if (command === "show") showTask(parsed.values);
   else if (command === "note") noteTask(parsed.values);
+  else if (command === "integrate") integrateTask(parsed.values);
   else if (command === "resume") resumeTask(parsed.values);
-  else emit({ errors: ["usage: cli.mjs plan ... | cli.mjs run ... | cli.mjs show ... [--json] | cli.mjs note ... | cli.mjs resume ... | cli.mjs restore --run <dir> | cli.mjs verify --run <dir>"] }, null, 2);
+  else emit({
+    errors: [`usage: cli.mjs ${[
+      "plan ...",
+      "run ...",
+      "integrate --root <root> --task T<n>",
+      "show ... [--json]",
+      "note ...",
+      "resume ...",
+      "restore --run <dir>",
+      "verify --run <dir>",
+    ].join(" | ")}`],
+  }, null, 2);
 }
