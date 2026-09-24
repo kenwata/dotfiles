@@ -4,6 +4,8 @@ import {
   classifyCommand,
   pairCommandIntervals,
   summarizeTiming,
+  stampReceivedAt,
+  timingMetrics,
   unionLengthMs,
 } from "../timing.mjs";
 
@@ -26,6 +28,80 @@ const cmd = (type, command, id) => ({
  * @param {object} event codex のイベント。
  */
 const timed = (receivedMs, event) => ({ receivedMs, event });
+
+test("JSON オブジェクト行の先頭に受信時刻を追加し後続バイト列を保つ", () => {
+  const line = '{ "é":"\\u00e9", "aggregated_output":"\\\\\\\"" }';
+
+  const result = stampReceivedAt(line, Date.parse("2026-09-24T11:03:54.075Z"));
+
+  assert.equal(
+    result,
+    '{"received_at":"2026-09-24T11:03:54.075Z",' + line.slice(1),
+  );
+  assert.deepEqual(Object.keys(JSON.parse(result)), [
+    "received_at", "é", "aggregated_output",
+  ]);
+});
+
+test("先頭空白のある JSON オブジェクト行で波括弧と後続バイト列を保つ", () => {
+  const line = '  { "é":"\\u00e9" }';
+  const objectStart = line.indexOf("{");
+
+  const result = stampReceivedAt(line, 0);
+
+  assert.ok(result.startsWith(line.slice(0, objectStart + 1)));
+  assert.ok(result.endsWith(line.slice(objectStart + 1)));
+  assert.deepEqual(JSON.parse(result), {
+    received_at: "1970-01-01T00:00:00.000Z",
+    "é": "é",
+  });
+});
+
+test("先頭空白と内部空白のある空オブジェクト行を JSON のまま保つ", () => {
+  const line = " \t{ }";
+  const objectStart = line.indexOf("{");
+
+  const result = stampReceivedAt(line, 0);
+
+  assert.ok(result.startsWith(line.slice(0, objectStart + 1)));
+  assert.ok(result.endsWith(line.slice(objectStart + 1)));
+  assert.deepEqual(JSON.parse(result), {
+    received_at: "1970-01-01T00:00:00.000Z",
+  });
+});
+
+test("空の JSON オブジェクト行に不正な末尾カンマを付けない", () => {
+  const result = stampReceivedAt("{}", 0);
+
+  assert.equal(result, '{"received_at":"1970-01-01T00:00:00.000Z"}');
+  assert.doesNotThrow(() => JSON.parse(result));
+});
+
+test("JSON オブジェクト以外と壊れた行をそのまま返す", () => {
+  for (const line of ["", "not json", "{broken", "[]", "null", "42", '"text"']) {
+    assert.equal(stampReceivedAt(line, 0), line);
+  }
+});
+
+test("集計例外を timing_error に変え秒数を null にする", () => {
+  const result = timingMetrics([
+    timed(0, cmd("item.started", "custom-check", "check")),
+  ], { startMs: 0, endMs: 1000, verifyCommands: /** @type {string[]} */ (null) });
+
+  const { timing_error: timingError, ...metrics } = result;
+
+  assert.deepEqual(metrics, {
+    check_s: null,
+    other_command_s: null,
+    model_s: null,
+    check_count: 0,
+    other_command_count: 0,
+    check_by_tool: {},
+    other_by_tool: {},
+  });
+  assert.equal(typeof timingError, "string");
+  assert.ok(timingError.length > 0);
+});
 
 test("既知の検査コマンドを前置きが繰り返されても分類する", () => {
   const result = classifyCommand(

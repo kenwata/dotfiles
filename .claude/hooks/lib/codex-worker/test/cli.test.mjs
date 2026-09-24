@@ -56,6 +56,63 @@ if (mode === "sleep") {
   setTimeout(() => {}, 60000);
   return;
 }
+if (mode === "chunked") {
+  const splitLine = Buffer.from('{"type":"message","text":"é"}\\n');
+  const splitAt = splitLine.indexOf(Buffer.from("é")) + 1;
+  process.stdout.write(splitLine.subarray(0, splitAt));
+  setTimeout(() => {
+    process.stdout.write(splitLine.subarray(splitAt));
+    process.stdout.write(Buffer.from('{"type":"message","text":"末尾"}'));
+  }, 50);
+  return;
+}
+if (mode === "timing" || mode === "timing-timeout") {
+  const timingEvents = [
+    {
+      type: "item.started",
+      item: {
+        id: "check-1", type: "command_execution", command: "/bin/zsh -lc 'uv run pytest -q'",
+      },
+    },
+    {
+      type: "item.completed",
+      item: {
+        id: "check-1", type: "command_execution", command: "/bin/zsh -lc 'uv run pytest -q'",
+        exit_code: 0,
+      },
+    },
+    {
+      type: "item.started",
+      item: { id: "other-1", type: "command_execution", command: "sed -n 1p README.md" },
+    },
+    {
+      type: "item.completed",
+      item: {
+        id: "other-1", type: "command_execution", command: "sed -n 1p README.md",
+        exit_code: 0,
+      },
+    },
+    {
+      type: "item.started",
+      item: { id: "packet-1", type: "command_execution", command: "test -f src/a/impl.ts" },
+    },
+    {
+      type: "item.completed",
+      item: {
+        id: "packet-1", type: "command_execution", command: "test -f src/a/impl.ts",
+        exit_code: 0,
+      },
+    },
+    { type: "message", text: "多バイト文字 é" },
+  ];
+  if (mode === "timing-timeout") {
+    console.log(JSON.stringify(timingEvents[0]));
+    setTimeout(() => {}, 60000);
+    return;
+  }
+  process.stdout.write("\\nnot-json\\n");
+  for (const event of timingEvents) console.log(JSON.stringify(event));
+}
 console.log(JSON.stringify({ type: "item.started", item: { type: "command_execution", command: "/bin/zsh -lc 'npm test'" } }));
 console.log(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "/bin/zsh -lc 'npm test'", exit_code: 0 } }));
 fs.writeFileSync(path.join(root, "src/a/impl.ts"), "impl\\n");
@@ -712,5 +769,163 @@ test("run は --root が git でなく --allow が絶対パスでも、JSON の�
 
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /git のリポジトリではない/);
+  } finally { t.cleanup(); }
+});
+
+test("events.jsonl は行を保持して受信時刻を付け、run は command metrics を集計する", () => {
+  const t = setup();
+  try {
+    const runStartedAt = Date.now();
+    const { code, json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "timing" });
+    const runEndedAt = Date.now();
+    assert.equal(code, 0, JSON.stringify(json));
+
+    const expected = [
+      "", "not-json",
+      JSON.stringify({
+        type: "item.started",
+        item: {
+          id: "check-1", type: "command_execution", command: "/bin/zsh -lc 'uv run pytest -q'",
+        },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          id: "check-1", type: "command_execution", command: "/bin/zsh -lc 'uv run pytest -q'",
+          exit_code: 0,
+        },
+      }),
+      JSON.stringify({
+        type: "item.started",
+        item: { id: "other-1", type: "command_execution", command: "sed -n 1p README.md" },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          id: "other-1", type: "command_execution", command: "sed -n 1p README.md",
+          exit_code: 0,
+        },
+      }),
+      JSON.stringify({
+        type: "item.started",
+        item: { id: "packet-1", type: "command_execution", command: "test -f src/a/impl.ts" },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          id: "packet-1", type: "command_execution", command: "test -f src/a/impl.ts",
+          exit_code: 0,
+        },
+      }),
+      JSON.stringify({ type: "message", text: "多バイト文字 é" }),
+      JSON.stringify({
+        type: "item.started",
+        item: { type: "command_execution", command: "/bin/zsh -lc 'npm test'" },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          type: "command_execution", command: "/bin/zsh -lc 'npm test'", exit_code: 0,
+        },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: {
+          type: "file_change",
+          changes: [{ path: path.join(t.root, "src/a/impl.ts"), kind: "add" }],
+        },
+      }),
+      JSON.stringify({
+        type: "turn.completed",
+        usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5 },
+      }),
+    ];
+    const actual = fs.readFileSync(path.join(json.run_dir, "events.jsonl"), "utf8").split("\n");
+    assert.equal(actual.length, expected.length + 2);
+    assert.match(actual[0], /^\{"received_at":"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z",/);
+    assert.ok(actual[0].includes('"type":"thread.started"'));
+    for (const line of actual.filter((entry) => entry.startsWith('{"received_at":'))) {
+      const receivedAt = Date.parse(JSON.parse(line).received_at);
+      assert.ok(receivedAt >= runStartedAt && receivedAt <= runEndedAt, line);
+    }
+    for (const [index, line] of expected.entries()) {
+      const actualLine = actual[index + 1];
+      if (!line || line === "not-json") {
+        assert.equal(actualLine, line);
+      } else {
+        assert.match(actualLine, /^\{"received_at":"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z",/);
+        assert.equal(actualLine.slice(actualLine.indexOf(",") + 1), line.slice(1));
+      }
+    }
+
+    const { metrics } = json;
+    for (const key of [
+      "check_s", "other_command_s", "model_s", "check_count", "other_command_count",
+      "check_by_tool", "other_by_tool",
+    ])
+      assert.ok(Object.hasOwn(metrics, key), key);
+    for (const key of [
+      "check_s", "other_command_s", "model_s", "check_count", "other_command_count",
+    ])
+      assert.ok(Number.isInteger(metrics[key]), key);
+    assert.deepEqual(metrics.check_by_tool, { "npm test": 0, packet: 0, pytest: 0 });
+    assert.deepEqual(metrics.other_by_tool, { sed: 0 });
+    for (const seconds of [
+      ...Object.values(metrics.check_by_tool), ...Object.values(metrics.other_by_tool),
+    ])
+      assert.ok(Number.isInteger(seconds));
+    assert.equal(metrics.check_count, 3);
+    assert.equal(metrics.other_command_count, 1);
+    const measured = metrics.check_s + metrics.other_command_s + metrics.model_s;
+    assert.ok(Math.abs(measured - metrics.duration_s) <= 1);
+    assert.ok(Number.isInteger(metrics.runner_s) && metrics.runner_s >= metrics.duration_s);
+  } finally { t.cleanup(); }
+});
+
+test("チャンク境界の多バイト文字と改行なしの末尾イベントを保つ", () => {
+  const t = setup();
+  try {
+    const { json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "chunked" });
+    const splitEvent = '{"type":"message","text":"é"}';
+    const finalEvent = '{"type":"message","text":"末尾"}';
+    const events = fs.readFileSync(path.join(json.run_dir, "events.jsonl"), "utf8");
+    const actualLines = events.split("\n");
+
+    assert.equal(actualLines.length, 3);
+    assert.match(actualLines[1], /^\{"received_at":"\d{4}-\d\d-\d\dT/);
+    assert.match(actualLines[2], /^\{"received_at":"\d{4}-\d\d-\d\dT/);
+    assert.equal(actualLines[1].slice(actualLines[1].indexOf(",") + 1), splitEvent.slice(1));
+    assert.equal(actualLines[2].slice(actualLines[2].indexOf(",") + 1), finalEvent.slice(1));
+    assert.doesNotThrow(() => JSON.parse(actualLines[1]));
+    assert.doesNotThrow(() => JSON.parse(actualLines[2]));
+    assert.equal(events.endsWith(actualLines[2]), true);
+  } finally { t.cleanup(); }
+});
+
+test("時間切れの run も metrics の全キーを出し model_s は 0 以上", () => {
+  const t = setup();
+  try {
+    const { code, json } = t.run(
+      [...baseArgs(t.root, t.packet), "--timeout", "1"],
+      { FAKE_MODE: "timing-timeout" },
+    );
+    assert.equal(code, 1);
+    for (const key of [
+      "check_s", "other_command_s", "model_s", "check_count", "other_command_count",
+      "check_by_tool", "other_by_tool",
+    ])
+      assert.ok(Object.hasOwn(json.metrics, key), key);
+    for (const key of [
+      "check_s", "other_command_s", "model_s", "check_count", "other_command_count",
+    ])
+      assert.ok(Number.isInteger(json.metrics[key]), key);
+    assert.ok(json.metrics.check_by_tool && typeof json.metrics.check_by_tool === "object");
+    assert.ok(json.metrics.other_by_tool && typeof json.metrics.other_by_tool === "object");
+    assert.ok(json.metrics.model_s >= 0);
+    assert.equal(json.metrics.check_count, 1);
+    const measured = json.metrics.check_s + json.metrics.other_command_s + json.metrics.model_s;
+    assert.ok(Math.abs(measured - json.metrics.duration_s) <= 1);
+    assert.ok(Number.isInteger(json.metrics.runner_s));
+    assert.ok(json.metrics.runner_s >= json.metrics.duration_s);
   } finally { t.cleanup(); }
 });

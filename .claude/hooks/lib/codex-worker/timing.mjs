@@ -190,6 +190,10 @@ export function classifyCommand(command, verifyCommands) {
 /** @typedef {{ check_s: number, other_command_s: number, model_s: number,
  * check_count: number, other_command_count: number,
  * check_by_tool: Record<string, number>, other_by_tool: Record<string, number> }} TimingSummary */
+/** @typedef {{ check_s: number | null, other_command_s: number | null,
+ * model_s: number | null, check_count: number, other_command_count: number,
+ * check_by_tool: Record<string, number>, other_by_tool: Record<string, number>,
+ * timing_error?: string }} TimingMetrics */
 
 /**
  * コマンドの開始と完了イベントを対応付け、
@@ -309,6 +313,59 @@ export function summarizeTiming(timedEvents, { startMs, endMs, verifyCommands })
     check_by_tool: roundedToolTotals(checks),
     other_by_tool: roundedToolTotals(others),
   };
+}
+
+/**
+ * JSON オブジェクト行の先頭に受信時刻を挿入し、その他の行はそのまま返す。
+ * @param {string} line events.jsonl の 1 行。
+ * @param {number} receivedMs 行を受信した時刻 (ミリ秒) 。
+ * @returns {string} 受信時刻を挿入した行、または変更していない行。
+ */
+export function stampReceivedAt(line, receivedMs) {
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(line);
+  } catch (error) {
+    if (error instanceof SyntaxError) return line;
+    throw error;
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return line;
+
+  const separator = Object.keys(parsed).length === 0 ? "" : ",";
+  const receivedAt = new Date(receivedMs).toISOString();
+  const objectStart = line.indexOf("{");
+
+  const prefix = `${line.slice(0, objectStart)}{"received_at":"${receivedAt}"${separator}`;
+
+  return `${prefix}${line.slice(objectStart + 1)}`;
+}
+
+/**
+ * 時間集計の例外を timing_error と null の秒数に変換する。
+ * @param {TimedEvent[]} timedEvents 受信時刻を伴うイベント。
+ * @param {{ startMs: number, endMs: number, verifyCommands: string[] }} options
+ *   worker の時間範囲と packet の検証コマンド。
+ * @returns {TimingMetrics} 秒単位の集計、または失敗時のエラー情報。
+ */
+export function timingMetrics(timedEvents, options) {
+  try {
+    return summarizeTiming(timedEvents, options);
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+
+    return {
+      check_s: null,
+      other_command_s: null,
+      model_s: null,
+      check_count: 0,
+      other_command_count: 0,
+      check_by_tool: {},
+      other_by_tool: {},
+      timing_error: error.message,
+    };
+  }
 }
 
 /**

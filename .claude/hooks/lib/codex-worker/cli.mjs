@@ -74,7 +74,8 @@ import {
   readRollout, resolveModelFamily, restore, sandboxProbeErrors, selectRules, takeSnapshot, trackedPaths, validateResult,
   normalizeAllow, workspaceErrors,
 } from "./core.mjs";
-import { lineSplitter, renderEvent, renderSummary } from "./status.mjs";
+import { renderEvent, renderSummary } from "./status.mjs";
+import { stampReceivedAt, timingMetrics } from "./timing.mjs";
 import { NOTE_KINDS, appendWorklog, normalizeStep, readPlan, readWorklog, rootSlug, runsDir, stateDir, taskDir } from "./worklog.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -222,16 +223,42 @@ function killGroup(child, signal) {
   try { process.kill(-child.pid, signal); } catch { /* 既に終了 */ }
 }
 
-// 生のイベントは events.jsonl にそのまま保存し、状態行は status.mjs が選んだものだけを出す
+// イベントは行単位で保存し、JSON オブジェクト行には受信時刻を加え、それ以外の行はそのまま書く
 function execWorker({ home, model, root, prompt, runDir, timeoutSec, uvCache, onStart, status }) {
   return new Promise((resolve) => {
     const events = fs.openSync(path.join(runDir, "events.jsonl"), "w");
     const stderr = fs.openSync(path.join(runDir, "stderr.txt"), "w");
-    const splitter = lineSplitter((line) => {
+    const timedEvents = [];
+    let eventsClosed = false;
+    let pending = "";
+    let pendingReceivedMs = Date.now();
+    const closeEvents = () => {
+      if (eventsClosed) return;
+      fs.closeSync(events);
+      eventsClosed = true;
+    };
+    const processLine = (line, receivedMs, terminated = true) => {
+      const newline = terminated ? "\n" : "";
       let event;
-      try { event = JSON.parse(line); } catch { return; }
+      try { event = JSON.parse(line); } catch (error) {
+        if (error instanceof SyntaxError) {
+          fs.writeSync(events, stampReceivedAt(line, receivedMs) + newline);
+          return;
+        }
+        throw error;
+      }
+      fs.writeSync(events, stampReceivedAt(line, receivedMs) + newline);
+      if (typeof event === "object" && event !== null && !Array.isArray(event)) {
+        timedEvents.push({ receivedMs, event });
+      }
       status(renderEvent(event, { root }));
-    });
+    };
+    const processText = (text, receivedMs) => {
+      const lines = `${pending}${text}`.split("\n");
+      pending = lines.pop() ?? "";
+      pendingReceivedMs = receivedMs;
+      for (const line of lines) processLine(line, receivedMs);
+    };
     const child = spawn("codex", [
       "exec", "--json", "-s", "workspace-write", "-m", model, "-C", root,
       "--output-schema", path.join(here, "worker-result.schema.json"),
@@ -239,12 +266,11 @@ function execWorker({ home, model, root, prompt, runDir, timeoutSec, uvCache, on
     ], { env: { ...process.env, CODEX_HOME: home, UV_CACHE_DIR: uvCache }, stdio: ["pipe", "pipe", stderr], detached: true });
     const decoder = new StringDecoder("utf8"); // チャンク境界で割れた多バイト文字を持ち越す
     child.stdout.on("data", (chunk) => {
-      fs.writeSync(events, chunk);
-      splitter.push(decoder.write(chunk));
+      processText(decoder.write(chunk), Date.now());
     });
     child.stdout.on("end", () => {
-      splitter.push(decoder.end());
-      splitter.end();
+      processText(decoder.end(), pendingReceivedMs);
+      if (pending) processLine(pending, pendingReceivedMs, false);
     });
     // stdout は pipe なので、codex の終了後に孫が pipe を握っていると close が来ない。exit でグループを止める
     child.on("exit", () => killGroup(child, "SIGKILL"));
@@ -255,11 +281,16 @@ function execWorker({ home, model, root, prompt, runDir, timeoutSec, uvCache, on
       killGroup(child, "SIGTERM");
       setTimeout(() => killGroup(child, "SIGKILL"), 10_000).unref();
     }, timeoutSec * 1000);
-    child.on("error", (error) => { clearTimeout(timer); resolve({ code: null, timedOut, spawnError: error.message }); });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      closeEvents();
+      resolve({ code: null, timedOut, spawnError: error.message, timedEvents });
+    });
     child.on("close", (code) => {
       clearTimeout(timer);
       killGroup(child, "SIGKILL"); // codex 本体が終わった後に残った子を止める(gate の後に書き込ませない)
-      resolve({ code, timedOut });
+      closeEvents();
+      resolve({ code, timedOut, timedEvents });
     });
     child.stdin.on("error", () => { /* 起動直後に終了した */ });
     child.stdin.end(prompt);
@@ -407,6 +438,7 @@ async function run(args) {
   status(`model=${model} allow=${allow.join(",")}${workspaceLabel} run=${runDir}`);
   const started = Date.now();
   let exec;
+  let ended;
   try {
     exec = await execWorker({
       home, model, root: workspace, prompt, runDir, timeoutSec, uvCache, status,
@@ -415,12 +447,13 @@ async function run(args) {
         fs.writeFileSync(lockFile, JSON.stringify({ ...lock, childPid: c.pid }));
       },
     });
+    ended = Date.now();
   } finally {
     fs.rmSync(lockFile, { force: true });
     fs.rmSync(uvCache, { recursive: true, force: true });
     for (const signal of signals) process.off(signal, onSignal);
   }
-  const durationSec = Math.round((Date.now() - started) / 1000);
+  const durationSec = Math.round((ended - started) / 1000);
 
   const reasons = [];
   let checked = { changed: [], violations: [], repoChanges: [], ignoredDirs: [], ignoredFiles: [] };
@@ -495,6 +528,12 @@ async function run(args) {
       compacted: context.compacted,
       ...usage,
       duration_s: durationSec,
+      ...timingMetrics(exec.timedEvents, {
+        startMs: started,
+        endMs: ended,
+        verifyCommands: packetVerifyCommands(packet),
+      }),
+      runner_s: Math.round(process.uptime()),
       packet_bytes: packetBytes,
       prompt_bytes: Buffer.byteLength(prompt),
     },
