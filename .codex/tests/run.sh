@@ -133,6 +133,7 @@ node --test "$repo_root/.claude/hooks/lib/task-loop/test/"*.test.mjs
 node --test "$repo_root/.claude/hooks/lib/code-layout/test/"*.test.mjs
 bash "$repo_root/.claude/hooks/tests/test-check-code-layout.sh" >/dev/null
 bash "$repo_root/.claude/hooks/tests/test-context-budget.sh" >/dev/null
+bash "$repo_root/.claude/hooks/tests/test-check-header-comment.sh" >/dev/null
 
 safe_git_output="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git status"}}' \
   | bash "$repo_root/.codex/hooks/deny-git-write.sh")"

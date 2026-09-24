@@ -176,6 +176,15 @@
         "matcher": "Write|Edit"
       },
       {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/check-header-comment.sh"
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "command": "~/.claude/hooks/check-question-legibility.sh",
