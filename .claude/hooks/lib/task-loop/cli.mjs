@@ -241,12 +241,11 @@ function observe(ctx) {
 //   停滞を見るためのもので、人の応答の遅さは別物だから。代わりに答え待ちが --answer-timeout-hours 続いたら止まる
 //   (中断で取り残された記録や herdr の読み違いで、無期限に待たないため)。窓の題名が <計画> T<n> / amend /
 //   breakdown のまま残り、何を待たれているかは見える
-// - ターンの途中(hook の running・herdr の working)と Codex worker の実行中(ロック): 待つ
+// - ターンの途中(hook の running・herdr の working)、ターンが終わっても裏の処理が走っている(hook の stopped に
+//   background。完了通知で再開するまでの空白。turn.mjs の経緯)、Codex worker の実行中(ロック): 待つ
 // - 判定できない(hook が待つ理由を示さず herdr も読めない): 静かな時間を数えずに待ち、HERDR_GRACE_MS 続いたら止まる
 // - それ以外: 落ち着いた状態が settle の間続いたら落ち着いたとみなす(worker の完了通知で監督のターンが再開する間を空ける)
 // 成果物の完了は毎周の最初に見るので、herdr が読めない間も完了したものは先へ進む。
-// 既知の穴: ターンが終わって(hook は stopped)バックグラウンド処理の完了通知で再開するまでの間は、herdr の working と
-// worker のロックしか待つ理由が無い。T106(2026-09-24)ではこの空白が 97〜810 秒で 11 回あり、--settle-sec の既定 90 秒より長い
 function settle(ctx, deadline, isComplete, logTask, session) {
   let quietSince = null;
   let quietPausedAt = null; // 落ち着いた状態の途中で判定できなくなった時刻。読めない間は静かな時間に数えない

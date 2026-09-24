@@ -22,7 +22,8 @@ const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.m
 //   flaky_work: turn は running のまま、get に herdr の失敗と unknown を交互に 5 回、working を 2 回返してから
 //   complete する(作業中に herdr が読めない場面と、読めるようになる場面)/ herdr_down: ターンを終え(stopped)、以後の get をすべて失敗させる /
 //   herdr_blip: ターンを終え、get を 3 回失敗させてから complete する / quick: running を書かずに stopped だけ書いて
-//   complete する(最初の見直しの前に終わる短いターン)/
+//   complete する(最初の見直しの前に終わる短いターン)/ background: hook と同じくターンの終わりに裏の処理が 1 件
+//   走っていると書き(画面は idle)、get を 5 回受けたら complete する(完了通知で再開するまでの空白)/
 //   stage_end: complete に加えて HANDOFF.md の次の一手を /breakdown docs/design/plan.md にする /
 //   hidden_question: 画面は idle のまま、hook と同じく turn を awaiting_user と書き、get を 5 回受けたら人が答えた形にする
 //   (名前の罫線で herdr が問いの画面を見逃す場面)/ silent_work: 同じく idle のまま turn を running と書き、get を 5 回
@@ -91,9 +92,9 @@ const amend = (how, task) => {
 const HIDDEN_GETS = 5;
 // hook(loop-turn.mjs)と同じく、turns/<id>.json を丸ごと置き換える
 const turnFile = () => path.join(process.env.XDG_STATE_HOME, "claude-task-loop", "turns", s.session + ".json");
-const writeTurn = (state, event = "fake") => {
+const writeTurn = (state, event = "fake", extra = {}) => {
   fs.mkdirSync(path.dirname(turnFile()), { recursive: true });
-  fs.writeFileSync(turnFile(), JSON.stringify({ state, event, at: Date.now() }));
+  fs.writeFileSync(turnFile(), JSON.stringify({ state, event, at: Date.now(), ...extra }));
 };
 const accept = () => { if (s.host !== "codex") writeTurn("running", "UserPromptSubmit"); };
 const endTurn = () => { if (s.host !== "codex") writeTurn("stopped", "Stop"); };
@@ -140,6 +141,11 @@ if (args[1] === "get") {
     if (s.downLeft === 0) complete(s.pending);
     save();
     fail("timeout");
+  }
+  if (s.bgLeft > 0) {
+    s.bgLeft -= 1;
+    if (s.bgLeft === 0) { complete(s.pending); endTurn(); }
+    save();
   }
   if (s.flakyLeft > 0) {
     s.flakyLeft -= 1;
@@ -251,7 +257,9 @@ if (args[1] === "prompt") {
   if (action === "flaky_work") { s.flakyLeft = 8; s.pending = task; }
   if (action === "herdr_down") s.down = true;
   if (action === "herdr_blip") { s.downLeft = 3; s.pending = task; }
-  if (!["question", "hidden_question", "silent_work", "working", "flaky_work"].includes(action)) endTurn();
+  if (action === "background") { s.bgLeft = HIDDEN_GETS; s.pending = task; }
+  if (!["question", "hidden_question", "silent_work", "working", "flaky_work", "background"].includes(action)) endTurn();
+  if (action === "background") writeTurn("stopped", "Stop", { background: 1 });
   save();
   ok(agent());
 }
@@ -845,6 +853,16 @@ test("答え待ちが --answer-timeout-hours を超えたら answer_timeout で�
     assert.equal(code, 2);
     assert.match(json.errors.join(), /--answer-timeout-hours/);
     assert.deepEqual(t.prompts(), []);
+  } finally { t.cleanup(); }
+});
+
+test("ターンが終わっても裏の処理が走っている間は、画面が idle でも落ち着いたとみなさずに待つ", () => {
+  const t = setup({ scenario: { T1: ["background"] } });
+  try {
+    const { code, json } = t.run("--tasks", "T1");
+    assert.equal(code, 0, `T106 の完了通知で再開するまでの空白(97〜810 秒)で判定へ進まない: ${JSON.stringify(json)}`);
+    assert.equal(json.reason, "all_done");
+    assert.equal(t.state().bgLeft, 0);
   } finally { t.cleanup(); }
 });
 

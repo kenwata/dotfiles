@@ -16,7 +16,12 @@
 // PostToolUse が記録を新しくする。Bash ツールの上限 10 分に余裕を持たせた値
 export const STALE_RUNNING_MS = 30 * 60_000;
 
-// 状態の値域。running: ターンの途中 / awaiting_user: 問い・許可の確認で利用者の答えを待つ / stopped: ターンを終えた
+// 状態の値域。running: ターンの途中 / awaiting_user: 問い・許可の確認で利用者の答えを待つ / stopped: ターンを終えた。
+// stopped には、ターンを終えた時に走っていた裏の処理(run_in_background の Bash・サブエージェントなど)の数を
+// background として添える(0 なら書かない)。裏の処理が終わると完了通知でターンが再開するので、その間は待つ。
+// 経緯(2026-09-24): T106 ではターンの終わりから完了通知での再開までの空白が 97〜810 秒で 11 回あり、画面の判定だけでは
+// 落ち着いたと取り違えうる(--settle-sec の既定 90 秒より長い)。Stop の hook の入力の background_tasks
+// (Claude Code 2.1.281 で採取: [{ id, type: "shell", status: "running", description, command }])で埋める
 export const TURN_STATE = Object.freeze({ running: "running", awaitingUser: "awaiting_user", stopped: "stopped" });
 
 // 問いの画面を出すツール。PreToolUse のこれだけを答え待ちとして記録する
@@ -29,16 +34,19 @@ const STOPPED_EVENTS = new Set(["Stop", "StopFailure"]);
  * hook の入力から、記録するターンの状態を決める。
  * PreToolUse の AskUserQuestion は、品質ゲートの hook が拒否して画面が出ないこともある。その時も次のツールの
  * PostToolUse か Stop で上書きされるので、答え待ちが残り続けることはない。
- * @param {{ hook_event_name?: string, tool_name?: string, agent_id?: string }} input hook の標準入力(JSON を読んだもの)
+ * @param {{ hook_event_name?: string, tool_name?: string, agent_id?: string, background_tasks?: unknown }} input hook の標準入力(JSON を読んだもの)
  * @param {number} now 記録する時刻(ミリ秒)
- * @returns {{ state: string, event: string, at: number } | null} 記録する状態。サブエージェントの発火・扱わない event なら null
+ * @returns {{ state: string, event: string, at: number, background?: number } | null} 記録する状態。サブエージェントの発火・扱わない event なら null
  */
 export function turnFromHook(input, now) {
   const event = input.hook_event_name;
   if (input.agent_id || !event) return null;
   const at = (state) => ({ state, event, at: now });
   if (RUNNING_EVENTS.has(event)) return at(TURN_STATE.running);
-  if (STOPPED_EVENTS.has(event)) return at(TURN_STATE.stopped);
+  if (STOPPED_EVENTS.has(event)) {
+    const background = Array.isArray(input.background_tasks) ? input.background_tasks.filter((t) => t?.status === "running").length : 0;
+    return background > 0 ? { ...at(TURN_STATE.stopped), background } : at(TURN_STATE.stopped);
+  }
   if (event === "PermissionRequest") return at(TURN_STATE.awaitingUser);
   if (event === "PreToolUse" && input.tool_name === QUESTION_TOOL) return at(TURN_STATE.awaitingUser);
   return null;
@@ -49,7 +57,7 @@ export function turnFromHook(input, now) {
  * hook の記録を先に見て、herdr は「待つ」方向の証拠を足すだけにする(2026-09-24 利用者と合意。herdr は画面を
  * 読んだ推測で、名前の罫線の下の問いの画面を idle と見逃し、画面の判定を外すこともある)。優先順:
  *   1. hook の awaiting_user、または herdr の blocked → awaiting_user
- *   2. hook の running(STALE_RUNNING_MS 以内)、または herdr の working → busy
+ *   2. hook の running(STALE_RUNNING_MS 以内)、hook の stopped に裏の処理が残っている、または herdr の working → busy
  *   3. herdr の状態が取れない(失敗・unknown) → no_evidence(落ち着いたとはみなさない)
  *   4. それ以外 → quiet
  * herdr だけが blocked の時も答え待ちにするのは、サブエージェントの問い(agent_id 付きの発火は記録しない)・MCP の
@@ -61,7 +69,8 @@ export function turnFromHook(input, now) {
  * 中断で取り残された awaiting_user は問いの画面と区別できないので、答えを待ち続ける(誤って進むより安全なため)。
  * hook の記録が無いホスト(Codex)・環境では herdr だけで決まる。
  * @param {string | null} agentStatus herdr の agent_status(idle / done / working / blocked)。取れない・unknown なら null
- * @param {{ state: string, at: number } | null | undefined} turn turns/<id>.json の内容
+ * 裏の処理が残る stopped は古さで打ち切らない(Codex worker の待機など長い処理があるため)。作業の制限時間で区切る。
+ * @param {{ state: string, at: number, background?: number } | null | undefined} turn turns/<id>.json の内容
  * @param {number} now 今の時刻(ミリ秒)。running が STALE_RUNNING_MS より古いかを見る
  * @returns {"awaiting_user" | "busy" | "no_evidence" | "quiet"} awaiting_user: 利用者の答えを待つ(作業の制限時間に
  *   数えない)/ busy: ターンの途中なので待つ / no_evidence: 判定できないので静かな時間を数えずに待つ /
@@ -70,6 +79,7 @@ export function turnFromHook(input, now) {
 export function waitPhase(agentStatus, turn, now) {
   if (turn?.state === TURN_STATE.awaitingUser || agentStatus === "blocked") return "awaiting_user";
   if (turn?.state === TURN_STATE.running && now - turn.at < STALE_RUNNING_MS) return "busy";
+  if (turn?.state === TURN_STATE.stopped && turn.background > 0) return "busy";
   if (agentStatus === "working") return "busy";
   if (agentStatus === null || agentStatus === undefined) return "no_evidence";
   return "quiet";

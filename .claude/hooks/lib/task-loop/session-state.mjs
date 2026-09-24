@@ -10,7 +10,7 @@
 //     compact … hook が compact を検知した時に書く({ at, trigger })。ループはこれを見て止まる
 //   statusline/<session_id>.json { session_id, at, used_percentage, context_window_size, current_usage, five_hour_pct }
 //     statusline.sh が描画のたびに書く。Claude の使用率の源(hook の入力には使用率が無い)
-//   turns/<session_id>.json      { state, event, at }
+//   turns/<session_id>.json      { state, event, at, background? }
 //     ../../loop-turn.mjs が、sessions/<id>.json に loop があるセッション(Claude)でだけ書くターンの状態
 //     (値域と経緯は turn.mjs)。ループは送る前に消し(cli.mjs の openTurn)、送信の受理の確かめ(waitAccepted)と
 //     settle で読む。sessions/<id>.json に

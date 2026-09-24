@@ -32,6 +32,17 @@ test("turnFromHook は Stop と StopFailure を stopped にする", () => {
   }
 });
 
+test("turnFromHook は Stop の時に走っている裏の処理の数を background に記録し、終わったものは数えない", () => {
+  // 形は 2026-09-24 に claude -p の Stop の hook で採取したもの(Claude Code 2.1.281)
+  const tasks = [
+    { id: "b1", type: "shell", status: "running", description: "sleep 40", command: "sleep 40" },
+    { id: "b2", type: "shell", status: "completed", description: "echo", command: "echo" },
+  ];
+  assert.deepEqual(turnFromHook({ hook_event_name: "Stop", background_tasks: tasks }, NOW), { state: "stopped", event: "Stop", at: NOW, background: 1 });
+  assert.deepEqual(turnFromHook({ hook_event_name: "Stop", background_tasks: [] }, NOW), { state: "stopped", event: "Stop", at: NOW });
+  assert.deepEqual(turnFromHook({ hook_event_name: "Stop", background_tasks: "x" }, NOW), { state: "stopped", event: "Stop", at: NOW }, "形が違えば数えない");
+});
+
 test("turnFromHook はサブエージェントの発火と、扱わない event・空の入力を記録しない", () => {
   assert.equal(turnFromHook({ hook_event_name: "PostToolUse", agent_id: "a1" }, NOW), null);
   assert.equal(turnFromHook({ hook_event_name: "SessionStart" }, NOW), null);
@@ -57,6 +68,12 @@ test("waitPhase は hook の running と herdr の working のどちらかがあ
   assert.equal(waitPhase(null, { state: "running", at: NOW }, NOW), "busy", "herdr が取れなくても hook で決まる");
   assert.equal(waitPhase("working", { state: "stopped", at: NOW }, NOW), "busy", "Stop の後にバックグラウンドの完了で再開した形");
   assert.equal(waitPhase("working", null, NOW), "busy");
+});
+
+test("waitPhase は hook がターンの終わりに裏の処理が走っていると書いていれば busy にする(完了通知で再開するまでの空白)", () => {
+  assert.equal(waitPhase("idle", { state: "stopped", at: NOW, background: 1 }, NOW), "busy");
+  assert.equal(waitPhase(null, { state: "stopped", at: NOW, background: 2 }, NOW), "busy");
+  assert.equal(waitPhase("idle", { state: "stopped", at: NOW - 10 * STALE_RUNNING_MS, background: 1 }, NOW), "busy", "裏の処理の長さは作業の制限時間で区切る");
 });
 
 test("waitPhase は hook の running が STALE_RUNNING_MS より古ければ、中断で取り残された記録とみなす", () => {
