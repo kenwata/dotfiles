@@ -341,8 +341,16 @@ test("verify は packet の検証節のコマンドを 1 本ずつ打ち、コ�
     assert.equal(verified.json.commands[1].tail, "checked");
     assert.equal(fs.readFileSync(verified.json.commands[1].log, "utf8"), "checked\n");
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(json.run_dir, "verify.json"), "utf8")), verified.json);
+    const verifyLines = [
+      /^\[Codex T7 s1 1\/2\] \d{2}:\d{2}:\d{2} verify \$ test -f src\/a\/impl\.ts$/m,
+      /^\[Codex T7 s1 1\/2\] \d{2}:\d{2}:\d{2} verify   ✗ exit 3$/m,
+      /^\[Codex T7 s1 1\/2\] \d{2}:\d{2}:\d{2} verify finished: 1\/2 ok$/m,
+    ];
     for (const line of ["verify $ test -f src/a/impl.ts", "verify   ✗ exit 3", "verify finished: 1/2 ok"]) {
       assert.ok(verified.stderr.includes(line), `${line} が無い:\n${verified.stderr}`);
+    }
+    for (const out of [verified.stderr, fs.readFileSync(t.statusLog, "utf8")]) {
+      for (const line of verifyLines) assert.match(out, line);
     }
     assertStatusLogLines(verified.stderr);
     assertStatusLogLines(fs.readFileSync(t.statusLog, "utf8"));
