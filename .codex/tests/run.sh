@@ -125,7 +125,8 @@ cmp "$fake_home/herdr-input.expected" "$fake_home/herdr-input.actual"
 node --test "$repo_root/.codex/tests/hooks.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/mainline-gauge/test/gauge.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/core.test.mjs"
-node --test "$repo_root/.claude/hooks/lib/codex-worker/test/cli.test.mjs"
+# cli の試験は主題ごとのファイルに分けてあり、1 回の node --test でファイルを並列に走らせる
+node --test "$repo_root/.claude/hooks/lib/codex-worker/test/"cli-*.test.mjs
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/worklog.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/status.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/timing.test.mjs"
