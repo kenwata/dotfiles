@@ -9,7 +9,7 @@ import {
 } from "../git.mjs";
 import { readWorktreeRecordForRun } from "../worktree/record.mjs";
 import {
-  activeWorkerLock, canonical, workerLockPath,
+  activeWorkerLock, activeWorkerLocks, canonical, workerLockPath,
 } from "../../../check-task-scope.mjs";
 import {
   buildPrompt, checkAllow, checkPacketCrossCheck, checkPacketVerify, packetVerifyCommands,
@@ -20,6 +20,8 @@ import { renderSummary } from "../status.mjs";
 import { timingMetrics } from "../timing.mjs";
 import { readPlan, readWorklog, runsDir, taskDir } from "../worklog.mjs";
 import { ensureWorktree } from "../worktree.mjs";
+import { ensureStepWorktree } from "../worktree/steps.mjs";
+import { DEFAULT_MAX_PARALLEL, parallelLockErrors } from "../parallel.mjs";
 import {
   emit, recordWorklog, runWorkspace, statusWriter, stepLabel,
 } from "../output.mjs";
@@ -43,7 +45,9 @@ export function pruneOldRuns() {
 }
 
 /** Resolve the task worktree after checking the source workspace and mixed-mode history.
- * @param {{ root: string, task: string, workspace: string }} options
+ * With `parallel`, the run works in the step's own worktree cut from the task worktree's branch.
+ * @param {{ root: string, task: string, workspace: string, step?: string,
+ *   parallel?: boolean }} options
  * @returns {{
  *   workspace: string,
  *   worktree: { repo: string, path: string, branch: string } | null,
@@ -51,7 +55,7 @@ export function pruneOldRuns() {
  *   errors: string[]
  * }}
  */
-export function prepareWorktreeRun({ root, task, workspace }) {
+export function prepareWorktreeRun({ root, task, workspace, step, parallel = false }) {
   const errors = workspaceErrors(root, workspace);
   if (errors.length > 0) {
     return { workspace, worktree: null, relocate: null, errors };
@@ -94,6 +98,9 @@ export function prepareWorktreeRun({ root, task, workspace }) {
   let ensured;
   try {
     ensured = ensureWorktree({ root, task, repo: mainRepo });
+    if (ensured.ok && parallel && step) {
+      ensured = ensureStepWorktree({ root, task, step, taskRecord: ensured.record });
+    }
   } catch (error) {
     if (!(error instanceof SyntaxError) && !(error instanceof TypeError)
       && !hasNodeSystemErrorCode(error) && !hasProcessExitStatus(error)) throw error;
@@ -138,18 +145,26 @@ export async function run(args) {
   const maxAllow = Number(args["max-allow"] ?? DEFAULTS.maxAllow);
   const peakThreshold = Number(args["peak-threshold"] ?? DEFAULTS.peakThreshold);
 
+  const parallel = Boolean(args.parallel);
+  const maxParallel = Number(args["max-parallel"] ?? DEFAULT_MAX_PARALLEL);
+
   const errors = [];
   const validTask = /^T\d+$/.test(task ?? "");
+  if (parallel && !args.worktree) {
+    errors.push("--parallel は --worktree と一緒に使う(ステップ専用の worktree で動かすため)");
+  }
+  if (!Number.isInteger(maxParallel) || maxParallel < 1) errors.push("--max-parallel は 1 以上の整数");
   if (args.worktree) {
     if (!args.workspace) errors.push("--worktree を使うには --workspace が必要");
     if (!root) errors.push(`git のリポジトリではない: ${requestedRoot}`);
     if (!validTask) errors.push("--task は T<n>");
+    if (parallel && !step) errors.push("--step が無い");
     if (errors.length > 0) {
       emit({ accepted: false, stage: "preflight", errors, warnings: [] }, null, 2);
       return;
     }
 
-    const prepared = prepareWorktreeRun({ root, task, workspace });
+    const prepared = prepareWorktreeRun({ root, task, workspace, step, parallel });
     errors.push(...prepared.errors);
     if (errors.length > 0) {
       emit({ accepted: false, stage: "preflight", errors, warnings: [] }, null, 2);
@@ -207,8 +222,18 @@ export async function run(args) {
       errors.push(`ステップ ${step} が ${task} の計画(${plan.file})に無い。ステップを切り直したなら cli.mjs plan で計画を登録し直す`);
     }
   }
-  const running = root ? activeWorkerLock(lockRoot(workspace)) ?? activeWorkerLock(root) : null;
+  // 並列ステップの兄弟との照合は worktree の最上位からの相対で行う(兄弟は別々の worktree で動くため)。
+  // 検査とロックの書き込みの間は原子的でないので、監督は並列ステップを 1 つずつ起動する(同時に打たない)
+  const allowKeys = worktree
+    ? allow.map((a) => path.relative(worktree.path, path.resolve(workspace, a)))
+    : allow;
+  const ledgerLock = parallel || !root ? null : activeWorkerLock(root);
+  const running = root ? activeWorkerLock(lockRoot(workspace)) ?? ledgerLock : null;
   if (running) errors.push(`別の worker が実行中: ${running.task} ステップ ${running.step}`);
+  if (parallel && root) {
+    const locks = activeWorkerLocks();
+    errors.push(...parallelLockErrors({ locks, root, task, allowKeys, maxParallel }));
+  }
   if (errors.length === 0) errors.push(...sandboxErrors(home, workspace));
   const resolved = errors.length === 0 ? resolveModel(args, home) : { model: null };
   if (resolved.error) errors.push(resolved.error);
@@ -245,7 +270,10 @@ export async function run(args) {
   // root しか知らない task-loop と resume が activeWorkerLock(root) で見つけるため
   const lockFile = workerLockPath(lockRoot(workspace));
   const expiresAt = Date.now() + (timeoutSec + 60) * 1000;
-  const lock = { root: workspace, taskRoot: root, task, step, runDir, pid: process.pid, expiresAt };
+  const lock = {
+    root: workspace, taskRoot: root, task, step, runDir, pid: process.pid, expiresAt,
+    ...(parallel ? { parallel: true, allowKeys } : {}),
+  };
   fs.mkdirSync(path.dirname(lockFile), { recursive: true, mode: 0o700 });
   fs.writeFileSync(lockFile, JSON.stringify(lock));
   let child = null;

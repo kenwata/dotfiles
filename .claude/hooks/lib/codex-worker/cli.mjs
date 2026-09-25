@@ -11,10 +11,17 @@
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs resume --root <プロジェクトルート> --task T<n>
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs run --root <プロジェクトルート> --task T<n> --step <番号>
 //        --packet <packet.md> --allow <パス> [--allow <パス> ...(既定で 3 件まで)]
-//        [--workspace <リポジトリ>] [--worktree]
+//        [--workspace <リポジトリ>] [--worktree [--parallel [--max-parallel <件数>]]]
 //        [--model-family <luna|terra|sol ...> | --model <モデル ID>] [--timeout <秒>]
 //        [--max-packet <バイト>] [--max-allow <件数>] [--peak-threshold <0〜1>]
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs integrate --root <root> --task T<n>
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs integrate-step --root <root> --task T<n>
+//        --step <番号>
+//   --parallel は依存の無いステップを同時に走らせる(--worktree と一緒に使う)。ステップ専用の worktree
+//   (worktree/steps.mjs。T の worktree のブランチの先端から切る)で worker を動かし、同じ T の並列ステップどうしだけ
+//   同時に起動できる。同時数の上限(既定 3、--max-parallel)と、走っている兄弟と許可パスが重なる起動は拒否する
+//   (parallel.mjs)。受け入れたステップは監督がその worktree でコミットし、integrate-step で T の worktree へ取り込む。
+//   T の integrate は、取り込んでいないステップの worktree が残っている間は拒否する
 //   --workspace は worker が書くリポジトリ(既定は --root)。T の対象がプロジェクトの外の
 //   リポジトリ(dotfiles など)にある時に使う。--root は帳簿(TODO.md・ステップ計画・作業記録・
 //   状態行)の場所のまま、worker の起動(codex exec -C)・snapshot・ゲート・restore・ロック・verify は
@@ -28,7 +35,7 @@
 //   実行中の状態行(コマンド・編集したファイル・進捗・トークン・判定)は stderr と
 //   ${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/status/<ルートのパスの記号を - にした名前>.log に出す
 //   (人が追うためのもの。report ではない。プロジェクトごとに分けるのは、同じリポジトリでは worker が同時に 1 つなので
-//   混ざらないため)。
+//   混ざらないため。--parallel の兄弟ステップは同じログに書くが、行の前置きのステップ番号で分けて読める)。
 //   run の記録は ${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/runs/ に置く(worker の sandbox は
 //   TMPDIR と /tmp に書けるので、restore の元になる退避コピーをそこに置かない)。7 日より古い記録は run の度に消す。
 //
@@ -67,7 +74,7 @@ import { parseArgs } from "node:util";
 import { emit } from "./output.mjs";
 import { restoreRun, verifyRun } from "./commands/run-review.mjs";
 import { run } from "./commands/run.mjs";
-import { integrateTask, worktreeTask } from "./commands/task-worktree.mjs";
+import { integrateStepTask, integrateTask, worktreeTask } from "./commands/task-worktree.mjs";
 import { noteTask, registerPlan, resumeTask, showTask } from "./commands/task-ledger.mjs";
 
 let parsed;
@@ -81,7 +88,8 @@ try {
       "peak-threshold": { type: "string" }, run: { type: "string" }, keep: { type: "string", multiple: true },
       file: { type: "string" }, kind: { type: "string" }, text: { type: "string" }, from: { type: "string" },
       changed: { type: "string" }, json: { type: "boolean" }, workspace: { type: "string" },
-      worktree: { type: "boolean" },
+      worktree: { type: "boolean" }, parallel: { type: "boolean" },
+      "max-parallel": { type: "string" },
       remove: { type: "boolean" }, force: { type: "boolean" },
     },
   });
@@ -97,6 +105,7 @@ if (parsed) {
   else if (command === "show") showTask(parsed.values);
   else if (command === "note") noteTask(parsed.values);
   else if (command === "integrate") integrateTask(parsed.values);
+  else if (command === "integrate-step") integrateStepTask(parsed.values);
   else if (command === "worktree") worktreeTask(parsed.values);
   else if (command === "resume") resumeTask(parsed.values);
   else emit({
@@ -104,6 +113,7 @@ if (parsed) {
       "plan ...",
       "run ...",
       "integrate --root <root> --task T<n>",
+      "integrate-step --root <root> --task T<n> --step <番号>",
       "worktree --root <root> --task T<n> [--json] [--remove [--force]]",
       "show ... [--json]",
       "note ...",

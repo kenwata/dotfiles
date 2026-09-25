@@ -23,6 +23,9 @@ import {
   worktreeStatus,
 } from "../worktree.mjs";
 import { forceRemoveTaskWorktree, removeWorktree } from "../worktree/removal.mjs";
+import {
+  integrateStepWorktree, pendingStepWorktrees, readStepWorktreeRecord,
+} from "../worktree/steps.mjs";
 import { emit, recordWorklog } from "../output.mjs";
 
 /** @typedef {import("../worktree/record.mjs").WorktreeRecord} WorktreeRecord */
@@ -47,6 +50,14 @@ export function integrateTask(args) {
   const { record, errors: recordErrors } = readWorktreeRecordForRun(root, task);
   if (recordErrors.length > 0) {
     emit({ errors: recordErrors }, null, 2);
+    return;
+  }
+
+  const pending = pendingStepWorktrees(root, task);
+  if (pending.length > 0) {
+    const steps = pending.map((step) => `s${step}`).join(", ");
+    const reason = `統合していないステップの worktree がある: ${steps}。integrate-step で取り込んでから統合する`;
+    emit({ errors: [reason] }, null, 2);
     return;
   }
 
@@ -75,6 +86,76 @@ export function integrateTask(args) {
       ...(result.report.cleanup_errors === undefined ? {} : { cleanup: "failed" }),
     },
     text: "worktree を本体へ統合",
+  });
+  emit(result.report, null, 0);
+}
+
+/** Validate integrate-step arguments and read the task and step worktree records.
+ * @param {{ root?: string, task?: string, step?: string }} args
+ * @returns {{ root: string, task: string, step: string, taskRecord: WorktreeRecord,
+ *   stepPath: string } | { errors: string[] }}
+ */
+function readStepIntegration(args) {
+  const requestedRoot = path.resolve(args.root ?? ".");
+  const root = gitRoot(requestedRoot);
+  const { task, step } = args;
+  const errors = [];
+  if (!root) errors.push(`git のリポジトリではない: ${requestedRoot}`);
+  if (!/^T\d+$/.test(task ?? "")) errors.push("--task は T<n>");
+  if (!/^\d+$/.test(step ?? "")) errors.push("--step は番号");
+  if (!root || errors.length > 0) return { errors };
+
+  const { record: taskRecord, errors: recordErrors } = readWorktreeRecordForRun(root, task);
+  if (recordErrors.length > 0) return { errors: recordErrors };
+  if (!taskRecord) return { errors: [`${task} の worktree の記録が無い`] };
+
+  let stepRecord;
+  try {
+    stepRecord = readStepWorktreeRecord(root, task, step);
+  } catch (error) {
+    return { errors: [`ステップ ${step} の worktree の記録を読めない: ${processErrorText(error)}`] };
+  }
+  if (!stepRecord) return { errors: [`ステップ ${step} の worktree の記録が無い`] };
+  return { root, task, step, taskRecord, stepPath: stepRecord.path };
+}
+
+/** Bring one accepted, committed parallel step into the task worktree and remove the step worktree.
+ * Refuses while a worker runs in the step worktree or the task worktree.
+ * @param {{ root?: string, task?: string, step?: string }} args Ledger root, task, and step number.
+ * @returns {void} Emits the integration report and sets the command exit code.
+ * @throws {Error} If an unexpected record, lock, or Git operation fails.
+ */
+export function integrateStepTask(args) {
+  const read = readStepIntegration(args);
+  if ("errors" in read) {
+    emit({ errors: read.errors }, null, 2);
+    return;
+  }
+
+  const { root, task, step, taskRecord, stepPath } = read;
+  const running = activeWorkerLock(lockRoot(stepPath))
+    ?? activeWorkerLock(lockRoot(taskRecord.path));
+  if (running) {
+    emit({ errors: [`別の worker が実行中: ${running.task} ステップ ${running.step}`] }, null, 2);
+    return;
+  }
+
+  const result = integrateStepWorktree({ root, task, step, taskRecord });
+  if (!result.ok) {
+    emit({ errors: result.errors }, null, result.code);
+    return;
+  }
+
+  recordWorklog(root, task, {
+    kind: "integrate",
+    step,
+    by: "runner",
+    keys: {
+      branch: result.report.branch,
+      commits: result.report.commits,
+      ...(result.report.cleanup_errors === undefined ? {} : { cleanup: "failed" }),
+    },
+    text: "ステップの worktree を T の worktree へ統合",
   });
   emit(result.report, null, 0);
 }

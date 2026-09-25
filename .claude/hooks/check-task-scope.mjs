@@ -300,7 +300,8 @@ export function activeWorkerLock(root) {
   return activeWorkerLocks().find(forTaskRoot) ?? null;
 }
 
-function activeWorkerLocks() {
+// 生きている worker のロックをすべて返す(runner の並列ステップの起動前検査が、同じ帳簿の root の兄弟を数えるのに使う)
+export function activeWorkerLocks() {
   let names;
   try { names = fs.readdirSync(stateDir()).filter((name) => name.startsWith("worker-lock-")); } catch { return []; }
   return names.map((name) => readWorkerLock(path.join(stateDir(), name))).filter(Boolean);
