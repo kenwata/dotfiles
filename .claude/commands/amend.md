@@ -1,7 +1,7 @@
 ---
 description: 設計書 docs/design/<slug>.md の一部と、影響を受ける未着手タスクを一回で改訂する。実行中に見つかった設計の穴、または利用者が指示した単発の追加が対象。新しい計画行は作らず、設計書の目的・スコープが変わるなら /elaborate へ回す
 argument-hint: T<n>(穴の記録を持つ中断中のタスク。利用者指示の改訂では省略可)
-allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Agent, Bash(ls:*), Bash(date:*), Bash(grep:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git diff:*), Bash(git add:*), Bash(git commit:*), Bash(git log:*)
+allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Agent, Bash(ls:*), Bash(date:*), Bash(grep:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git diff:*), Bash(git add:*), Bash(git commit:*), Bash(git log:*), Bash(node:*)
 ---
 
 設計の穴、または利用者が指示した単発の変更を、設計書の該当節と `TODO.md` の未着手タスクへ「部分改訂」として着地させてください。本コマンドの目的は、小さな修正を小さな経路で終わらせ、中断した `T<n>` へ戻ることである。計画粒度のやり直し(`/elaborate` → `/breakdown`)の代わりではない。変更の大きさと経路の対応の正は `~/.claude/templates/BLUEPRINT.md` §6「変更の三段分類」。開始時に `~/.claude/templates/model-routing.md` を読み、「設計の部分改訂」の役割のモデルに従う(現在のモデルが基準未満なら作業を始めず、必要なプロファイルでの再実行を案内する)。要点:
@@ -30,7 +30,7 @@ allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Agent, Bash(ls:*)
    - `docs/design/index.md` がある場合、該当行の `T` 列を「タスク分解」節と同じ表記へ更新する(他の列・他の行には触らない)。
    - `HANDOFF.md`: 「仕掛かり中」の穴の記録のうち解消したものを消し、「次セッションの最初の一手」を中断していた `/execute-task T<n>` へ戻す(その `T<n>` を廃止した場合は置き換え先、または次の未着手タスク)。書式は同ファイル冒頭の雛形コメントに従い全体上書き。
    - **新しい計画行は作らない**(1 フェーズ = 1 設計書 = 1 計画行を保つ)。新しい設計書も作らない。
-7. **検証**: ①追記位置マーカーの残存 ②タスク表の行と完了条件ブロックの 1 対 1(`共通の前提(` で始まる段落は対象外)③`T<n>` の重複なし・`#<n>-<m>` の計画内重複なしと昇順 ④完了条件を変えた・廃止した全 `T<n>` に `docs/decisions.md` の行があること(`git diff` で変わった完了条件ブロックを列挙して突合)⑤設計書「タスク分解」節・索引の `T` 列・`TODO.md` の該当計画の T が一致すること ⑥`T<n>` 以外の未定義省略ID が着地物に残っていないこと ⑦改訂後のタスクのコールドスタートテスト(着地物だけを読んだ新セッションが会話履歴なしで着手できるか)。
+7. **検証**: `node ~/.claude/hooks/lib/markdown-header-rule-check/cli.mjs <プロジェクトルート> --base HEAD` を実行し、今回の改訂に関わる `NG` の行を直して `result: ok` になるまで繰り返す(冒頭に規約コメントを持つ文書が、その規約どおりかを検査する。改訂に効くのは、追記位置マーカー、タスク表の行と完了条件ブロックの 1 対 1、`T<n>` と `#<n>-<m>` の重複と順序、設計書「タスク分解」節・索引の `T` 列・`TODO.md` の該当計画の T の一致、完了条件を変えた・廃止した `T<n>` ごとの `docs/decisions.md` の行、`docs/decisions.md` が追記だけで変わったか、`HANDOFF.md` の要確認の回収点。`--base HEAD` は未コミットの改訂を変更前と比べるため。検査の中身の正は同 CLI)。改訂の前から残っていた `NG`(今回触れていない計画のもの)は直さず報告に載せる。CLI が見ない次の 2 点は自分で確かめる: ①`T<n>` 以外の未定義省略ID が着地物に残っていないこと ②改訂後のタスクのコールドスタートテスト(着地物だけを読んだ新セッションが会話履歴なしで着手できるか)。
 8. **コミットと報告**(BLUEPRINT §6 の書式で自動実行): prefix は `amend`。要約 `amend: <slug> の設計を改訂(T<n> 由来)`(利用者指示経路では `(利用者指示)`)、本文に「タスク:」「対応:」。prefix が `amend` のコミットは、`/execute-task` と `/follow-up` が数える「完了した T の件数」に含まれない。報告には、段の判定、目標への照合先(`plan.md §<節番号> / <フェーズ見出し>`、`plan.md` が無ければ設計書の「目的(アウトカム)」、それも無ければ「照合先なし」)、設計書の変更節、書き換えた・追加した・廃止した `T<n>`、緩和に当たる変更の有無、改訂案に入れなかった改善案、次の一手を簡潔に示す。push はしない。
 
 実行時機の原則: 対象は **`TODO.md` に計画行を持つ既存の設計書 1 本と、その計画行の未着手タスク** だけ。まだ分解されていない設計書(計画行が無い。`/breakdown` が設計の不足で差し戻した場合を含む)の修正は、書き換えるタスクが無いので本コマンドではなく `/elaborate` が行う。新しいフェーズ・施策(既存のどの設計書の「目的」にも収まらない)は `/elaborate` → `/breakdown`。同じ `T<n>` に対して本コマンドが繰り返し必要になる場合は、設計書の前提そのものが崩れている兆候なので、3 回目を実行する前に止め、`/elaborate` での見直しを利用者に提案する。
