@@ -11,6 +11,7 @@ writable_roots = [
   "{{HOME}}/.agents/skills/agmsg/run",
   "{{HOME}}/.agents/skills/agmsg/db",
   "{{HOME}}/.agents/skills/agmsg/teams",
+  "{{HOME}}/workspace/repos/dotfiles",
 ]
 
 [agents]
