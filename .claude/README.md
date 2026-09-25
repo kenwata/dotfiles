@@ -316,11 +316,11 @@ TODO 等が行数予算を超えた初回ローテーション時に生成され
    `task-loop T12..T16` で範囲)と打てば続けて回せる。1 回の起動は /follow-up の 1 区間で、checkpoint 以後の完了が 5 件に達したら
    (回す作業が尽きた時も含めて)/follow-up を送り、checkpoint が増えたらそこで終える。送る先は同じプロジェクトで入力待ちのペインを自動で選び、無ければ
    隣に作って起動する(T ごとに /clear。引数なしの時は工程を 1 つ終えるたびに HANDOFF.md の次の一手を読み直し、TODO.md の並びからは選ばない。
-   穴の記録なら /amend T<n> を送って次の一手の T へ戻る。次の一手が /breakdown なら送って続ける(/breakdown は引数なしの時だけ)。
+   穴の記録なら /amend T<n> を送って次の一手の T へ戻る。次の一手が引数なしの /amend(利用者指示経路)・/breakdown なら送って続ける(どちらも引数なしの起動の時だけ)。
    承認・関門・要確認の問いは答えるまで待つ(上限は --answer-timeout-hours、既定 24 時間)。次の一手が /elaborate・コマンド無し・済んだ T、同じ T で 2 回目の穴・依存の未完了・compact などで止まり、
    理由と次の一手を JSON で出す)。
    Claude のペインは窓の題名で何をしているか分かるよう、起動時に `--name "<計画> loop"`、/clear の後に毎回
-   `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`、/amend は `<計画> T<n> amend`、/breakdown は `<設計書の slug> breakdown`)で名前を付け直す。<計画> は T が属する TODO.md の
+   `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`、/amend T<n> は `<計画> T<n> amend`、引数なしの /amend は `<リポジトリのディレクトリ名> amend`、/breakdown は `<設計書の slug> breakdown`)で名前を付け直す。<計画> は T が属する TODO.md の
    `## #<n> <slug>` の slug で、無ければリポジトリのディレクトリ名。Codex のペインには名前を付けない
 7. 節目で /follow-up → checkpoint以後の複数タスクを横断して総点検し、次フェーズは 4 へ戻る。
    HANDOFF の要確認は、/execute-task の着手前(対象 T を回収点に持つ項目)と /follow-up の冒頭(全項目)で利用者に問い、決着を decisions.md に書く

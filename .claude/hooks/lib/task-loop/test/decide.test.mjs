@@ -218,6 +218,7 @@ test("loopStep は次の一手を引数なしの task-loop が回す工程とし
     for (const [line, step] of [
       ["`/execute-task T70`(説明)", { command: "execute-task", arg: "T70" }],
       ["`/amend T5`", { command: "amend", arg: "T5" }],
+      ["`/amend`(設計書 `docs/design/a.md`、利用者指示経路)", { command: "amend", arg: null }],
       ["`/breakdown docs/design/a.md`", { command: "breakdown", arg: "docs/design/a.md" }],
       ["`/follow-up`", { command: "follow-up", arg: null }],
     ]) {
@@ -226,8 +227,6 @@ test("loopStep は次の一手を引数なしの task-loop が回す工程とし
     }
     for (const [line, error] of [
       ["`/elaborate docs/design/a.md`", "not_runnable"],
-      ["`/breakdown`(引数なし)", "not_runnable"],
-      ["`/execute-task`(T が無い)", "not_runnable"],
       ["なし", "not_runnable"],
       ["`/execute-task T1`", "not_open"],
       ["`/execute-task T2`", "not_open"],
@@ -236,6 +235,27 @@ test("loopStep は次の一手を引数なしの task-loop が回す工程とし
     ]) {
       write(line);
       assert.equal(loopStep(t.root).error, error, line);
+    }
+  } finally { t.cleanup(); }
+});
+
+test("loopStep は回す工程の引数の形が違えば bad_argument を返し、回さない工程(not_runnable)と分ける", () => {
+  const t = fixture();
+  const write = (line) => fs.writeFileSync(path.join(t.root, "HANDOFF.md"), `## 次セッションの最初の一手\n\n- ${line}\n`);
+  try {
+    for (const line of [
+      "`/execute-task`(T が無い)",
+      "`/execute-task docs/design/a.md`",
+      "`/amend docs/design/a.md`",
+      "`/breakdown`(引数なし)",
+      "`/breakdown T5`",
+    ]) {
+      write(line);
+
+      const result = loopStep(t.root);
+
+      assert.equal(result.error, "bad_argument", line);
+      assert.ok(result.step, `${line}: 読めた工程を返す`);
     }
   } finally { t.cleanup(); }
 });
@@ -251,18 +271,18 @@ test("amendOutcome: コミット・計画工程のファイルの着地・次の
     fs.writeFileSync(path.join(t.root, "src.txt"), "途中成果物"); // 穴で止まった execute-task の未コミットは妨げない
     fs.mkdirSync(path.join(t.root, "docs/guide"), { recursive: true });
     fs.writeFileSync(path.join(t.root, "docs/guide/x.md"), "書きかけの成果物の文書");
-    assert.equal(amendOutcome(t.root, head), "incomplete", "何も起きていない");
+    assert.equal(amendOutcome(t.root, head, "T5"), "incomplete", "何も起きていない");
     write("## 仕掛かり中\n- なし\n## 次セッションの最初の一手\n- `/execute-task T5`\n");
-    assert.equal(amendOutcome(t.root, head), "incomplete", "HANDOFF.md が未コミット");
+    assert.equal(amendOutcome(t.root, head, "T5"), "incomplete", "HANDOFF.md が未コミット");
     git(t.root, "add", "HANDOFF.md");
     git(t.root, "commit", "-qm", "amend: plan の設計を改訂(T5 由来)");
-    assert.equal(amendOutcome(t.root, head), "done", "docs/guide/ の書きかけは計画工程のファイルではない");
+    assert.equal(amendOutcome(t.root, head, "T5"), "done", "docs/guide/ の書きかけは計画工程のファイルではない");
     fs.mkdirSync(path.join(t.root, "docs/design"), { recursive: true });
     fs.writeFileSync(path.join(t.root, "docs/design/plan.md"), "書きかけ");
-    assert.equal(amendOutcome(t.root, head), "incomplete", "設計書が未コミット");
+    assert.equal(amendOutcome(t.root, head, "T5"), "incomplete", "設計書が未コミット");
     fs.rmSync(path.join(t.root, "docs/design"), { recursive: true });
     write("## 仕掛かり中\n- T5 の穴の記録\n## 次セッションの最初の一手\n- `/elaborate docs/design/plan.md`\n");
-    assert.equal(amendOutcome(t.root, head), "elaborate");
+    assert.equal(amendOutcome(t.root, head, "T5"), "elaborate");
     for (const [step, expected, why] of [
       ["/execute-task T6", "done", "足した是正タスク・次の未着手へ戻るのも着地(VC_Analysis の amend T54 → T59)"],
       ["/execute-task T4", "incomplete", "完了済みの T は戻り先にならない"],
@@ -272,7 +292,37 @@ test("amendOutcome: コミット・計画工程のファイルの着地・次の
       write("## 次セッションの最初の一手\n- `" + step + "`\n");
       git(t.root, "add", "HANDOFF.md");
       git(t.root, "commit", "-qm", "amend: plan の設計を改訂(T5 由来)");
-      assert.equal(amendOutcome(t.root, head), expected, why);
+      assert.equal(amendOutcome(t.root, head, "T5"), expected, why);
+    }
+  } finally { t.cleanup(); }
+});
+
+test("amendOutcome: 引数なしの /amend の後は、ループが回せる別の工程が次の一手になれば done、引数なしの /amend のままなら incomplete", () => {
+  const t = fixture();
+  const land = (step) => {
+    fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "## 次セッションの最初の一手\n- `" + step + "`(説明)\n");
+    git(t.root, "add", "HANDOFF.md");
+    git(t.root, "commit", "-qm", "amend: plan の設計を改訂(利用者指示)");
+  };
+  try {
+    fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "## 次セッションの最初の一手\n- `/amend`(利用者指示経路)\n");
+    git(t.root, "add", "-A");
+    git(t.root, "commit", "-qm", "chore: 次の一手を /amend にする");
+    const head = headOf(t.root);
+    for (const [step, expected, why] of [
+      ["/amend T5", "done", "利用者指示の改訂の後に穴の記録経路の /amend T<n> が続く(2026-09-25 execute-task-speedup)"],
+      ["/execute-task T6", "done", "未着手の T へ進む"],
+      ["/breakdown docs/design/plan.md", "done", "改訂で足した段階を分解する"],
+      ["/follow-up", "done", "総点検へ進む"],
+      ["/amend", "incomplete", "次の一手が送った /amend のままでは、着地したか区別できない"],
+      ["/execute-task T4", "incomplete", "完了済みの T は戻り先にならない"],
+      ["/amend T4", "incomplete", "完了済みの T の /amend は回せない"],
+    ]) {
+      land(step);
+
+      const outcome = amendOutcome(t.root, head, null);
+
+      assert.equal(outcome, expected, why);
     }
   } finally { t.cleanup(); }
 });

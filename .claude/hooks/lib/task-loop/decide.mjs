@@ -170,27 +170,41 @@ export function nextStep(root) {
   return match ? { command: match[1], arg: match[2]?.replace(/\.+$/, "") || null } : null;
 }
 
+// /breakdown の引数(設計書の相対パス)と、/execute-task・/amend の引数(タスクID)の形
+const DESIGN_PATH = /^docs\/design\/\S+\.md$/;
+const TASK_ID = /^T\d+$/;
+
 // 次の一手が /breakdown なら、その設計書の相対パス。無ければ null
 export function breakdownTarget(root) {
   const step = nextStep(root);
-  return step?.command === "breakdown" && /^docs\/design\/\S+\.md$/.test(step.arg ?? "") ? step.arg : null;
+  return step?.command === "breakdown" && DESIGN_PATH.test(step.arg ?? "") ? step.arg : null;
 }
 
 // 引数なしの task-loop が回す工程。/elaborate は対話で詰める工程なので入れない(2026-09-24 利用者決定)
 const LOOP_COMMANDS = ["execute-task", "amend", "breakdown", "follow-up"];
 
+// 回す工程の引数の形が合っているか。/amend の引数なしは利用者指示経路(amend.md 手順 1)で、T<n> 付きの穴の記録経路と
+// 同じく回す(2026-09-25。0f88835 が /execute-task と同じ枝で T<n> を必須にしていたのは、利用者決定「/elaborate だけ外す」
+// からの逸脱だった)
+function argumentFits(step) {
+  if (step.command === "execute-task") return TASK_ID.test(step.arg ?? "");
+  if (step.command === "amend") return step.arg === null || TASK_ID.test(step.arg);
+  if (step.command === "breakdown") return DESIGN_PATH.test(step.arg ?? "");
+  return true;
+}
+
 // 引数なしの task-loop が次に回す工程を、HANDOFF.md の次の一手から決める。T の順は各工程が次の一手に書いた順が正で、
 // TODO.md の並びからは選ばない(表の並びは実行順ではない。2026-09-24、凍結中の T47 を表の先頭として 2 回送って止まった)。
-// 戻り値: { step }(回してよい)/ { error: "not_runnable", step }(次の一手が無い・回さない工程・引数の形が違う)/
+// 戻り値: { step }(回してよい)/ { error: "not_runnable", step }(次の一手が無い・回さない工程)/
+// { error: "bad_argument", step }(回す工程だが引数の形が違う)/
 // { error: "not_open", step }(/execute-task・/amend の T が未着手([ ])ではない。推測で別の T を選ばない)
 export function loopStep(root) {
   const step = nextStep(root);
   if (!step || !LOOP_COMMANDS.includes(step.command)) return { error: "not_runnable", step };
-  if (step.command === "breakdown" && !breakdownTarget(root)) return { error: "not_runnable", step };
-  if (step.command === "execute-task" || step.command === "amend") {
-    if (!/^T\d+$/.test(step.arg ?? "")) return { error: "not_runnable", step };
-    if (findTask(root, step.arg)?.state !== " ") return { error: "not_open", step };
-  }
+  if (!argumentFits(step)) return { error: "bad_argument", step };
+
+  const task = step.command === "execute-task" || step.command === "amend" ? step.arg : null;
+  if (task && findTask(root, task)?.state !== " ") return { error: "not_open", step };
   return { step };
 }
 
@@ -208,19 +222,23 @@ export function amendCount(root, task) {
 // 未コミットで残りうるため(execute-task.md 手順 4 の ④)
 const PLANNING_PATHS = (p) => p === "HANDOFF.md" || p === "TODO.md" || p === "docs/decisions.md" || p.startsWith("docs/design/");
 
-// /amend T<n> の後の判定。成果物(コミット・HANDOFF.md・計画工程のファイル)だけで決める
-//   done       : HEAD が進み、計画工程のファイルに未コミットが無く、次の一手が未着手([ ])の T の /execute-task に
-//                なった。戻る先は元の T に限らない(置き換え先・次の未着手・amend が足した是正タスク。amend.md 手順 6。
-//                2026-09-24 VC_Analysis の amend T54 は是正タスク T59 を足して次の一手を T59 にした)
+// /amend の後の判定。成果物(コミット・HANDOFF.md・計画工程のファイル)だけで決める。sent は送った /amend の引数
+// (穴の記録経路の T<n>、利用者指示経路は null)
+//   done       : HEAD が進み、計画工程のファイルに未コミットが無く、次の一手がループの回せる工程(loopStep)で、送った
+//                /amend そのものではない。戻る先は元の T に限らない(置き換え先・次の未着手・amend が足した是正タスク。
+//                amend.md 手順 6。2026-09-24 VC_Analysis の amend T54 は是正タスク T59 を足して次の一手を T59 にした)。
+//                利用者指示の改訂の後に /amend T<n> や /breakdown が続くこともある(2026-09-25 execute-task-speedup の
+//                HANDOFF.md は /amend → /amend T4 の順)
 //   elaborate  : 次の一手が /elaborate(amend の段の判定で部分改訂の範囲を超えた)
-//   incomplete : それ以外(承認されなかった・途中で止まった)
-export function amendOutcome(root, headBefore) {
+//   incomplete : それ以外(承認されなかった・途中で止まった・次の一手が送った /amend のままで着地を区別できない)
+export function amendOutcome(root, headBefore, sent) {
   const step = nextStep(root);
   if (step?.command === "elaborate") return "elaborate";
   const moved = headOf(root) !== headBefore;
   const landed = !dirtyPaths(root).some(PLANNING_PATHS);
-  const back = step?.command === "execute-task" && /^T\d+$/.test(step.arg ?? "") && findTask(root, step.arg)?.state === " ";
-  return moved && landed && back ? "done" : "incomplete";
+  const runnable = !loopStep(root).error;
+  const unchanged = step?.command === "amend" && step.arg === sent;
+  return moved && landed && runnable && !unchanged ? "done" : "incomplete";
 }
 
 // /breakdown の後の判定。done: HEAD が進み、計画工程のファイルに未コミットが無く、openBefore に無い [ ] の T が増えた /

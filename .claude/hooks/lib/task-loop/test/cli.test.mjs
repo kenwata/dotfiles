@@ -37,7 +37,9 @@ const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "cli.m
 // hidden_question・silent_work は /follow-up にも使える(答え・完了で checkpoint をコミットする)。
 // /amend T<n> には scenario.amend の先頭で応える: land(穴の記録を消し、次の一手を /execute-task T<n> に戻して amend:
 // でコミット)/ land_add(land に加えて T4 を足す)/ land_fix(是正タスク T4 を足し、次の一手を T4 にする)/ abolish(T<n> を廃止して置き換え先 T4 を立てる)/ question(承認の
-// 問いで止まり、答えると land)/ elaborate(次の一手を /elaborate にするだけ)/ nothing
+// 問いで止まり、答えると land)/ elaborate(次の一手を /elaborate にするだけ)/ nothing。
+// 引数なしの /amend(利用者指示経路)にも同じ scenario.amend で応え、land は次の一手を s.after.amend(無ければ最初の [ ] の T の
+// /execute-task)にして `amend: …(利用者指示)` でコミットする
 // /breakdown <設計書> には scenario.breakdown の先頭で応える: land(T4・T5 を足し、次の一手を /execute-task T4 に
 // して plan: でコミット)/ land_stay(land と同じだが次の一手を /breakdown のまま残す)/ nothing
 // 端末の題名(pane get の terminal_title_stripped)は起動時の --name と /rename で変わり、/clear では変わらない
@@ -82,12 +84,15 @@ const amend = (how, task) => {
     fs.writeFileSync(todo, lines.join("\\n"));
     addTasks(["T4"]);
     handoff("/execute-task T4");
+  } else if (task === null) {
+    handoff(s.after?.amend ?? "/execute-task " + firstOpen());
   } else {
     if (how === "land_add" || how === "land_fix") addTasks(["T4"]);
     handoff("/execute-task " + (how === "land_fix" ? "T4" : task));
   }
   git("add", "-A");
-  git("commit", "-q", "--allow-empty", "-m", "amend: repo の設計を改訂(" + task + " 由来)"); // HANDOFF.md が初期と同じ文面に戻っても記録は残す
+  const origin = task === null ? "(利用者指示)" : "(" + task + " 由来)";
+  git("commit", "-q", "--allow-empty", "-m", "amend: repo の設計を改訂" + origin); // HANDOFF.md が初期と同じ文面に戻っても記録は残す
 };
 // 答え・完了までの get の回数。ループは 1 周で判定の get と settle の get を 1 回ずつ呼ぶので、2 周では足りない回数にする
 // (herdr だけを見る作りなら 1 周目で落ち着いたとみなし、判定の get を足しても届かずに止まる)
@@ -214,8 +219,9 @@ if (args[1] === "prompt") {
     save();
     ok(agent());
   }
-  const amendTask = (text.match(/amend (T\\d+)$/) || [])[1];
-  if (amendTask) {
+  const amendSent = text.match(/[\\/$]amend(?: (T\\d+))?$/);
+  if (amendSent) {
+    const amendTask = amendSent[1] ?? null;
     const how = (s.scenario.amend || []).shift() || "nothing";
     s.amendSent = (s.amendSent || 0) + 1;
     accept();
@@ -577,6 +583,8 @@ test("引数なしで HANDOFF.md の次の一手が回せる工程でなけれ�
   for (const [label, opts, pattern] of [
     ["HANDOFF.md が無い", { next: null }, /次の一手/],
     ["次の一手が /elaborate", { next: "/elaborate docs/design/plan.md" }, /次の一手.*elaborate/],
+    ["回さない工程の文は引数に触れない", { next: "/elaborate docs/design/plan.md" }, /plan\.md は task-loop が回す工程\([^)]*\)ではない: /],
+    ["次の一手の引数の形が違う", { next: "/execute-task" }, /\/execute-task は引数の形が違う/],
     ["次の一手の T が済んでいる", { todo: "| #1-1 | T1 | 済み | — | [x] |\n" }, /T1 は未着手\(\[ \]\)ではない/],
   ]) {
     const t = setup(opts);
@@ -944,6 +952,40 @@ test("amend が着地しない・/elaborate へ回した・同じ T で 2 回目
       assert.equal(json.reason, reason);
       assert.deepEqual(json.tasks_remaining, ["T1", "T2"], reason);
       assert.equal(t.state().amendSent, 1, `amend は 1 回だけ送る: ${reason}`);
+    } finally { t.cleanup(); }
+  }
+});
+
+test("次の一手が引数なしの /amend なら /amend を送り、着地した後は次の一手(/amend T<n> を含む)から続ける", () => {
+  const t = setup({
+    todo: TWO, next: "/amend", after: { amend: "/amend T1" },
+    scenario: { T1: ["complete"], T2: ["complete"], amend: ["land", "land"] },
+  });
+  try {
+    const { code, json } = t.runAuto();
+
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(json.tasks_done, ["T1", "T2"]);
+    assert.deepEqual(t.prompts().filter((p) => p !== "/clear"), [
+      "/rename repo amend", "/amend", "/rename repo T1 amend", "/amend T1",
+      "/rename repo T1", "/execute-task T1", "/rename repo T2", "/execute-task T2",
+    ]);
+  } finally { t.cleanup(); }
+});
+
+test("引数なしの /amend が着地しない・次の一手を引数なしの /amend のまま残したら、1 回だけ送って止まる", () => {
+  for (const [label, opts] of [
+    ["着地しない", { scenario: { amend: ["nothing"] } }],
+    ["次の一手が引数なしの /amend のまま", { after: { amend: "/amend" }, scenario: { amend: ["land"] } }],
+  ]) {
+    const t = setup({ todo: TWO, next: "/amend", ...opts });
+    try {
+      const { code, json } = t.runAuto();
+
+      assert.equal(code, 1, `${label}: ${JSON.stringify(json)}`);
+      assert.equal(json.reason, "amend_incomplete", label);
+      assert.equal(t.state().amendSent, 1, `${label}: amend は 1 回だけ送る`);
+      assert.deepEqual(json.tasks_remaining, [], `${label}: 範囲の T に null を積まない`);
     } finally { t.cleanup(); }
   }
 });

@@ -18,8 +18,8 @@
 //   (次の区間は打ち直して始める。範囲指定でも同じ)。/follow-up が利用者への問い(blocked)を出せば答えを待つ。
 //   --no-follow-up なら /follow-up を送らず follow_up_required として止まる
 //   Claude のセッションには名前を付ける(窓の題名と /resume の一覧に出る)。自動起動は `claude --name "<計画> loop"`、
-//   /clear の後は毎回 `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`、/amend は `<計画> T<n> amend`、
-//   /breakdown は `<設計書の slug> breakdown`)。<計画> は T が属する TODO.md の
+//   /clear の後は毎回 `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`、/amend T<n> は `<計画> T<n> amend`、
+//   引数なしの /amend は `<リポジトリのディレクトリ名> amend`、/breakdown は `<設計書の slug> breakdown`)。<計画> は T が属する TODO.md の
 //   `## #<n> <slug>` の slug で、無ければリポジトリのディレクトリ名
 //
 // 経緯(2026-09-23): 利用者はタスクの間で /clear を打ち、compact(自動要約)による情報消失を避けてきた。複数の T を
@@ -46,7 +46,8 @@
 // 数えず、--answer-timeout-hours で区切る。ターンの途中・答え待ち・終了は hook(../../loop-turn.mjs)が turns/<id>.json に
 // 書いた記録を先に見て、herdr の画面の判定は待つ方向の証拠を足すだけにする(herdr は画面を読んだ推測で、名前の罫線の
 // 下の問いの画面を idle と見逃す。turn.mjs)。herdr は送る手段として使い、見張りの間の失敗・unknown では猶予の後に止まる。/elaborate は対話で詰める工程なのでループに入れない(2026-09-24 利用者決定)。
-// 計画工程: 引数なしの時は、次の一手が /breakdown docs/design/<slug>.md なら送り(runBreakdown)、/amend T<n> なら送る。
+// 計画工程: 引数なしの時は、次の一手が /breakdown docs/design/<slug>.md なら送り(runBreakdown)、/amend T<n> と引数なしの
+// /amend(利用者指示経路)なら送る(runAmend)。
 // T を位置引数・--tasks で指定した時は範囲を「ここまで」と読み、/breakdown を送らない(範囲が済めば all_done、次の一手は
 // next_step に出す)。/amend・/breakdown が途中で止まった時の再開は無い(人が片付けて打ち直す)
 // 経緯(2026-09-24): 引数なしの既定を「TODO.md の未着手を上から順に」にしていたため、表の先頭にあった凍結中の T47 を
@@ -212,21 +213,24 @@ function preflight(args, positionalTasks) {
   return { errors, tasks, step, host: agent.agent, root, target, pane: agent.pane_id, started, tasksFrom };
 }
 
-// 引数なしの起動で最初に回す工程(HANDOFF.md の次の一手。decide.mjs の loopStep)。tasks は /execute-task・/amend の T
-// (未コミットの変更の照合とセッション名に使う)。回せなければ何も送らずに前提検査で止まる
+// loopStep が回せないとした次の一手の、前提検査のエラー文。理由ごとに分ける(2026-09-25、引数なしの /amend に
+// 「回す工程ではないか、引数の形が違う」と 2 択で返し、括弧の中の /amend と食い違って読めた)
+function handoffError(error, step, root) {
+  const shown = step ? `/${step.command}${step.arg ? " " + step.arg : ""}` : null;
+  if (error === "not_open") return `HANDOFF.md の次の一手 ${shown} の ${step.arg} は未着手([ ])ではない。次の一手を直すか、T を引数で指定する: ${root}`;
+  if (error === "bad_argument") return `HANDOFF.md の次の一手 ${shown} は引数の形が違う(/execute-task は T<n>、/amend は T<n> か引数なし、/breakdown は docs/design/<slug>.md): ${root}`;
+  if (shown) return `HANDOFF.md の次の一手 ${shown} は task-loop が回す工程(/execute-task・/amend・/breakdown・/follow-up)ではない: ${root}`;
+  return `HANDOFF.md の次の一手(「次セッションの最初の一手」節)に task-loop が回す工程(/execute-task・/amend・/breakdown・/follow-up)が無い: ${root}`;
+}
+
+// 引数なしの起動で最初に回す工程(HANDOFF.md の次の一手。decide.mjs の loopStep)。tasks は /execute-task・/amend T<n> の T
+// (未コミットの変更の照合とセッション名に使う。引数なしの /amend は T を持たないので空)。回せなければ何も送らずに前提検査で止まる
 function handoffTasks(root) {
   const { step, error } = loopStep(root);
-  const shown = step ? `/${step.command}${step.arg ? " " + step.arg : ""}` : null;
-  if (error === "not_open") return { tasks: [], errors: [`HANDOFF.md の次の一手 ${shown} の ${step.arg} は未着手([ ])ではない。次の一手を直すか、T を引数で指定する: ${root}`] };
-  if (error) {
-    return {
-      tasks: [],
-      errors: [shown
-        ? `HANDOFF.md の次の一手 ${shown} は task-loop が回す工程(/execute-task・/amend・/breakdown・/follow-up)ではないか、引数の形が違う: ${root}`
-        : `HANDOFF.md の次の一手(「次セッションの最初の一手」節)に task-loop が回す工程(/execute-task・/amend・/breakdown・/follow-up)が無い: ${root}`],
-    };
-  }
-  return { tasks: step.command === "execute-task" || step.command === "amend" ? [step.arg] : [], step, errors: [] };
+  if (error) return { tasks: [], errors: [handoffError(error, step, root)] };
+
+  const task = step.command === "execute-task" || step.command === "amend" ? step.arg : null;
+  return { tasks: task ? [task] : [], step, errors: [] };
 }
 
 // herdr の agent_status と session_id を読む。unknown(分類できない)と失敗は status を null にし、failure に止まる時の
@@ -467,13 +471,15 @@ function runPlanning(ctx, { label, text, loopTask, name, outcome }) {
   return { outcome: outcome(), session };
 }
 
-// 穴の記録で止まった T に /amend T<n> を送る。amend.md 手順 5 の承認は人が答える(ループは blocked の間待つ)。
-// 着地(amendOutcome が done。次の一手が未着手の T の /execute-task になった)なら continue、次の一手が /elaborate なら amend_to_elaborate、それ以外は amend_incomplete
+// /amend を送る。task は穴の記録で止まった T(/amend T<n>)か、null(引数なしの /amend。利用者指示経路)。
+// amend.md 手順 5 の承認は人が答える(ループは blocked の間待つ)。着地(amendOutcome が done。次の一手がループの回せる
+// 別の工程になった)なら continue、次の一手が /elaborate なら amend_to_elaborate、それ以外は amend_incomplete
 function runAmend(ctx, task) {
   const headBefore = headOf(ctx.root);
   const r = runPlanning(ctx, {
-    label: "amend", text: `${ctx.host === "codex" ? "$" : "/"}amend ${task}`, loopTask: task, name: sessionName(ctx.root, task, `${task} amend`),
-    outcome: () => amendOutcome(ctx.root, headBefore),
+    label: "amend", text: stepText(ctx.host, { command: "amend", arg: task }), loopTask: task ?? "amend",
+    name: sessionName(ctx.root, task, task ? `${task} amend` : "amend"),
+    outcome: () => amendOutcome(ctx.root, headBefore, task),
   });
   if (r.stop) return { action: "stop", reason: r.stop, session: r.session, details: r.details };
   if (r.outcome === "done") return { action: "continue", session: r.session };
@@ -619,18 +625,20 @@ function runLoop(ctx, checked) {
     return out;
   };
 
-  // 穴の記録の T に /amend を送る。同じ T の amend はこのループで 1 回まで。履歴に T 由来の amend が既に 2 件あれば送らない
-  // (amend.md「同じ T<n> に 3 回目を実行する前に止める」。git log から数えるので打ち直しをまたいでも揃う)。
-  // 戻り値: true = 着地して続ける / false = 止まった
+  // /amend を送る。task は穴の記録の T か null(引数なしの /amend)。同じ T の amend はこのループで 1 回まで。履歴に
+  // T 由来の amend が既に 2 件あれば送らない(amend.md「同じ T<n> に 3 回目を実行する前に止める」。git log から数えるので
+  // 打ち直しをまたいでも揃う)。引数なしの /amend の繰り返しは、amendOutcome が次の一手が引数なしの /amend のままなら
+  // 着地としないので止まる。戻り値: true = 着地して続ける / false = 止まった
   const amendTask = (task, attempt) => {
-    if (amended.has(task) || amendCount(ctx.root, task) >= 2) { queue.unshift(task); stop({ reason: "amend_repeated" }, task, attempt); return false; }
-    amended.add(task);
+    if (task && (amended.has(task) || amendCount(ctx.root, task) >= 2)) { queue.unshift(task); stop({ reason: "amend_repeated" }, task, attempt); return false; }
+    if (task) amended.add(task);
     const planned = runAmend(ctx, task);
-    log(task, `amend: ${planned.action}${planned.reason ? " " + planned.reason : ""}`);
-    if (planned.action !== "continue") { queue.unshift(task); stop(planned, task, attempt); return false; }
-    // 範囲指定の時は、次の一手が指す T(元の T・置き換え先・amend が足した是正タスクのどれか。amendOutcome が未着手と
-    // 確認済み)をキューの先頭に置く。次の一手から回す時は次の周回でそのまま読む
-    if (!fromHandoff) queue = settleQueue([nextStep(ctx.root).arg, ...queue]);
+    log(task ?? "amend", `amend: ${planned.action}${planned.reason ? " " + planned.reason : ""}`);
+    if (planned.action !== "continue") { if (task) queue.unshift(task); stop(planned, task, attempt); return false; }
+    // 範囲指定の時は、次の一手が /execute-task なら、その T(元の T・置き換え先・amend が足した是正タスクのどれか。
+    // amendOutcome が未着手と確認済み)をキューの先頭に置く。次の一手から回す時は次の周回でそのまま読む
+    const next = nextStep(ctx.root);
+    if (!fromHandoff && next?.command === "execute-task") queue = settleQueue([next.arg, ...queue]);
     return true;
   };
 
