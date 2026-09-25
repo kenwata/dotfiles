@@ -124,6 +124,14 @@ T のブランチへ載せ直せない時(衝突)は rebase を取り消して e
 並列にしたステップの後には、それらすべてに依存する直列のステップを 1 つ置き、その検証節に全体の試験を書く
 (並列のステップはそれぞれ自分の変更しか検証していない)。T のすべてのステップを統合したら、`integrate` で T の
 worktree を本体へ取り込む。`integrate` は、統合していないステップの worktree が残っている間は拒否する。
+dotfiles の「1 タスク = 1 コミット」を守るため、ステップごとのコミットをすべて T の worktree に取り込んだ後、
+`integrate` の前にその worktree で `git reset --soft <worktree.json の base>` を実行し、変更を 1 コミットにまとめる。
+保存先:
+
+`${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/tasks/<ルート名>/T<n>/worktree.json`
+
+まとめても、本体の HEAD がブランチの祖先という
+`integrate` の前提は崩れない。
 
 ## packet
 
@@ -169,7 +177,7 @@ worktree を本体へ取り込む。`integrate` は、統合していないス�
 
 ````bash
 node ~/.claude/hooks/lib/codex-worker/cli.mjs run --root <プロジェクトルート> --task T<n> --step <番号> \
-  --packet <packet.md> --allow <パス> [--allow <パス> ...] [--workspace <リポジトリ>]
+  --packet <packet.md> --allow <パス> [--allow <パス> ...] [--workspace <リポジトリ>] [--worktree]
 ````
 
 T の対象がプロジェクトの外のリポジトリにある時(`対象:` が `~/.claude/...` のように dotfiles の中を指す、など)は、
@@ -177,6 +185,29 @@ T の対象がプロジェクトの外のリポジトリにある時(`対象:` �
 worker の sandbox は作業ツリー(`-C` の先)にしか書けないので、`--root` のままではプロジェクトの外へ書けない。
 リポジトリの最上位を渡さないのは、dotfiles のように Claude Code・herdr などが動いている間ずっと書き込むファイル
 (`.claude/history.jsonl` など)を含むリポジトリで、worker に書ける範囲とゲートが見る範囲を広げないためである。
+T の対象が dotfiles の中にあり、作業場所が `.claude` 直下のようにアプリ本体が書く場所を含む時は、
+`--worktree` を付ける。これにより、本体の HEAD から T ごとの worktree を作り、worker はその中で動く。
+既定の作業場所では Claude Code などが動作中に書くファイルもゲートに見えるため、worktree ではその影響を分ける。
+`--worktree` は値を取らないフラグで、既定では付けない。付けなければ run は従来と同じ経路を通る。
+指定時は `--workspace` が必要で、本体のリポジトリ最上位が帳簿の `--root` の最上位と異なること。
+この前提を満たさなければ worker を起動せず exit 2 を返す。終了コードは 0 が成功、1 が判定として不可
+(不採用・統合不可)、2 が前提不足で worker 未起動を表す。ただし `run --worktree` は worktree 作成後の検査で
+拒否した場合、worktree を残したまま exit 2 を返すことがある。
+
+worktree は帳簿のルートと T の組ごとに 1 つで、後のステップも同じ worktree を使う。
+前のステップが受け入れた未コミットの変更もそこで見える。最初の run で、本体の HEAD から次のように作る:
+
+````bash
+git -C <本体> worktree add -b <ブランチ> <置き場> HEAD
+````
+
+置き場は `${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/worktrees/<rootSlug(帳簿のルート)>/<T>/`、
+ブランチは `codex-worker/<canonical(帳簿のルート) の sha1 先頭 8 桁>/<T>`。
+本体の HEAD が detached なら作成を拒否し exit 2。
+有効な作業場所は `<worktree の最上位>/<本体の最上位から --workspace までの相対パス>`。
+T の対象と `--allow` の `~/…`・絶対パスは worktree の最上位を基準に読み替える。
+`--worktree` では worktree がほかのプロセスに書かれないため、`--workspace` にリポジトリの最上位を渡してよい。
+
 `--root` は帳簿(`TODO.md`・ステップ計画・作業記録・状態行)の場所のまま変えず、worker の起動・snapshot・
 ゲート・restore・ロック・`verify` が作業場所の中だけで行われる。`--allow` は作業場所からの相対で書く
 (`~/…` や絶対パスで渡しても、runner が作業場所からの相対に直す)。runner は T の対象の `~/…` と絶対パスも
@@ -185,17 +216,44 @@ worker の sandbox は作業ツリー(`-C` の先)にしか書けないので、
 選ぶ(`paths:` は各規約の置き場所からの相対で照合する)。作業場所とプロジェクトが入れ子のもの、.gitignore 対象の
 ディレクトリの中のものは起動前に拒否する。作業場所では、起動前からあった .gitignore 対象のファイルの変更・
 削除を違反にせず警告(`gate.ignored_files`)に分け、復元もしない(ほかのプロセスの書き込みを巻き戻さないため)。
-新しく作られたファイルは .gitignore 対象でも違反のまま。実行中ロックは作業場所のリポジトリ単位なので、同じ
-リポジトリの worker は作業場所が違っても同時に 1 つだけ(2 つ目は起動前に拒否される)。例外は同じ T の並列ステップで、
-それぞれ専用の worktree で動くので同時に走れる(上の「並列ステップ」)。`resume` は作業場所の
+新しく作られたファイルは .gitignore 対象でも違反のまま。通常 run の実行中ロックは作業場所のリポジトリ単位なので、
+同じリポジトリの worker は作業場所が違っても同時に 1 つだけ(2 つ目は起動前に拒否される)。例外は同じ T の
+並列ステップで、それぞれ専用の worktree で動くので同時に走れる(上の「並列ステップ」)。
+`--worktree` run のロックは worktree ごとになる。`check-task-scope.mjs` が拒否する Claude 側の編集も
+worktree 内だけで、本体の `~/.claude` への編集は止めない。本体で worker の対象と同じファイルを編集すると、
+`integrate` の fast-forward が拒否される。`resume` は作業場所の
 未コミットの変更も照合し、説明できないものを絶対パスで `unexplained_dirty` に足す。作業場所のコミットは監督が、
 自分が変えたファイルだけをパス指定で行う。
+
+`--worktree` を使った時も、監督は T の対象に関わる本体の未コミット変更を、最初の run より前に本体でコミットする。
+worker が変えたファイルは、監督が worktree の中で確かめたものだけをパス指定でコミットする
+(`git -C <worktree> add <paths>` → `commit`)。本体ではこのコミットを打たない。
+T のステップを受け入れて clean にした後、次で本体へ統合する:
+
+````bash
+node ~/.claude/hooks/lib/codex-worker/cli.mjs integrate --root <プロジェクトルート> --task T<n>
+````
+
+統合後に本体の SHA を記録する。dotfiles 側の SHA を帳簿のリポジトリのコミット本文に書く規則も、
+`integrate` 後の本体の SHA で行う(rebase で SHA が変わるため)。検証節のコマンドと試験は作業場所からの相対で書く。
+`~/.claude/…` は本体を指すため、worktree 内のコードを試験したことにはならない。
+`integrate` の前提不足は exit 2 で何も変えない: worktree の記録があり `git worktree list` に載っていること、
+worktree と本体のどちらにも生きた worker ロックがないこと、worktree が clean であること、
+本体の `symbolic-ref HEAD` が作成時と同じこと。worktree が clean かは
+`git -C <worktree> status --porcelain` が空かで確認する(untracked を含む)。
+本体の HEAD が worktree のブランチの祖先でない場合、または git が
+`git -C <本体> merge --ff-only <ブランチ>` を拒否した場合は exit 1 で何も変えない。
+前者は `errors` に `git -C <worktree> rebase <ブランチ名>` が示されるので監督が実行し、衝突したら停止する。
+後者は本体の未コミット変更と同じファイルをブランチが変えた場合などに起きる。
+成功時は fast-forward、`git worktree remove`、`git branch -d` の順に進み、worktree の記録を消す。
 
 Bash ツールの `run_in_background` で起動し、完了通知を待つ(Bash の 10 分上限を超え得るため。runner 自身が
 既定 20 分で worker をプロセスグループごと止める)。出力をファイルへリダイレクト(`> file 2>&1` など)しない —
 下の状態行がバックグラウンドタスクの出力に出なくなり、利用者から実行中の様子が見えなくなる。実行中は runner がロックを置き、`check-task-scope.mjs` が
-そのリポジトリへの Claude 側の編集を拒否する(IDE や Bash 経由の編集は止められない。run 中に作業ツリーを
-触らない)。packet は scratchpad など作業ツリーの外に置く。
+そのリポジトリへの Claude 側の編集を拒否する。`--worktree` run では拒否するのは worktree 内だけで、
+本体の `~/.claude` への編集は止めない(本体で対象と同じファイルを編集すると、`integrate` の fast-forward が
+拒否される)。IDE や Bash 経由の編集は止められないので、run 中に作業ツリーを触らない。
+packet は scratchpad など作業ツリーの外に置く。
 
 worker の sandbox は、作業ツリーと TMPDIR・/tmp にだけ書け、ネットワークは loopback(127.0.0.1)だけを通して
 外部を拒否する(設定の正は `.codex/worker-config.toml` のコメント)。試験がローカルのサーバや番兵のポートを
@@ -213,7 +271,11 @@ worker のモデルは系統名で指定する(既定 `luna`。上げる時は `
 実行中の様子は、runner が状態行として stderr とプロジェクトごとのログ
 `${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/status/<ルートのパスの / などを - にした名前>.log` に出す(`codex exec --json` のイベントから、実行したコマンドと終了コード・編集したファイル・worker の進捗の一言・
 トークン数・最後の判定を選んだもの。形式は `hooks/lib/codex-worker/status.mjs`)。行の前置きは `[Codex T<n> s<番号> <何番目>/<全ステップ数>]` で、
-開始の行にそのステップの目的を出す。利用者はバックグラウンドタスクの
+その直後にローカル時刻の `HH:MM:SS` と半角スペース 1 つを付ける。開始の行にそのステップの目的を出す。
+本文が複数行なら各行に時刻を付け、run・plan・verify の全サブコマンドで同じ形式を使う。
+最後の要約では `finished:` の直後、`reason:` の前に、`metrics.check_s` が数値なら
+`  timing: check=<check_s>s other=<other_command_s>s model=<model_s>s` を出す。
+利用者はバックグラウンドタスクの
 出力か、別の端末の `tail -F` でそのプロジェクトのログを追う(同じリポジトリでは worker が同時に 1 つなので、1 つのログの中で
 別の run と混ざらない。並列ステップは同じログに交互に書くが、行の前置きのステップ番号で分けて読める)。状態行は人のためのもので、監督は読まない(判断は report と
 差分で行う)。生のイベントは run ディレクトリの `events.jsonl` に残るが、監督は全文を読まない。
@@ -229,6 +291,9 @@ runner は report(JSON)を stdout と `<run_dir>/report.json` に出す。バッ
 stderr の状態行も混ざるので、完了通知の後は `sed -n '/^{$/,/^}$/p' <出力ファイル>` で report だけを読む(状態行は
 `[Codex ` で始まる 1 行ずつなので、`{` だけの行と `}` だけの行は report の開始と終わりに限られる)。report は判断材料であり、`worker` 欄は
 worker の主張である。受け入れる前に、監督が `git diff` と `verify` で確かめる。
+
+`--worktree` を付けた run の report には `worktree: { repo, path, branch }` がある。付けない run には
+`report.worktree` は出ない。
 
 ````bash
 node ~/.claude/hooks/lib/codex-worker/cli.mjs verify --run <run_dir> [--timeout <1 本あたりの秒。既定 900>]
@@ -260,6 +325,42 @@ worker の変更が載った作業ツリーの試験を、監督の Bash で直�
 採らないと決めた run の変更は `cli.mjs restore --run <run_dir>` で snapshot 時点へ戻す(許可パスの中だけを戻す。
 run の後に監督が書いた状態文書には触れない)。
 
+`integrate` の report は、成功時 `{ task, repo, branch, commits, head }`、後始末だけに失敗した時はこれに
+`cleanup_errors` が加わる。`commits` は本体へ進めたコミット数で、先行コミットがなくても成功し `commits: 0`。
+前提不足は exit 2 で何も変えず、統合できない時は exit 1 で何も変えない。本体の HEAD がブランチの祖先でない時は
+`errors` に `git -C <worktree> rebase <ブランチ名>` が示される。監督が rebase し、衝突したら止める。
+成功は exit 0。fast-forward 後の後始末は worktree の削除、ブランチの削除、記録の削除の順で行う。
+いずれかが失敗したらそこで止まり、本体が進んでいるため exit 0 のまま、失敗した手順のメッセージ・残った物・
+復旧コマンドを `cleanup_errors: string[]` に出す。作業記録の integrate 行には失敗時だけ `cleanup=failed` が付く。
+前提不足・統合不可時の report は `{ errors }`。成功時の作業記録には `kind=integrate`、`branch=`、
+`commits=` が記録される。
+
+worktree の状態確認は次で行う。`--json` の有無で出力は変わらない。
+
+````bash
+node ~/.claude/hooks/lib/codex-worker/cli.mjs worktree --root <root> --task T<n> \
+  [--json] [--remove [--force]]
+````
+
+記録がある時の状態 report は `{ task, worktree: { path, branch, base_ref, exists, dirty, ahead, behind } }`、
+記録がない時は `{ task }`。`ahead` はブランチが本体より先のコミット数、`behind` は本体がブランチより先の数で、
+`behind > 0` なら統合前に rebase が要る。読めない記録または git の失敗は exit 2 と `{ errors }`。
+`--force` は `--remove` と同時にだけ指定できる。
+
+`--remove` は clean な worktree と本体に未統合コミットのないブランチを削除し、記録も削除する。記録の
+`repo`・`path`・`branch` が計算値と違う、記録が読めない、git のロックがある、worktree が dirty、または未統合
+コミットがある時は exit 2 で何も消さない。`--force` は記録の内容にかかわらず計算値の worktree・ブランチ・記録を
+対象にし、git のロックも無視する。本体が見つからない時は worktree の置き場と記録だけを消し、
+`removed.branch: false` と `warnings` を出して exit 0。ブランチが別の場所で checkout 中、置き場が symlink、または
+本体か worktree に生きた worker のロックがある時は force でも exit 2 で何も消さない。
+削除結果は `{ task, removed: { worktree, branch, record } }` で、各値は削除した時 true、
+元々なかった時 false。
+
+記録がある T について、`resume` と `show` も同じ `worktree` 欄を出す。記録が読めない時は終了コードと既存の欄を
+変えず、`worktree: { error: "<メッセージ>" }` を出す。
+`resume` は、統合済み・破棄済みで作業場所が消えた run を `removed: true` で返す。
+`verify --run` と `restore --run` は対象の run の作業場所がもう無い時、exit 2 と `errors` を返す。
+
 ## 再試行・エスカレーション・差し戻し
 
 - 設計の範囲内の不足(試験の失敗、完了の基準の未充足、許可外の変更、`slice_too_large`)は、ステップを直すか
@@ -278,7 +379,7 @@ run の後に監督が書いた状態文書には触れない)。
 
 ## ゲートが見るもの・見ないもの
 
-- 見る: HEAD・全 ref・index の変化(commit・stash・ブランチ操作・stage)、未コミットと untracked のファイルの
+- 通常 run で見る: HEAD・全 ref・index の変化(commit・stash・ブランチ操作・stage)、未コミットと untracked のファイルの
   内容と実行権限、.gitignore 対象のファイル(`.env` など)の内容、入れ子のリポジトリ・サブモジュールの HEAD と
   作業ツリー。snapshot の前から未コミットだったファイルへの追記も、内容の比較で捕まる。
 - 違反にせず警告にする: .gitignore 対象のディレクトリの出入り(試験の生成物など。`gate.ignored_dirs`)。
@@ -286,9 +387,11 @@ run の後に監督が書いた状態文書には触れない)。
   復元もしない)。新しく作られたファイルは違反。
 - 見ない: .gitignore 対象のディレクトリの中身の変更、作業ツリーの外(worker の sandbox はリポジトリと TMPDIR・
   /tmp にしか書けない)。`--workspace` の run では作業場所の外(リポジトリの中でも、作業場所のディレクトリの外)。
-  HEAD・ref はリポジトリ全体で(index は作業場所の中で)見るので、run 中にほかのセッションが同じリポジトリで
-  コミットすると
-  不採用になる(worker の変更は戻さない。監督が確かめて打ち直す)。TMPDIR にある hook の状態とロックは worker が書き換えうるが、ロックを消されても失うのは
+  通常 run は HEAD・ref をリポジトリ全体で(index は作業場所の中で)見るので、run 中にほかのセッションが同じ
+  リポジトリでコミットすると不採用になる(worker の変更は戻さない。監督が確かめて打ち直す)。
+  `--worktree` run は自ブランチ(`refs/heads/<ブランチ>`)だけを見る。HEAD・`symbolic-ref`・index
+  (`git -C <worktree> ls-files -s`)は従来どおり見るが、`refs/stash` とほかのブランチは見ない
+  (本体と共有なので、ほかのセッションの操作で不採用になるのを避ける)。TMPDIR にある hook の状態とロックは worker が書き換えうるが、ロックを消されても失うのは
   監督の編集の抑止だけで、ゲートの判定には使わない。
 
 ## 記録と計測
@@ -298,6 +401,24 @@ run の後に監督が書いた状態文書には触れない)。
   `model` 欄の値を写す。版番号を記憶から書かない — モデルは更新されるので、実行時の値だけが事実である。
 - report の `metrics`(ピーク使用率・compaction・トークン・所要時間・packet の大きさ)は、
   `model-routing.md` とこの文書の既定値(packet 上限、ピークの閾値、許可パスの件数)を見直す材料にする。
+  `duration_s` を、検査コマンドが走った区間の和集合 `check_s`、検査でない
+  `command_execution` が走った区間から検査との重なりを除いた `other_command_s`、
+  残りの `model_s` に分ける。`model_s` にはファイル変更と結果 JSON の生成も含む。
+  単位は整数秒または `null` で、3 つの和は `duration_s` と
+  ±1 秒の範囲で一致する。`timing_error` がある場合はこの 3 値がすべて `null`。
+  `check_count` と `other_command_count` は各区分のコマンド本数。
+  `check_by_tool` は検査の道具名ごとの延べ秒数(重複を含む)。
+  `other_by_tool` はその他のコマンドの剥がした後の先頭語ごとの延べ秒数で、読み込み時間も含む。
+  `runner_s` は `run` 開始から report 組み立てまでの秒数で、snapshot・規約選択・prompt 組み立て・
+  worker・gate・restore を含む。`runner_s - duration_s` が runner の固定費。
+  集計例外時のみ `timing_error` にメッセージを記録し、その場合は本数 0、道具別 `{}`。
+  計測は常時有効。起動前の拒否とシグナル中断では `metrics` 自体がないことがある。
+  既存の `peak_ratio`・`context_window`・`compacted`・トークン数・`duration_s`・
+  `packet_bytes`・`prompt_bytes` は従来どおり。
   run ディレクトリは上の「起動」の節の置き場所に 7 日残る。
+- `events.jsonl` は行単位で記録する。JSON として解釈できた行には、機械集計用の最上位キー
+  `received_at`(UTC の ISO 8601、ミリ秒。例 `2026-09-24T11:03:54.075Z`)を加える。
+  解釈できない行はそのまま残し、行順と Codex 側のキー・バイト列は変えない。
+  状態行のローカル時刻とは用途が異なる。
 - 作業記録の `kind=budget`(予算停止が発火した使用率)と `kind=compact`(閾値をすり抜けて compact が起きた)は、
   予算停止の閾値(`~/.config/claude-task-loop/config.json`、既定 Claude 70/80%・Codex 60/70%)を見直す材料にする。

@@ -205,6 +205,7 @@ export function workspaceIsInsideRepo(workspace, repo) {
 // 実行中ロックの単位。作業場所を含む git リポジトリの最上位にする。作業場所はリポジトリの中の
 // サブディレクトリでもよいので、作業場所そのものを単位にすると、範囲の重なる 2 つの worker(同じ
 // リポジトリの別のサブディレクトリや最上位)が同時に走り、互いの変更をゲートの違反として巻き戻す
+// --worktree の run は作業場所が worktree 内なので、lockRoot は worktree ごとに分かれる
 export function lockRoot(workspace) {
   return gitRoot(workspace) ?? workspace;
 }

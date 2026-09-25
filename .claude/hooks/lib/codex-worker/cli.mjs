@@ -17,6 +17,12 @@
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs integrate --root <root> --task T<n>
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs integrate-step --root <root> --task T<n>
 //        --step <番号>
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs worktree --root <root> --task T<n> [--json]
+//        [--remove [--force]]
+//   実行中ロックは作業場所を含む git の最上位(git.mjs の lockRoot)の単位
+//   --worktree の run では worktree の最上位になり、ロックは worktree ごとに分かれる
+//   check-task-scope.mjs が止める Claude 側の編集も worktree の中だけになる
+//   commands/ にサブコマンド、worktree/ に worktree の git 操作を置く
 //   --parallel は依存の無いステップを同時に走らせる(--worktree と一緒に使う)。ステップ専用の worktree
 //   (worktree/steps.mjs。T の worktree のブランチの先端から切る)で worker を動かし、同じ T の並列ステップどうしだけ
 //   同時に起動できる。同時数の上限(既定 3、--max-parallel)と、走っている兄弟と許可パスが重なる起動は拒否する

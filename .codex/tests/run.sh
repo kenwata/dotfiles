@@ -129,6 +129,7 @@ node --test "$repo_root/.claude/hooks/lib/codex-worker/test/cli.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/worklog.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/status.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/timing.test.mjs"
+node --test "$repo_root/.claude/hooks/lib/codex-worker/test/worktree.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/worktree-steps.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/codex-worker/test/parallel.test.mjs"
 node --test "$repo_root/.claude/hooks/lib/task-loop/test/"*.test.mjs
