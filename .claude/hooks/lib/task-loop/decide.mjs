@@ -227,8 +227,8 @@ const PLANNING_PATHS = (p) => p === "HANDOFF.md" || p === "TODO.md" || p === "do
 //   done       : HEAD が進み、計画工程のファイルに未コミットが無く、次の一手がループの回せる工程(loopStep)で、送った
 //                /amend そのものではない。戻る先は元の T に限らない(置き換え先・次の未着手・amend が足した是正タスク。
 //                amend.md 手順 6。2026-09-24 VC_Analysis の amend T54 は是正タスク T59 を足して次の一手を T59 にした)。
-//                利用者指示の改訂の後に /amend T<n> や /breakdown が続くこともある(2026-09-25 execute-task-speedup の
-//                HANDOFF.md は /amend → /amend T4 の順)
+//                利用者指示の改訂の後に /amend T<n> や /breakdown が続くこともある(2026-09-25 に観測した
+//                HANDOFF.md は /amend → /amend T<n> の順)
 //   elaborate  : 次の一手が /elaborate(amend の段の判定で部分改訂の範囲を超えた)
 //   incomplete : それ以外(承認されなかった・途中で止まった・次の一手が送った /amend のままで着地を区別できない)
 export function amendOutcome(root, headBefore, sent) {

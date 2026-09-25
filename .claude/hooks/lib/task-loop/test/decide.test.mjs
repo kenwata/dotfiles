@@ -310,7 +310,7 @@ test("amendOutcome: 引数なしの /amend の後は、ループが回せる別�
     git(t.root, "commit", "-qm", "chore: 次の一手を /amend にする");
     const head = headOf(t.root);
     for (const [step, expected, why] of [
-      ["/amend T5", "done", "利用者指示の改訂の後に穴の記録経路の /amend T<n> が続く(2026-09-25 execute-task-speedup)"],
+      ["/amend T5", "done", "利用者指示の改訂の後に穴の記録経路の /amend T<n> が続く(2026-09-25 の観測)"],
       ["/execute-task T6", "done", "未着手の T へ進む"],
       ["/breakdown docs/design/plan.md", "done", "改訂で足した段階を分解する"],
       ["/follow-up", "done", "総点検へ進む"],
