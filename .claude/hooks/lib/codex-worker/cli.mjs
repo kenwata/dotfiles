@@ -35,6 +35,7 @@
 //   読み替えて照合する。規約は作業場所 → --root の順に選ぶ
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs restore --run <run ディレクトリ> [--keep <残すパス> ...]
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs verify --run <run ディレクトリ> [--timeout <1 本あたりの秒>]
+//   node ~/.claude/hooks/lib/codex-worker/cli.mjs size-check --run <run ディレクトリ> [--max-file-lines <n>]
 //   worker 用 CODEX_HOME は環境変数 CODEX_WORKER_HOME(既定 ~/.codex-worker、.codex/install.sh が作る)。
 //   モデルは既定で系統 luna(model-routing.md の通常実装)を、`codex debug models` の一覧の最新の版へ解決する。
 //   版番号をどこにも固定しないため。--model は解決を飛ばして ID を直接渡す(一覧に無いモデルを試す時だけ)。
@@ -79,6 +80,7 @@
 import { parseArgs } from "node:util";
 import { emit } from "./output.mjs";
 import { restoreRun, verifyRun } from "./commands/run-review.mjs";
+import { sizeCheckCommand } from "./commands/size-check.mjs";
 import { run } from "./commands/run.mjs";
 import { integrateStepTask, integrateTask, worktreeTask } from "./commands/task-worktree.mjs";
 import { noteTask, registerPlan, resumeTask, showTask } from "./commands/task-ledger.mjs";
@@ -96,6 +98,7 @@ try {
       changed: { type: "string" }, json: { type: "boolean" }, workspace: { type: "string" },
       worktree: { type: "boolean" }, parallel: { type: "boolean" },
       "max-parallel": { type: "string" },
+      "max-file-lines": { type: "string" },
       remove: { type: "boolean" }, force: { type: "boolean" },
     },
   });
@@ -107,6 +110,7 @@ if (parsed) {
   if (command === "run") await run(parsed.values);
   else if (command === "restore") restoreRun(parsed.values);
   else if (command === "verify") await verifyRun(parsed.values);
+  else if (command === "size-check") sizeCheckCommand(parsed.values);
   else if (command === "plan") registerPlan(parsed.values);
   else if (command === "show") showTask(parsed.values);
   else if (command === "note") noteTask(parsed.values);
@@ -126,6 +130,7 @@ if (parsed) {
       "resume ...",
       "restore --run <dir>",
       "verify --run <dir>",
+      "size-check --run <dir> [--max-file-lines <n>]",
     ].join(" | ")}`],
   }, null, 2);
 }
