@@ -15,6 +15,10 @@ import {
   worklogEntries,
 } from "./cli-harness.mjs";
 
+const REWORK_SECTION = `## 直すこと
+種別: defect
+既存テストとの整合: 該当なし: 差し戻し契約を満たす試験用 packet`;
+
 test("run --worktree は --workspace が無ければ起動前に exit 2 で拒否する", () => {
   const t = setup();
   try {
@@ -73,6 +77,13 @@ test(
         env: { ...process.env, XDG_STATE_HOME: path.join(t.base, "state") },
       });
 
+      fs.writeFileSync(
+        t.packet,
+        fs.readFileSync(t.packet, "utf8").replace(
+          "## 利用者に見える文",
+          `${REWORK_SECTION}\n\n## 利用者に見える文`,
+        ),
+      );
       const result = t.run([...wsArgs(t), "--worktree"], { FAKE_MODE: "ok" });
 
       assert.equal(result.code, 0, JSON.stringify(result.json));

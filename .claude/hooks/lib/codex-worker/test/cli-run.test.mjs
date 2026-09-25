@@ -14,6 +14,10 @@ import {
   assertStatusLogLines,
 } from "./cli-harness.mjs";
 
+const REWORK_SECTION = `## 直すこと
+種別: defect
+既存テストとの整合: 該当なし: 差し戻し契約を満たす試験用 packet`;
+
 test("正常な run は exit 0 で、系統名から最新のモデルを解決し、ロックを外す", () => {
   const t = setup();
   try {
@@ -228,7 +232,10 @@ test("同じ step の run 記録があれば利用者に見える文の節を要
   try {
     const first = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
     assert.equal(first.code, 0, JSON.stringify(first.json));
-    fs.writeFileSync(t.packet, `## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 試験用\n\n${VERIFY_SECTION}`);
+    fs.writeFileSync(
+      t.packet,
+      `## 目的\nimpl を書く\n\n${REWORK_SECTION}\n\n## 横断の確認\n該当なし: 試験用\n\n${VERIFY_SECTION}`,
+    );
     const retry = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
     assert.equal(retry.code, 0, JSON.stringify(retry.json));
   } finally { t.cleanup(); }

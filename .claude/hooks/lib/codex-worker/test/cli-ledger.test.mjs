@@ -14,6 +14,18 @@ import {
   readLog,
 } from "./cli-harness.mjs";
 
+const REWORK_SECTION = `## 直すこと
+種別: defect
+既存テストとの整合: 該当なし: 差し戻し契約を満たす試験用 packet`;
+
+/** Adds the required rework section to a packet while preserving its other sections. */
+function withReworkSection(packet) {
+  return packet.replace(
+    "## 利用者に見える文",
+    `${REWORK_SECTION}\n\n## 利用者に見える文`,
+  );
+}
+
 test("plan は計画を登録し、登録し直すと前の計画を残して、一覧を状態行に出す", () => {
   const t = setup();
   try {
@@ -64,6 +76,7 @@ test("show は計画の各ステップの最新の run の状態と verify の�
     assert.match(out.stdout, /^1\/2 s1 +未着手 +impl を書く$/m);
 
     const { json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    fs.writeFileSync(t.packet, withReworkSection(fs.readFileSync(t.packet, "utf8")));
     t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
     t.run(["verify", "--run", json.run_dir]); // 古い run の verify は最新の run の欄に出ない
     out = t.show();
@@ -80,12 +93,28 @@ test("show は計画の各ステップの最新の run の状態と verify の�
   } finally { t.cleanup(); }
 });
 
+test("show は packet の最新・run ごとの写しを末尾に表示する", () => {
+  const t = setup();
+  try {
+    t.registerPlan(PLAN);
+
+    const out = t.show();
+
+    assert.equal(out.status, 0);
+    assert.equal(
+      out.stdout.trimEnd().split("\n").at(-1),
+      `packet の写し: ${t.taskDir}/s<番号>.packet.md(最新)、s<番号>-<run_id>.packet.md(run ごと)`,
+    );
+  } finally { t.cleanup(); }
+});
+
 test("plan・run・verify は結果を worklog に 1 行ずつ残し、最初の run だけが起動前の未コミットを baseline に持つ", () => {
   const t = setup();
   try {
     fs.appendFileSync(path.join(t.root, "other/y.ts"), "利用者の作業中の変更\n");
     const { json } = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
     t.run(["verify", "--run", json.run_dir]);
+    fs.writeFileSync(t.packet, withReworkSection(fs.readFileSync(t.packet, "utf8")));
     t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
     const log = readLog(t);
     assert.match(log, /^- \S+ kind=plan by=runner steps=2 revised=false — s1 impl を書く \/ s2 呼び出し元を直す$/m);

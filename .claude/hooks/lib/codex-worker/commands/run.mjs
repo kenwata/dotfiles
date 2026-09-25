@@ -16,7 +16,9 @@ import {
   gate, readRollout, restore, selectRules, takeSnapshot,
   validateResult, normalizeAllow, workspaceErrors,
 } from "../core.mjs";
-import { checkPacketDesignRefs, checkPacketUserVisibleText } from "../packet.mjs";
+import {
+  checkPacketDesignRefs, checkPacketRework, checkPacketUserVisibleText, packetReworkKind,
+} from "../packet.mjs";
 import { renderSummary } from "../status.mjs";
 import { timingMetrics } from "../timing.mjs";
 import { normalizeStep, readPlan, readWorklog, runsDir, taskDir } from "../worklog.mjs";
@@ -209,13 +211,18 @@ export async function run(args) {
   if (packetBytes > maxPacket) {
     errors.push(`packet が ${packetBytes} バイトで上限 ${maxPacket} を超える。ステップを小さく切り、意図の層(背景・兄弟タスク・将来計画)を削る`);
   }
+
+  const stepKey = normalizeStep(step);
+  const hasRunForStep = root && /^T\d+$/.test(task ?? "") && step
+    ? (readWorklog(root, task)?.entries ?? []).some((entry) =>
+      entry.kind === "run" && normalizeStep(entry.step) === stepKey)
+    : false;
+  const rerunKind = hasRunForStep ? packetReworkKind(packet) : null;
   if (args.packet && packet !== "") {
     errors.push(...checkPacketCrossCheck(packet), ...checkPacketVerify(packet));
-    if (root && /^T\d+$/.test(task ?? "") && step) {
-      const stepKey = normalizeStep(step);
-      const hasRunForStep = (readWorklog(root, task)?.entries ?? []).some((entry) =>
-        entry.kind === "run" && normalizeStep(entry.step) === stepKey);
-      if (!hasRunForStep) errors.push(...checkPacketUserVisibleText(packet));
+    if (hasRunForStep) errors.push(...checkPacketRework(packet));
+    else if (root && /^T\d+$/.test(task ?? "") && step) {
+      errors.push(...checkPacketUserVisibleText(packet));
     }
     errors.push(...checkPacketDesignRefs(packet, (relativePath) =>
       fs.existsSync(path.join(workspace, relativePath))));
@@ -271,7 +278,12 @@ export async function run(args) {
   const runMeta = { root, workspace, task, step, model, allow, ...(worktree ? { worktree } : {}) };
   fs.writeFileSync(path.join(runDir, "run.json"), JSON.stringify(runMeta, null, 2));
   fs.writeFileSync(path.join(runDir, "packet.md"), packet); // verify が検証節を読む
-  try { fs.writeFileSync(path.join(taskDir(root, task), `s${step}.packet.md`), packet); } catch { /* 写しは人が読むためのもの */ }
+  for (const name of [`s${step}.packet.md`, `s${step}-${id}.packet.md`]) {
+    try {
+      fs.writeFileSync(path.join(taskDir(root, task), name), packet);
+    } catch { /* 写しは人が読むためのもの */ }
+  }
+
   // 作業場所 → そのリポジトリの最上位 → 帳簿の root の順(重なりは除く)
   const ruleRoots = [...new Set([workspace, gitRoot(workspace) ?? workspace, root])];
   const { rules, conservative } = selectRules(workspace, allow, ruleRoots);
@@ -311,6 +323,7 @@ export async function run(args) {
       keys: {
         run: id, accepted: false, stage: "interrupted", ...(loggedWorkspace ? { workspace } : {}),
         ...(worktree ? { branch: worktree.branch } : {}),
+        ...(rerunKind ? { rerun: rerunKind } : {}),
       },
       text: `runner が ${signal} で止められた。作業ツリーは戻していない`,
     });
@@ -320,6 +333,7 @@ export async function run(args) {
       accepted: false,
       stage: "interrupted",
       run_dir: runDir,
+      rerun_kind: rerunKind,
       ...(worktree ? { worktree } : {}),
       reasons: [interruptionReason],
     }, runDir, 1);
@@ -408,6 +422,7 @@ export async function run(args) {
     task,
     step,
     workspace,
+    rerun_kind: rerunKind,
     ...(worktree ? { worktree } : {}),
     model,
     model_family: resolved.family ?? null,
@@ -461,6 +476,7 @@ export async function run(args) {
       run: id, accepted: report.accepted, worker: result?.status ?? "none", changed: checked.changed,
       ...(loggedWorkspace ? { workspace } : {}),
       ...(worktree ? { branch: worktree.branch } : {}),
+      ...(rerunKind ? { rerun: rerunKind } : {}),
       ...(firstRun ? { baseline: Object.entries(snapshot.files).filter(([, f]) => !f.ignored).map(([p]) => p) } : {}),
     },
     text: report.accepted ? `accepted: ${plan.steps.find((s) => s.step === step).purpose}` : reasons.join(" / "),

@@ -119,7 +119,10 @@ export function showTask(args) {
   const pad = (text, width) => text + " ".repeat(width - [...text].length);
   const lines = [`${task} ${root}`, `計画: ${plan.file}`, ""];
   for (const r of rows) lines.push(`${pad(r[0], widths[0])}  ${pad(r[1], widths[1])}  ${pad(r[2], widths[2])}  ${r[3]}`);
-  lines.push("", `packet の写し: ${path.dirname(plan.file)}/s<番号>.packet.md`);
+  lines.push(
+    "",
+    `packet の写し: ${path.dirname(plan.file)}/s<番号>.packet.md(最新)、s<番号>-<run_id>.packet.md(run ごと)`,
+  );
   process.stdout.write(lines.join("\n") + "\n");
 }
 

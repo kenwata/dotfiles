@@ -9,6 +9,66 @@ const PACKET_CROSS_CHECK_REASON = `packet に「${PACKET_CROSS_CHECK_HEADING}」
 2. packet が不具合・遅さの原因を断定している → 根拠(計測の結果、または仮説3つ以上と棄却の理由)を書く。観測から直接読めないなら、先に「測って報告するだけ」のステップを起動する。
 3. 複数ステップが共有する型・データ形式に触れる → 共有の一覧のどれに当たるかを書く。設計書が決めていない大きな共有形式を新たに固める時は、裁量で固めず穴の記録の経路へ戻す。`;
 
+const PACKET_REWORK_HEADING = "## 直すこと";
+const PACKET_REWORK_KINDS = ["defect", "supervisor", "spec", "environment", "replan"];
+const PACKET_REWORK_KIND_LINE_PATTERN = /^種別: (.+)$/;
+const PACKET_REWORK_REASON_DETAILS =
+  `1 行目は「種別: (defect|supervisor|spec|environment|replan)」、`
+  + `2 行目は「既存テストとの整合: \\S.*」の書式にする。`
+  + `種別の意味は defect = worker の欠陥(size_check の違反を含む)、`
+  + `supervisor = 監督の指示の誤り・監督が見落としていた前提、`
+  + `spec = 仕様の後出し(最初の packet に書いていなかった要件)、`
+  + `environment = 時間切れ・compaction・実行環境の制限など worker の欠陥でない打ち直し、`
+  + "replan = 計画の切り直しで同じ番号が別の目的になった(差し戻しではない)。";
+
+/**
+ * Checks the required rework section and its two nonblank lines.
+ * @param {string} packet Packet text.
+ * @returns {string[]} One reason when invalid; otherwise an empty array.
+ */
+export function checkPacketRework(packet) {
+  const body = packetSection(packet, PACKET_REWORK_HEADING);
+  if (body === null) return [packetReworkReason("節が無い")];
+
+  const kindLineIndex = body.findIndex((line) => line.trim() !== "");
+  const kindLine = body[kindLineIndex]?.trimEnd();
+  const consistencyLine = body[kindLineIndex + 1]?.trimEnd();
+  const kindMatch = kindLine === undefined ? null : PACKET_REWORK_KIND_LINE_PATTERN.exec(kindLine);
+  if (!kindMatch) return [packetReworkReason("1 行目の書式が合わない")];
+  if (!PACKET_REWORK_KINDS.includes(kindMatch[1])) {
+    return [packetReworkReason("種別が 5 値の外")];
+  }
+  if (!/^既存テストとの整合: \S.*$/.test(consistencyLine ?? "")) {
+    return [packetReworkReason("2 行目の書式が合わない")];
+  }
+
+  return [];
+}
+
+/**
+ * Returns the rework kind when the packet's rework section is valid.
+ * @param {string} packet Packet text.
+ * @returns {"defect" | "supervisor" | "spec" | "environment" | "replan" | null} Valid kind or null.
+ */
+export function packetReworkKind(packet) {
+  if (checkPacketRework(packet).length > 0) return null;
+
+  const body = packetSection(packet, PACKET_REWORK_HEADING) ?? [];
+  const kindLine = body.find((line) => line.trim() !== "")?.trimEnd() ?? "";
+
+  return PACKET_REWORK_KIND_LINE_PATTERN.exec(kindLine)?.[1] ?? null;
+}
+
+/**
+ * Builds the single user-facing reason for a rework-section validation failure.
+ * @param {string} issue The first failing condition.
+ * @returns {string} Reason with the required formats and kind definitions.
+ */
+function packetReworkReason(issue) {
+  return `${issue}。packet の「${PACKET_REWORK_HEADING}」節について、`
+    + PACKET_REWORK_REASON_DETAILS;
+}
+
 // packet の「## 横断の確認」節を検査する。節が無いか、次の同じ深さの見出しまでが空白だけなら理由を 1 件返す
 /**
  * Checks the required cross-check section in a packet.

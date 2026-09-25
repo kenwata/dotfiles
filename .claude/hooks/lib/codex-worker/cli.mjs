@@ -64,7 +64,10 @@
 // plan は、タスクのステップ計画(「- s<番号>: <目的>」の箇条書き)を
 // ${XDG_STATE_HOME:-~/.local/state}/claude-codex-worker/tasks/<ルートのパスの記号を - にした名前>/T<n>/plan.md に登録する。
 // 登録し直すと前の計画は plan-<時刻>.md に残る。run は計画に無いステップを起動せず、packet を同じ場所の
-// s<番号>.packet.md にも写す。show は計画の各ステップの最新の run の状態と verify の結果を人向けの表で出す。
+// s<番号>.packet.md(最新)と
+// s<番号>-<run_id>.packet.md(run ごと。上書きしない)にも写す。
+// show は計画の各ステップの最新の run の状態と verify の結果を
+// 人向けの表で出す。
 // verify は、run の packet の「## 検証」節のコマンドを worker と同じ sandbox(`codex sandbox`、worker 用 CODEX_HOME の
 // 設定)の中で 1 本ずつ別々に打ち、コマンドごとの終了コードを JSON で stdout と <run ディレクトリ>/verify.json に出す。
 // worker が書いたコードを、API キーとネットワークのある sandbox の外で走らせないため。UV_CACHE_DIR は verify 専用。
