@@ -40,6 +40,8 @@ run_case "blocks_when_message_ends_with_question_mark" 2 "自動ゲート" \
   "$(stop_input $'二つの案があります。\nどちらにしますか？')"
 run_case "blocks_when_message_requests_user_review" 2 "自動ゲート" \
   "$(stop_input $'対象は次の4件です。\nご確認のうえ readiness label を教えてください。')"
+run_case "block_reason_distinguishes_reordering_from_shortcut" 2 "順序を入れ替え" \
+  "$(stop_input $'二つの案があります。\nどちらにしますか？')"
 run_case "passes_when_message_is_plain_report" 0 "" \
   "$(stop_input $'T32 が完了しました。コミットは 90ca242 です。')"
 run_case "passes_when_question_is_only_in_the_middle" 0 "" \
