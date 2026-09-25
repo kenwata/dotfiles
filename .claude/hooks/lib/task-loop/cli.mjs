@@ -63,22 +63,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
-import { activeWorkerLock, gitRoot } from "../../check-task-scope.mjs";
+import { gitRoot } from "../../check-task-scope.mjs";
 import {
   amendCount, amendOutcome, breakdownOutcome, checkpointSince, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge,
   loopStep, nextStep, openDependencies, openTasks, parseTaskList, planSlug,
 } from "./decide.mjs";
 import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, available, paneSplit, paneTitle } from "./herdr.mjs";
+import { initialSettleState, observe, settleTick } from "./settle.mjs";
 import { clearTurn, loopStateDir, readConfig, readSession, readTurn, sweep, updateSession } from "./session-state.mjs";
-import { waitPhase } from "./turn.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_CLI = path.join(here, "..", "codex-worker", "cli.mjs");
 // 状態を見直す間隔。TASK_LOOP_POLL_MS はテストで短くするためだけの上書き
 const POLL_MS = Number(process.env.TASK_LOOP_POLL_MS) > 0 ? Number(process.env.TASK_LOOP_POLL_MS) : 5_000;
-// 見張りの間に、hook の記録が待つ理由を示さず herdr の状態も取れない(失敗・unknown)のが続いたら止まるまでの猶予。
-// 画面の描き直しや herdr の一時的な失敗を止まる理由にしないため。TASK_LOOP_HERDR_GRACE_MS はテストで短くするためだけの上書き
-const HERDR_GRACE_MS = Number(process.env.TASK_LOOP_HERDR_GRACE_MS) > 0 ? Number(process.env.TASK_LOOP_HERDR_GRACE_MS) : 60_000;
 const CHECKPOINT_LIMIT = 5;
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -233,91 +230,18 @@ function handoffTasks(root) {
   return { tasks: task ? [task] : [], step, errors: [] };
 }
 
-// herdr の agent_status と session_id を読む。unknown(分類できない)と失敗は status を null にし、failure に止まる時の
-// 理由を入れる。session_id は SessionStart の hook(herdr-agent-state.sh)が herdr に届けた値
-function observe(ctx) {
-  try {
-    const agent = agentGet(ctx.target);
-    const session = agent.agent_session?.value ?? null;
-    return agent.agent_status === "unknown" ? { status: null, session, failure: "unknown" } : { status: agent.agent_status, session };
-  } catch (error) {
-    return { status: null, failure: "herdr_error", detail: error.message };
-  }
-}
-
-// 送った後、成果物の判定に進んでよいところまで、POLL_MS ごとに見直して待つ。待ち方は hook(../../loop-turn.mjs)が
-// turns/<session>.json に書いたターンの状態を先に見て、herdr の agent_status は待つ方向の証拠を足すだけにする
-// (turn.mjs の waitPhase)。herdr の長い待ち(agent wait)は使わない(herdr.mjs 冒頭の経緯)。
-// - 答え待ち(AskUserQuestion・承認の画面): 人の答えを待ち、その間は作業の制限時間に数えない。制限時間はエージェントの
-//   停滞を見るためのもので、人の応答の遅さは別物だから。代わりに答え待ちが --answer-timeout-hours 続いたら止まる
-//   (中断で取り残された記録や herdr の読み違いで、無期限に待たないため)。窓の題名が <計画> T<n> / amend /
-//   breakdown のまま残り、何を待たれているかは見える
-// - ターンの途中(hook の running・herdr の working)、ターンが終わっても裏の処理が走っている(hook の stopped に
-//   background。完了通知で再開するまでの空白。turn.mjs の経緯)、Codex worker の実行中(ロック): 待つ
-// - 判定できない(hook が待つ理由を示さず herdr も読めない): 静かな時間を数えずに待ち、HERDR_GRACE_MS 続いたら止まる
-// - それ以外: 落ち着いた状態が settle の間続いたら落ち着いたとみなす(worker の完了通知で監督のターンが再開する間を空ける)
-// 成果物の完了は毎周見て、揃えばターンの終わりを待って先へ進む。herdr が読めない間も、hook がターンの終わりを
-// 書いていれば進む。
+// settle.mjs の settleTick を POLL_MS ごとに呼ぶ薄い包み。
 function settle(ctx, deadline, isComplete, logTask, session) {
-  let quietSince = null;
-  let quietPausedAt = null; // 落ち着いた状態の途中で判定できなくなった時刻。読めない間は静かな時間に数えない
-  let answerSince = null;
-  let answeredFrom = null; // 前の周が答え待ちなら、その周の始まり。周の全体を作業の制限時間から除く
-  let blindSince = null;
-  let blind = false;
-  let completeSeen = false;
-  let limit = deadline;
+  const waitCtx = { ...ctx, session, isComplete, log: (text) => log(logTask, text) };
+  let state = initialSettleState(deadline);
+
   for (;;) {
-    const roundAt = Date.now();
-    if (answeredFrom !== null) { limit += roundAt - answeredFrom; answeredFrom = null; }
-    if (roundAt > limit) return { stop: "timeout" };
-    const seen = observe(ctx);
-    // 送った時と別のセッションになったら、hook の記録(前のセッションのもの)では待つ理由を決められない。判定へ進む
-    // (runTask では judge が session_changed として止め、/follow-up・/amend・/breakdown では着地していないとして止まる)
-    if (session && seen.session && seen.session !== session) return {};
-    if (Boolean(seen.failure) !== blind) {
-      blind = !blind;
-      log(logTask, blind ? `herdr: 状態を読めない(${seen.detail ?? seen.failure})。hook の記録で判定を続ける` : "herdr: 状態を読めるようになった");
+    const result = settleTick(waitCtx, state, Date.now());
+    state = result.state;
+    if (!result.wait) {
+      return result.done ? {} : { stop: result.stop, detail: result.detail };
     }
-    const phase = waitPhase(seen.status, session ? readTurn(session) : null, Date.now());
-    // 成果物が揃っても、ターンが続いている間(作業中・答え待ち・worker の実行中)は先へ進まない。次の /clear が
-    // Claude Code の待ち行列に入り、ターンの終わりまで実行されないため(2026-09-24 の VC_Analysis T61: コミットの後に
-    // 完了条件の確かめを 2 分続けている間に /clear を送り、clear_not_detected で止まった)。揃った後は静かな時間を待たない
-    const turnGoing = phase === "busy" || phase === "awaiting_user" || activeWorkerLock(ctx.root);
-    if (isComplete()) {
-      if (!turnGoing) {
-        if (answerSince !== null) log(logTask, "blocked: 答えを受けて再開");
-        return {};
-      }
-      if (!completeSeen) { log(logTask, "完了を確認。ターンが終わるのを待つ"); completeSeen = true; }
-    }
-    if (phase !== "awaiting_user" && answerSince !== null) { log(logTask, "blocked: 答えを受けて再開"); answerSince = null; }
-    if (phase !== "no_evidence") blindSince = null;
-    if (phase === "awaiting_user") {
-      if (answerSince === null) log(logTask, "blocked: 利用者の答えを待つ");
-      answerSince ??= Date.now();
-      if (Date.now() - answerSince > ctx.answerTimeoutMs) return { stop: "answer_timeout" };
-      quietSince = null; quietPausedAt = null;
-      answeredFrom = roundAt;
-      sleep(POLL_MS);
-      continue;
-    }
-    // worker のロックは herdr によらない待つ理由なので、判定できない場合より先に見る
-    if (phase === "busy" || activeWorkerLock(ctx.root)) {
-      quietSince = null; quietPausedAt = null;
-      sleep(POLL_MS);
-      continue;
-    }
-    if (phase === "no_evidence") {
-      blindSince ??= Date.now();
-      if (Date.now() - blindSince > HERDR_GRACE_MS) return { stop: seen.failure, detail: seen.detail };
-      if (quietSince !== null) quietPausedAt ??= Date.now();
-      sleep(POLL_MS);
-      continue;
-    }
-    if (quietPausedAt !== null) { quietSince += Date.now() - quietPausedAt; quietPausedAt = null; }
-    quietSince ??= Date.now();
-    if (Date.now() - quietSince >= ctx.settleMs) return {};
+
     sleep(POLL_MS);
   }
 }
