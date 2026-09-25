@@ -128,6 +128,20 @@ test("glued-block: Python はインデントの戻りでブロックの閉じを
   assert.deepEqual(kinds(source, py), ["glued-block"]);
 });
 
+test("glued-block: 複数行の文字列の中身のインデントの戻りはブロックの閉じとみなさない", () => {
+  const source = [
+    "def test_extracts() -> None:",
+    '    text = """## 9. Earlier',
+    "`.venv/bin/ignored-before`",
+    "## 10. Round operations",
+    '"""',
+    "",
+    "    run(text)",
+  ].join("\n");
+
+  assert.deepEqual(kinds(source, py), []);
+});
+
 test("glued-block: Python の elif・else・except は続きの節として通す", () => {
   const source = [
     "def f(x):",

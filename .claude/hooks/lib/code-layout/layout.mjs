@@ -125,7 +125,8 @@ export function findLayoutIssues(source, language) {
 }
 
 // 各行に種類(blank / comment / string / code)とインデントを付ける。
-// ブロックコメントと複数行の文字列の中は、閉じの記号や文として読まないよう code から外す
+// ブロックコメントと複数行の文字列の中は、閉じの記号や文として読まないよう code から外す。
+// 前の行で開いた文字列・ヒアドキュメントの続きの行には inLiteral を付ける(インデントを読まないため)
 function classifyLines(source, language) {
   const { comments, multilineStrings } = language;
   let blockEnd = null;
@@ -139,7 +140,7 @@ function classifyLines(source, language) {
 
     if (heredocEnd !== null) {
       if (trimmed === heredocEnd) heredocEnd = null;
-      return { ...line, kind: "string" };
+      return { ...line, kind: "string", inLiteral: true };
     }
 
     if (blockEnd !== null) {
@@ -150,13 +151,15 @@ function classifyLines(source, language) {
     if (stringDelimiter !== null) {
       const delimiter = stringDelimiter;
 
-      if (countOccurrences(text, delimiter) % 2 === 0) return { ...line, kind: "string" };
+      if (countOccurrences(text, delimiter) % 2 === 0) {
+        return { ...line, kind: "string", inLiteral: true };
+      }
 
       // 文字列を閉じた行の残り(`` `).then(() => { `` の `).then(() => {`)。括弧の追跡が読む
       const afterString = text.slice(text.lastIndexOf(delimiter) + delimiter.length).trim();
 
       stringDelimiter = null;
-      return { ...line, kind: "string", afterString };
+      return { ...line, kind: "string", inLiteral: true, afterString };
     }
 
     if (trimmed === "") return { ...line, kind: "blank" };
@@ -223,7 +226,8 @@ function findGluedBlocks(lines, language) {
     const next = lines[index + 1];
 
     if (next === undefined || next.kind === "blank" || line.kind !== "code") return [];
-    if (language.continuation.test(next.trimmed)) return [];
+    // 前の行で開いた複数行の文字列・ヒアドキュメントの中身は文ではなく、インデントも意味を持たない
+    if (next.inLiteral === true || language.continuation.test(next.trimmed)) return [];
 
     const closed = language.blockStyle === "indent"
       ? closedIndentBlock(lines, index)
