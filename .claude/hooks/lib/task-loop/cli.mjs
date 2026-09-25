@@ -19,7 +19,8 @@
 //   --no-follow-up なら /follow-up を送らず follow_up_required として止まる
 //   Claude のセッションには名前を付ける(窓の題名と /resume の一覧に出る)。自動起動は `claude --name "<計画> loop"`、
 //   /clear の後は毎回 `/rename <計画> T<n>`(/follow-up の前は `<計画> follow-up`、/amend T<n> は `<計画> T<n> amend`、
-//   引数なしの /amend は `<リポジトリのディレクトリ名> amend`、/breakdown は `<設計書の slug> breakdown`)。<計画> は T が属する TODO.md の
+//   T<n> 以外の引数の /amend は `<リポジトリのディレクトリ名> amend`、/breakdown は `<設計書の slug> breakdown`(引数なしは
+//   `<リポジトリのディレクトリ名> breakdown`))。<計画> は T が属する TODO.md の
 //   `## #<n> <slug>` の slug で、無ければリポジトリのディレクトリ名
 //
 // 経緯(2026-09-23): 利用者はタスクの間で /clear を打ち、compact(自動要約)による情報消失を避けてきた。複数の T を
@@ -40,14 +41,14 @@
 //           次の一手が指す T(元の T・置き換え先・足された是正タスク)を attempt 1 から送る。同じ T でこのループ 2 回目の穴、
 //           または履歴に T 由来の amend が既に 2 件ある時は amend_repeated で止まる
 //   stop  : それ以外(次の一手が /elaborate・timeout・compact など)。人の判断を待つ
-// 引数なしで T の間に読む次の一手が回せない時の停止理由: next_step_not_runnable(/elaborate・コマンド無し・引数の形が違う)/
+// 引数なしで T の間に読む次の一手が回せない時の停止理由: next_step_not_runnable(/elaborate・コマンド無し・T<n> の無い /execute-task)/
 // next_step_not_open(済んだ T・廃止した T を指す)/ breakdown_repeated(同じ設計書の /breakdown が T の完了を挟まずに続いた)
 // 問い(AskUserQuestion・承認の画面)で止めず、人が答えて動き出すまで待つ(settle)。答え待ちの間はタスクの制限時間に
 // 数えず、--answer-timeout-hours で区切る。ターンの途中・答え待ち・終了は hook(../../loop-turn.mjs)が turns/<id>.json に
 // 書いた記録を先に見て、herdr の画面の判定は待つ方向の証拠を足すだけにする(herdr は画面を読んだ推測で、名前の罫線の
 // 下の問いの画面を idle と見逃す。turn.mjs)。herdr は送る手段として使い、見張りの間の失敗・unknown では猶予の後に止まる。/elaborate は対話で詰める工程なのでループに入れない(2026-09-24 利用者決定)。
-// 計画工程: 引数なしの時は、次の一手が /breakdown docs/design/<slug>.md なら送り(runBreakdown)、/amend T<n> と引数なしの
-// /amend(利用者指示経路)なら送る(runAmend)。
+// 計画工程: 引数なしの時は、次の一手が /breakdown・/amend なら引数の有無・形を問わず次の一手の文面のまま送る
+// (runBreakdown・runAmend。ループから外すのは /elaborate だけ。2026-09-24 利用者決定)。
 // T を位置引数・--tasks で指定した時は範囲を「ここまで」と読み、/breakdown を送らない(範囲が済めば all_done、次の一手は
 // next_step に出す)。/amend・/breakdown が途中で止まった時の再開は無い(人が片付けて打ち直す)
 // 経緯(2026-09-24): 引数なしの既定を「TODO.md の未着手を上から順に」にしていたため、表の先頭にあった凍結中の T47 を
@@ -66,7 +67,7 @@ import { parseArgs } from "node:util";
 import { gitRoot } from "../../check-task-scope.mjs";
 import {
   amendCount, amendOutcome, breakdownOutcome, checkpointSince, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge,
-  loopStep, nextStep, openDependencies, openTasks, parseTaskList, planSlug,
+  loopStep, nextStep, openDependencies, openTasks, parseTaskList, planSlug, stepTask,
 } from "./decide.mjs";
 import { HerdrError, agentGet, agentList, agentPrompt, agentRead, agentStart, available, paneSplit, paneTitle } from "./herdr.mjs";
 import { initialSettleState, observe, settleTick } from "./settle.mjs";
@@ -215,18 +216,18 @@ function preflight(args, positionalTasks) {
 function handoffError(error, step, root) {
   const shown = step ? `/${step.command}${step.arg ? " " + step.arg : ""}` : null;
   if (error === "not_open") return `HANDOFF.md の次の一手 ${shown} の ${step.arg} は未着手([ ])ではない。次の一手を直すか、T を引数で指定する: ${root}`;
-  if (error === "bad_argument") return `HANDOFF.md の次の一手 ${shown} は引数の形が違う(/execute-task は T<n>、/amend は T<n> か引数なし、/breakdown は docs/design/<slug>.md): ${root}`;
+  if (error === "bad_argument") return `HANDOFF.md の次の一手 ${shown} に T<n> が無い(/execute-task は T の完了で判定するので T<n> が要る): ${root}`;
   if (shown) return `HANDOFF.md の次の一手 ${shown} は task-loop が回す工程(/execute-task・/amend・/breakdown・/follow-up)ではない: ${root}`;
   return `HANDOFF.md の次の一手(「次セッションの最初の一手」節)に task-loop が回す工程(/execute-task・/amend・/breakdown・/follow-up)が無い: ${root}`;
 }
 
 // 引数なしの起動で最初に回す工程(HANDOFF.md の次の一手。decide.mjs の loopStep)。tasks は /execute-task・/amend T<n> の T
-// (未コミットの変更の照合とセッション名に使う。引数なしの /amend は T を持たないので空)。回せなければ何も送らずに前提検査で止まる
+// (未コミットの変更の照合とセッション名に使う。T<n> 以外の引数の /amend は T を持たないので空)。回せなければ何も送らずに前提検査で止まる
 function handoffTasks(root) {
   const { step, error } = loopStep(root);
   if (error) return { tasks: [], errors: [handoffError(error, step, root)] };
 
-  const task = step.command === "execute-task" || step.command === "amend" ? step.arg : null;
+  const task = stepTask(step);
   return { tasks: task ? [task] : [], step, errors: [] };
 }
 
@@ -395,15 +396,17 @@ function runPlanning(ctx, { label, text, loopTask, name, outcome }) {
   return { outcome: outcome(), session };
 }
 
-// /amend を送る。task は穴の記録で止まった T(/amend T<n>)か、null(引数なしの /amend。利用者指示経路)。
-// amend.md 手順 5 の承認は人が答える(ループは blocked の間待つ)。着地(amendOutcome が done。次の一手がループの回せる
-// 別の工程になった)なら continue、次の一手が /elaborate なら amend_to_elaborate、それ以外は amend_incomplete
-function runAmend(ctx, task) {
+// /amend を送る。arg は次の一手に書かれた引数のまま(穴の記録経路の T<n>、利用者指示経路は null か設計書のパスなど)。
+// T として扱うのは arg が T<n> の時だけ。amend.md 手順 5 の承認は人が答える(ループは blocked の間待つ)。着地
+// (amendOutcome が done。次の一手がループの回せる別の工程になった)なら continue、次の一手が /elaborate なら
+// amend_to_elaborate、それ以外は amend_incomplete
+function runAmend(ctx, arg) {
+  const task = stepTask({ command: "amend", arg });
   const headBefore = headOf(ctx.root);
   const r = runPlanning(ctx, {
-    label: "amend", text: stepText(ctx.host, { command: "amend", arg: task }), loopTask: task ?? "amend",
+    label: "amend", text: stepText(ctx.host, { command: "amend", arg }), loopTask: task ?? "amend",
     name: sessionName(ctx.root, task, task ? `${task} amend` : "amend"),
-    outcome: () => amendOutcome(ctx.root, headBefore, task),
+    outcome: () => amendOutcome(ctx.root, headBefore, arg),
   });
   if (r.stop) return { action: "stop", reason: r.stop, session: r.session, details: r.details };
   if (r.outcome === "done") return { action: "continue", session: r.session };
@@ -415,8 +418,9 @@ function runAmend(ctx, task) {
 function runBreakdown(ctx, design) {
   const headBefore = headOf(ctx.root);
   const openBefore = openTasks(ctx.root);
+  const name = design ? `${path.basename(design, ".md")} breakdown` : sessionName(ctx.root, null, "breakdown");
   const r = runPlanning(ctx, {
-    label: "breakdown", text: `${ctx.host === "codex" ? "$" : "/"}breakdown ${design}`, loopTask: "breakdown", name: `${path.basename(design, ".md")} breakdown`,
+    label: "breakdown", text: stepText(ctx.host, { command: "breakdown", arg: design }), loopTask: "breakdown", name,
     outcome: () => breakdownOutcome(ctx.root, headBefore, openBefore),
   });
   if (r.stop) return { action: "stop", reason: r.stop, session: r.session, details: r.details };
@@ -549,14 +553,14 @@ function runLoop(ctx, checked) {
     return out;
   };
 
-  // /amend を送る。task は穴の記録の T か null(引数なしの /amend)。同じ T の amend はこのループで 1 回まで。履歴に
-  // T 由来の amend が既に 2 件あれば送らない(amend.md「同じ T<n> に 3 回目を実行する前に止める」。git log から数えるので
-  // 打ち直しをまたいでも揃う)。引数なしの /amend の繰り返しは、amendOutcome が次の一手が引数なしの /amend のままなら
-  // 着地としないので止まる。戻り値: true = 着地して続ける / false = 止まった
-  const amendTask = (task, attempt) => {
+  // /amend を送る。task は穴の記録の T か null(T<n> 以外の引数の /amend)、arg は送る引数(既定は task)。同じ T の amend は
+  // このループで 1 回まで。履歴に T 由来の amend が既に 2 件あれば送らない(amend.md「同じ T<n> に 3 回目を実行する前に
+  // 止める」。git log から数えるので打ち直しをまたいでも揃う)。T を持たない /amend の繰り返しは、amendOutcome が次の一手が
+  // 送った /amend のままなら着地としないので止まる。戻り値: true = 着地して続ける / false = 止まった
+  const amendTask = (task, attempt, arg = task) => {
     if (task && (amended.has(task) || amendCount(ctx.root, task) >= 2)) { queue.unshift(task); stop({ reason: "amend_repeated" }, task, attempt); return false; }
     if (task) amended.add(task);
-    const planned = runAmend(ctx, task);
+    const planned = runAmend(ctx, arg);
     log(task ?? "amend", `amend: ${planned.action}${planned.reason ? " " + planned.reason : ""}`);
     if (planned.action !== "continue") { if (task) queue.unshift(task); stop(planned, task, attempt); return false; }
     // 範囲指定の時は、次の一手が /execute-task なら、その T(元の T・置き換え先・amend が足した是正タスクのどれか。
@@ -597,10 +601,10 @@ function runLoop(ctx, checked) {
     if (!work.step && (!fromHandoff || openTasks(ctx.root).length === 0)) break;
     if (work.error || !work.step) { stop({ reason: work.error === "not_open" ? "next_step_not_open" : "next_step_not_runnable" }, work.step?.arg ?? null, null); return; }
     const { command, arg } = work.step;
-    const task = command === "execute-task" || command === "amend" ? arg : null;
+    const task = stepTask(work.step);
     if (command === "follow-up" || intervalFull()) { closeInterval(task); return; }
     if (!fromHandoff) queue.shift();
-    const going = command === "breakdown" ? breakdown(arg) : command === "amend" ? amendTask(task, null) : runTaskAttempts(task);
+    const going = command === "breakdown" ? breakdown(arg) : command === "amend" ? amendTask(task, null, arg) : runTaskAttempts(task);
     if (!going) return;
   }
   // 5 件目の完了で回す作業が尽きた時も区間を閉じる(閉じずに終えると、次の起動は回す作業が無く /follow-up を送れない)

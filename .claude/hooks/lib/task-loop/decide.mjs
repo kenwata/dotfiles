@@ -326,40 +326,31 @@ export function readySet(root, { running = [], excluded = [], limit = null } = {
   return { ready, blocked };
 }
 
-// /breakdown の引数(設計書の相対パス)と、/execute-task・/amend の引数(タスクID)の形
-const DESIGN_PATH = /^docs\/design\/\S+\.md$/;
+// /execute-task・/amend の引数(タスクID)の形
 const TASK_ID = /^T\d+$/;
 
-// 次の一手が /breakdown なら、その設計書の相対パス。無ければ null
-export function breakdownTarget(root) {
-  const step = nextStep(root);
-  return step?.command === "breakdown" && DESIGN_PATH.test(step.arg ?? "") ? step.arg : null;
-}
-
-// 引数なしの task-loop が回す工程。/elaborate は対話で詰める工程なので入れない(2026-09-24 利用者決定)
+// 引数なしの task-loop が回す工程。/elaborate は対話で詰める工程なので入れない(2026-09-24 利用者決定)。それ以外の工程は
+// 引数の形で拒まず、次の一手の文面のまま送る(利用者決定は「/elaborate だけ外す」で、引数の形の制限は決めていない。
+// 2026-09-25、648ba20 が /amend・/breakdown に足した形の検査で /amend docs/design/<slug>.md が止まった)
 const LOOP_COMMANDS = ["execute-task", "amend", "breakdown", "follow-up"];
 
-// 回す工程の引数の形が合っているか。/amend の引数なしは利用者指示経路(amend.md 手順 1)で、T<n> 付きの穴の記録経路と
-// 同じく回す(2026-09-25。0f88835 が /execute-task と同じ枝で T<n> を必須にしていたのは、利用者決定「/elaborate だけ外す」
-// からの逸脱だった)
-function argumentFits(step) {
-  if (step.command === "execute-task") return TASK_ID.test(step.arg ?? "");
-  if (step.command === "amend") return step.arg === null || TASK_ID.test(step.arg);
-  if (step.command === "breakdown") return DESIGN_PATH.test(step.arg ?? "");
-  return true;
+// 工程が指す T。/execute-task の引数と、/amend の引数が T<n> の時(穴の記録経路)だけ。それ以外は null
+export function stepTask(step) {
+  if (step?.command !== "execute-task" && step?.command !== "amend") return null;
+  return TASK_ID.test(step.arg ?? "") ? step.arg : null;
 }
 
 // 引数なしの task-loop が次に回す工程を、HANDOFF.md の次の一手から決める。T の順は各工程が次の一手に書いた順が正で、
 // TODO.md の並びからは選ばない(表の並びは実行順ではない。2026-09-24、凍結中の T47 を表の先頭として 2 回送って止まった)。
 // 戻り値: { step }(回してよい)/ { error: "not_runnable", step }(次の一手が無い・回さない工程)/
-// { error: "bad_argument", step }(回す工程だが引数の形が違う)/
-// { error: "not_open", step }(/execute-task・/amend の T が未着手([ ])ではない。推測で別の T を選ばない)
+// { error: "bad_argument", step }(/execute-task に T<n> が無い。完了の判定が T の [x] に依るので送れない)/
+// { error: "not_open", step }(/execute-task・/amend T<n> の T が未着手([ ])ではない。推測で別の T を選ばない)
 export function loopStep(root) {
   const step = nextStep(root);
   if (!step || !LOOP_COMMANDS.includes(step.command)) return { error: "not_runnable", step };
-  if (!argumentFits(step)) return { error: "bad_argument", step };
+  const task = stepTask(step);
+  if (step.command === "execute-task" && !task) return { error: "bad_argument", step };
 
-  const task = step.command === "execute-task" || step.command === "amend" ? step.arg : null;
   if (task && findTask(root, task)?.state !== " ") return { error: "not_open", step };
   return { step };
 }
@@ -379,7 +370,7 @@ export function amendCount(root, task) {
 const PLANNING_PATHS = (p) => p === "HANDOFF.md" || p === "TODO.md" || p === "docs/decisions.md" || p.startsWith("docs/design/");
 
 // /amend の後の判定。成果物(コミット・HANDOFF.md・計画工程のファイル)だけで決める。sent は送った /amend の引数
-// (穴の記録経路の T<n>、利用者指示経路は null)
+// (穴の記録経路の T<n>。利用者指示経路は null か次の一手に書かれた引数のまま)
 //   done       : HEAD が進み、計画工程のファイルに未コミットが無く、次の一手がループの回せる工程(loopStep)で、送った
 //                /amend そのものではない。戻る先は元の T に限らない(置き換え先・次の未着手・amend が足した是正タスク。
 //                amend.md 手順 6。2026-09-24 VC_Analysis の amend T54 は是正タスク T59 を足して次の一手を T59 にした)。

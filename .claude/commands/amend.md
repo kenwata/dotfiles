@@ -1,6 +1,6 @@
 ---
 description: 設計書 docs/design/<slug>.md の一部と、影響を受ける未着手タスクを一回で改訂する。実行中に見つかった設計の穴、または利用者が指示した単発の追加が対象。新しい計画行は作らず、設計書の目的・スコープが変わるなら /elaborate へ回す
-argument-hint: T<n>(穴の記録を持つ中断中のタスク。利用者指示の改訂では省略可)
+argument-hint: T<n>(穴の記録を持つ中断中のタスク。利用者指示の改訂では省略するか、対象の設計書 docs/design/<slug>.md を渡す)
 allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Agent, Bash(ls:*), Bash(date:*), Bash(grep:*), Bash(git rev-parse:*), Bash(git status:*), Bash(git diff:*), Bash(git add:*), Bash(git commit:*), Bash(git log:*), Bash(node:*)
 ---
 
@@ -8,7 +8,7 @@ allowed-tools: Read, Glob, Grep, Write, Edit, AskUserQuestion, Agent, Bash(ls:*)
 
 1. **入力**(2 経路。混ぜない):
    - **穴の記録経路**(標準): 引数 `T<n>`。`HANDOFF.md` の「仕掛かり中」に `/execute-task` が書いた穴の記録(観測した事実と証拠 / 矛盾または欠落している設計書の節 / 満たせない完了条件の項目 / 停止位置と途中成果物)を一次情報とする。記録が無い、または 4 項目のどれかが欠けて改訂案を導けない場合は、推測で補わず、欠けている項目を示して止める。
-   - **利用者指示経路**: 利用者がこの会話で指示した改訂・単発のタスク追加、または `/follow-up`・`/execute-task` の要確認の回収で `docs/decisions.md` に書かれた利用者決定の行(別セッションの回収結果を拾うため。行を逐語で一次情報とし、決定の範囲を推測で広げない)。対象の設計書と計画行を特定できなければ AskUserQuestion で確認する。
+   - **利用者指示経路**: 利用者がこの会話で指示した改訂・単発のタスク追加、または `/follow-up`・`/execute-task` の要確認の回収で `docs/decisions.md` に書かれた利用者決定の行(別セッションの回収結果を拾うため。行を逐語で一次情報とし、決定の範囲を推測で広げない)。引数が `T<n>` 以外(設計書のパスなど)の時もこの経路で、引数は対象の特定に使う。対象の設計書と計画行を特定できなければ AskUserQuestion で確認する。
    - **読む範囲を絞る**: 穴の記録、記録が指す設計書の節、設計書の「目的(アウトカム)」「スコープ / 非スコープ」の 2 節(手順 2 の判定に要る)、同じ計画行の未着手タスクとその完了条件ブロック、該当 `T<n>` の `docs/decisions.md` の行、穴の記録が証拠として挙げた実装箇所、設計書の「全体構想」行が `plan.md` を指すならその節の中のフェーズ見出しの本文と `plan.md` 冒頭の目標(手順 2 の「`plan.md` のフェーズ構成を変える必要があるか」の判定と、手順 4 の目標への照合に要る。規則の正は BLUEPRINT §6「目標への照合」)。設計書のそれ以外の節・`plan.md` のそれ以外の部分・過去の transcript は読まない。それらを読み直さないと改訂案を作れないと判明したら、それ自体が部分改訂の範囲を超えた兆候なので、手順 2 の判定で `/elaborate` へ回す。
 2. **段の判定**(書き始める前に行い、結果を報告に明記する):
    - 設計書の「目的(アウトカム)」「スコープ / 非スコープ」、または `plan.md` のフェーズ構成を変える必要がある → **設計書・`TODO.md` には何も書かずに止め**、理由と観測事実を添えて `/elaborate docs/design/<slug>.md`(既存設計書の更新)→ `/breakdown` を案内する。`HANDOFF.md` は「次セッションの最初の一手」だけを `/elaborate docs/design/<slug>.md` に書き換え(穴の記録は `/elaborate` の一次情報なので消さない)、`HANDOFF.md` だけを要約 `amend: T<n> を /elaborate へ回す(部分改訂の範囲外)` でコミットする。

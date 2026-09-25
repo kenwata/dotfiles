@@ -7,7 +7,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseDependencies, readTaskScope } from "../../../check-task-scope.mjs";
 import {
-  amendCount, amendOutcome, breakdownOutcome, breakdownTarget, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, loopStep, nextStep,
+  amendCount, amendOutcome, breakdownOutcome, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, loopStep, nextStep,
   openDependencies, openTasks, parseTaskList, planSlug, readySet,
 } from "../decide.mjs";
 
@@ -356,14 +356,10 @@ test("nextStep は「次セッションの最初の一手」節の最初のコ�
     assert.deepEqual(nextStep(t.root), { command: "execute-task", arg: "T20" }, "最初の行の最初のコマンドを取る(breakdown.md 手順 3 の書き添え)");
     write("## 次セッションの最初の一手\n- /breakdown docs/design/alpha.md(段階 2 の分解)\n");
     assert.deepEqual(nextStep(t.root), { command: "breakdown", arg: "docs/design/alpha.md" });
-    assert.equal(breakdownTarget(t.root), "docs/design/alpha.md");
     write("## 次セッションの最初の一手\n- `$amend T7`\n");
     assert.deepEqual(nextStep(t.root), { command: "amend", arg: "T7" }, "Codex の $ も読む");
-    assert.equal(breakdownTarget(t.root), null);
     write("## 次セッションの最初の一手\n- TODO.md の T147 に着手する\n");
     assert.equal(nextStep(t.root), null, "コマンドの形で書かれていなければ読まない");
-    write("## 次セッションの最初の一手\n- `/breakdown`(引数なし)\n");
-    assert.equal(breakdownTarget(t.root), null, "設計書のパスが無い /breakdown は送らない");
   } finally { t.cleanup(); }
 });
 
@@ -376,7 +372,9 @@ test("loopStep は次の一手を引数なしの task-loop が回す工程とし
       ["`/execute-task T70`(説明)", { command: "execute-task", arg: "T70" }],
       ["`/amend T5`", { command: "amend", arg: "T5" }],
       ["`/amend`(設計書 `docs/design/a.md`、利用者指示経路)", { command: "amend", arg: null }],
+      ["`/amend docs/design/a.md`(利用者指示経路)", { command: "amend", arg: "docs/design/a.md" }],
       ["`/breakdown docs/design/a.md`", { command: "breakdown", arg: "docs/design/a.md" }],
+      ["`/breakdown`(引数なし)", { command: "breakdown", arg: null }],
       ["`/follow-up`", { command: "follow-up", arg: null }],
     ]) {
       write(line);
@@ -396,16 +394,13 @@ test("loopStep は次の一手を引数なしの task-loop が回す工程とし
   } finally { t.cleanup(); }
 });
 
-test("loopStep は回す工程の引数の形が違えば bad_argument を返し、回さない工程(not_runnable)と分ける", () => {
+test("loopStep は /execute-task に T<n> が無ければ bad_argument を返し、回さない工程(not_runnable)と分ける", () => {
   const t = fixture();
   const write = (line) => fs.writeFileSync(path.join(t.root, "HANDOFF.md"), `## 次セッションの最初の一手\n\n- ${line}\n`);
   try {
     for (const line of [
       "`/execute-task`(T が無い)",
       "`/execute-task docs/design/a.md`",
-      "`/amend docs/design/a.md`",
-      "`/breakdown`(引数なし)",
-      "`/breakdown T5`",
     ]) {
       write(line);
 
@@ -478,6 +473,32 @@ test("amendOutcome: 引数なしの /amend の後は、ループが回せる別�
       land(step);
 
       const outcome = amendOutcome(t.root, head, null);
+
+      assert.equal(outcome, expected, why);
+    }
+  } finally { t.cleanup(); }
+});
+
+test("amendOutcome: 設計書のパス付きの /amend の後は、次の一手が同じ /amend のままなら incomplete、別の工程になれば done", () => {
+  const t = fixture();
+  const land = (step) => {
+    fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "## 次セッションの最初の一手\n- `" + step + "`(説明)\n");
+    git(t.root, "add", "HANDOFF.md");
+    git(t.root, "commit", "-qm", "amend: plan の設計を改訂(利用者指示)");
+  };
+  try {
+    fs.writeFileSync(path.join(t.root, "HANDOFF.md"), "## 次セッションの最初の一手\n- `/amend docs/design/plan.md`\n");
+    git(t.root, "add", "-A");
+    git(t.root, "commit", "-qm", "chore: 次の一手を /amend docs/design/plan.md にする");
+    const head = headOf(t.root);
+    for (const [step, expected, why] of [
+      ["/amend docs/design/plan.md", "incomplete", "次の一手が送った /amend のままでは、着地したか区別できない"],
+      ["/breakdown docs/design/plan.md", "done", "改訂の後に段階を分解する"],
+      ["/amend", "done", "送った引数と違う /amend は別の工程"],
+    ]) {
+      land(step);
+
+      const outcome = amendOutcome(t.root, head, "docs/design/plan.md");
 
       assert.equal(outcome, expected, why);
     }

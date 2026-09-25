@@ -219,9 +219,9 @@ if (args[1] === "prompt") {
     save();
     ok(agent());
   }
-  const amendSent = text.match(/[\\/$]amend(?: (T\\d+))?$/);
+  const amendSent = text.match(/[\\/$]amend(?: (\\S+))?$/);
   if (amendSent) {
-    const amendTask = amendSent[1] ?? null;
+    const amendTask = /^T\\d+$/.test(amendSent[1] ?? "") ? amendSent[1] : null;
     const how = (s.scenario.amend || []).shift() || "nothing";
     s.amendSent = (s.amendSent || 0) + 1;
     accept();
@@ -232,7 +232,7 @@ if (args[1] === "prompt") {
     save();
     ok(agent());
   }
-  if (/breakdown docs\\/design\\//.test(text)) {
+  if (/[\\/$]breakdown(?: \\S+)?$/.test(text)) {
     const how = (s.scenario.breakdown || []).shift() || "nothing";
     accept();
     endTurn();
@@ -584,7 +584,7 @@ test("引数なしで HANDOFF.md の次の一手が回せる工程でなけれ�
     ["HANDOFF.md が無い", { next: null }, /次の一手/],
     ["次の一手が /elaborate", { next: "/elaborate docs/design/plan.md" }, /次の一手.*elaborate/],
     ["回さない工程の文は引数に触れない", { next: "/elaborate docs/design/plan.md" }, /plan\.md は task-loop が回す工程\([^)]*\)ではない: /],
-    ["次の一手の引数の形が違う", { next: "/execute-task" }, /\/execute-task は引数の形が違う/],
+    ["/execute-task に T<n> が無い", { next: "/execute-task" }, /\/execute-task に T<n> が無い/],
     ["次の一手の T が済んでいる", { todo: "| #1-1 | T1 | 済み | — | [x] |\n" }, /T1 は未着手\(\[ \]\)ではない/],
   ]) {
     const t = setup(opts);
@@ -973,6 +973,23 @@ test("次の一手が引数なしの /amend なら /amend を送り、着地し�
   } finally { t.cleanup(); }
 });
 
+test("次の一手が設計書のパス付きの /amend なら、その文面のまま送り、着地した後は次の一手から続ける", () => {
+  const t = setup({
+    todo: TWO, next: "/amend docs/design/plan.md",
+    scenario: { T1: ["complete"], T2: ["complete"], amend: ["land"] },
+  });
+  try {
+    const { code, json } = t.runAuto();
+
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(json.tasks_done, ["T1", "T2"]);
+    assert.deepEqual(t.prompts().filter((p) => p !== "/clear"), [
+      "/rename repo amend", "/amend docs/design/plan.md",
+      "/rename repo T1", "/execute-task T1", "/rename repo T2", "/execute-task T2",
+    ]);
+  } finally { t.cleanup(); }
+});
+
 test("引数なしの /amend が着地しない・次の一手を引数なしの /amend のまま残したら、1 回だけ送って止まる", () => {
   for (const [label, opts] of [
     ["着地しない", { scenario: { amend: ["nothing"] } }],
@@ -1032,6 +1049,17 @@ test("次の一手が /breakdown なら送り、足された T で続ける。�
   try {
     const { json } = t.runAuto();
     assert.equal(json.reason, "breakdown_incomplete");
+  } finally { t.cleanup(); }
+});
+
+test("次の一手が引数なしの /breakdown なら、その文面のまま送り、足された T で続ける", () => {
+  const t = setup({ todo: "| #1-1 | T1 | 済み | — | [x] |\n\n", next: "/breakdown", scenario: { T4: ["complete"], T5: ["complete"], breakdown: ["land"] } });
+  try {
+    const { code, json } = t.runAuto();
+
+    assert.equal(code, 0, JSON.stringify(json));
+    assert.deepEqual(json.tasks_done, ["T4", "T5"]);
+    assert.ok(t.prompts().includes("/breakdown"), JSON.stringify(t.prompts()));
   } finally { t.cleanup(); }
 });
 
