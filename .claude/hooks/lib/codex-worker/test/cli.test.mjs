@@ -181,6 +181,13 @@ function initWorkspaceRepo(wsRepo, codeDir) {
   fs.writeFileSync(path.join(codeDir, ".env"), "SECRET=original\n");
 }
 
+// 試験を打つ環境の変数から、runner の挙動を変えるものを除いて子プロセスへ渡す。CODEX_THREAD_ID は note の書き手を
+// codex:… にするので、Codex worker の中で試験を打つと by=claude を期待する試験が落ちていた(2026-09-25)。
+// その値を試す試験は extraEnv で明示して渡す
+function inheritedEnv() {
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "CODEX_THREAD_ID"));
+}
+
 // workspace: "repo" なら、帳簿(TODO.md)の root とは別のリポジトリ wsrepo を worker の
 // 作業場所にする。
 // "subdir" なら wsrepo の中の pkg を作業場所にする。どちらも T の対象を HOME からの ~ で書く
@@ -212,7 +219,7 @@ function setup({ workspace = null } = {}) {
   const tmp = path.join(base, "tmp");
   fs.mkdirSync(tmp);
   const env = {
-    ...process.env, PATH: `${bin}:${process.env.PATH}`, CODEX_WORKER_HOME: home, TMPDIR: tmp,
+    ...inheritedEnv(), PATH: `${bin}:${process.env.PATH}`, CODEX_WORKER_HOME: home, TMPDIR: tmp,
     XDG_STATE_HOME: path.join(base, "state"), ...(workspace ? { HOME: base } : {}),
   };
   const run = (args, extraEnv = {}) => {
