@@ -1583,3 +1583,501 @@ test(
     } finally { t.cleanup(); }
   },
 );
+
+test(
+  "integrate は後始末の git worktree remove が失敗しても exit 0 で cleanup_errors と cleanup=failed を残す",
+  () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+      git(t.wsRepo, "add", "src/a/fixture.ts");
+      git(t.wsRepo, "commit", "-qm", "track workspace target");
+
+      const ran = t.run([...wsArgs(t), "--worktree"], { FAKE_MODE: "ok" });
+
+      assert.equal(ran.code, 0, JSON.stringify(ran.json));
+      const recordPath = path.join(t.taskDir, "worktree.json");
+      const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+      const worktreePath = fs.realpathSync(record.path);
+      git(worktreePath, "add", "src/a/impl.ts");
+      git(worktreePath, "commit", "-qm", "supervisor commit");
+      const branchTip = git(worktreePath, "rev-parse", "HEAD").trim();
+      git(t.wsRepo, "worktree", "lock", worktreePath);
+
+      const integrated = t.run(["integrate", "--root", t.root, "--task", "T7"]);
+
+      assert.equal(integrated.code, 0, JSON.stringify(integrated.json));
+      assert.equal(integrated.json.head, branchTip);
+      assert.equal(git(t.wsRepo, "rev-parse", "HEAD").trim(), branchTip);
+      assert.ok(Array.isArray(integrated.json.cleanup_errors));
+      assert.ok(integrated.json.cleanup_errors.some((error) => error.includes("worktree remove")));
+      assert.ok(integrated.json.cleanup_errors.some((error) => error.includes("worktree --root")));
+      assert.equal(fs.existsSync(worktreePath), true);
+      assert.notEqual(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+      assert.equal(fs.existsSync(recordPath), true);
+
+      const lines = worklogEntries(t, "integrate");
+      assert.equal(lines.length, 1);
+      assert.ok(lines[0].includes(`branch=${record.branch}`), lines[0]);
+      assert.ok(lines[0].includes("commits=1"), lines[0]);
+      assert.ok(lines[0].includes("cleanup=failed"), lines[0]);
+    } finally { t.cleanup(); }
+  },
+);
+
+test("worktree --json は記録した worktree の 7 欄を返す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { record, worktreePath } = createCleanRecordedWorktree(t);
+    const status = t.run(["worktree", "--root", t.root, "--task", "T7", "--json"]);
+
+    assert.equal(status.code, 0, JSON.stringify(status.json));
+    assert.equal(status.json.task, "T7");
+    assert.deepEqual(Object.keys(status.json.worktree).sort(), [
+      "ahead", "base_ref", "behind", "branch", "dirty", "exists", "path",
+    ]);
+    assert.deepEqual(status.json.worktree, {
+      path: fs.realpathSync(worktreePath),
+      branch: record.branch,
+      base_ref: record.base_ref,
+      exists: true,
+      dirty: false,
+      ahead: 0,
+      behind: 0,
+    });
+
+    fs.writeFileSync(path.join(worktreePath, "src/a/impl.ts"), "worktree change\n");
+    git(worktreePath, "add", "src/a/impl.ts");
+    git(worktreePath, "commit", "-qm", "worktree change");
+    const advanced = t.run(["worktree", "--root", t.root, "--task", "T7"]);
+
+    assert.equal(advanced.code, 0, JSON.stringify(advanced.json));
+    assert.equal(advanced.json.worktree.ahead, 1);
+  } finally { t.cleanup(); }
+});
+
+test("worktree --json は JSON でない記録に exit 2 と errors を返す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    createCleanRecordedWorktree(t);
+    fs.writeFileSync(path.join(t.taskDir, "worktree.json"), "not json\n");
+
+    const status = t.run(["worktree", "--root", t.root, "--task", "T7", "--json"]);
+
+    assert.equal(status.code, 2);
+    assert.ok(Array.isArray(status.json.errors));
+    assert.equal(status.json.errors.length > 0, true);
+  } finally { t.cleanup(); }
+});
+
+test("worktree --json は repo が存在しない記録に exit 2 と errors を返す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { record } = createCleanRecordedWorktree(t);
+    fs.writeFileSync(
+      path.join(t.taskDir, "worktree.json"),
+      `${JSON.stringify({ ...record, repo: path.join(t.tmp, "deleted-repo") }, null, 2)}\n`,
+    );
+
+    const status = t.run(["worktree", "--root", t.root, "--task", "T7", "--json"]);
+
+    assert.equal(status.code, 2);
+    assert.ok(Array.isArray(status.json.errors));
+    assert.equal(status.json.errors.length > 0, true);
+  } finally { t.cleanup(); }
+});
+
+test("worktree --remove は removed の 3 欄を返して worktree・ブランチ・記録を消す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { record, worktreePath } = createCleanRecordedWorktree(t);
+    const recordPath = path.join(t.taskDir, "worktree.json");
+
+    const removed = t.run(["worktree", "--root", t.root, "--task", "T7", "--remove"]);
+
+    assert.equal(removed.code, 0, JSON.stringify(removed.json));
+    assert.equal(removed.json.task, "T7");
+    assert.deepEqual(removed.json.removed, { worktree: true, branch: true, record: true });
+    assert.equal(fs.existsSync(worktreePath), false);
+    assert.equal(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+    assert.equal(fs.existsSync(recordPath), false);
+  } finally { t.cleanup(); }
+});
+
+test("worktree --remove は dirty worktree と未統合コミットを exit 2 で保持する", () => {
+  for (const state of ["dirty", "ahead"]) {
+    const t = setup({ workspace: "repo" });
+    try {
+      const { record, worktreePath } = createCleanRecordedWorktree(t);
+      const recordPath = path.join(t.taskDir, "worktree.json");
+      if (state === "dirty") {
+        fs.writeFileSync(path.join(worktreePath, "untracked.txt"), "untracked\n");
+      } else {
+        fs.writeFileSync(path.join(worktreePath, "src/a/unmerged.ts"), "unmerged\n");
+        git(worktreePath, "add", "src/a/unmerged.ts");
+        git(worktreePath, "commit", "-qm", "unmerged commit");
+      }
+
+      const refused = t.run(["worktree", "--root", t.root, "--task", "T7", "--remove"]);
+
+      assert.equal(refused.code, 2, JSON.stringify(refused.json));
+      assert.ok(Array.isArray(refused.json.errors));
+      assert.equal(fs.existsSync(worktreePath), true);
+      assert.notEqual(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+      assert.equal(fs.existsSync(recordPath), true);
+    } finally { t.cleanup(); }
+  }
+});
+
+for (const state of ["repo", "path", "invalid-json"]) {
+  test(`worktree --remove --force は ${state} の記録でも計算値を破棄する`, () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      const { record, worktreePath } = createCleanRecordedWorktree(t);
+      const recordPath = path.join(t.taskDir, "worktree.json");
+      const outsidePath = path.join(t.tmp, "outside-worktree");
+      if (state === "repo") {
+        fs.writeFileSync(recordPath, JSON.stringify({
+          ...record,
+          repo: path.join(t.tmp, "deleted-repo"),
+        }));
+      } else if (state === "path") {
+        fs.mkdirSync(outsidePath);
+        fs.writeFileSync(path.join(outsidePath, "keep.txt"), "keep\n");
+        fs.writeFileSync(recordPath, JSON.stringify({ ...record, path: outsidePath }));
+      } else {
+        fs.writeFileSync(recordPath, "{\n");
+      }
+
+      const removed = t.run([
+        "worktree", "--root", t.root, "--task", "T7", "--remove", "--force",
+      ]);
+
+      assert.equal(removed.code, 0, JSON.stringify(removed.json));
+      assert.deepEqual(removed.json.removed, { worktree: true, branch: true, record: true });
+      assert.equal(fs.existsSync(worktreePath), false);
+      assert.equal(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+      assert.equal(fs.existsSync(recordPath), false);
+      if (state === "path") {
+        assert.equal(fs.readFileSync(path.join(outsidePath, "keep.txt"), "utf8"), "keep\n");
+      }
+    } finally { t.cleanup(); }
+  });
+
+  test(`worktree --remove は ${state} の記録で --force 無しなら何も消さない`, () => {
+    const t = setup({ workspace: "repo" });
+    try {
+      const { record, worktreePath } = createCleanRecordedWorktree(t);
+      const recordPath = path.join(t.taskDir, "worktree.json");
+      const outsidePath = path.join(t.tmp, "outside-worktree");
+      if (state === "repo") {
+        fs.writeFileSync(recordPath, JSON.stringify({
+          ...record,
+          repo: path.join(t.tmp, "deleted-repo"),
+        }));
+      } else if (state === "path") {
+        fs.mkdirSync(outsidePath);
+        fs.writeFileSync(path.join(outsidePath, "keep.txt"), "keep\n");
+        fs.writeFileSync(recordPath, JSON.stringify({ ...record, path: outsidePath }));
+      } else {
+        fs.writeFileSync(recordPath, "{\n");
+      }
+
+      const refused = t.run(["worktree", "--root", t.root, "--task", "T7", "--remove"]);
+
+      assert.equal(refused.code, 2, JSON.stringify(refused.json));
+      assert.equal(fs.existsSync(worktreePath), true);
+      assert.notEqual(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+      assert.equal(fs.existsSync(recordPath), true);
+      if (state === "path") {
+        assert.equal(fs.readFileSync(path.join(outsidePath, "keep.txt"), "utf8"), "keep\n");
+      }
+    } finally { t.cleanup(); }
+  });
+}
+
+test("worktree --remove --force は置き場が消えて登録だけ残る状態も worktree を削除済みと報告する", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { worktreePath } = createCleanRecordedWorktree(t);
+    const recordPath = path.join(t.taskDir, "worktree.json");
+    fs.rmSync(worktreePath, { recursive: true, force: true });
+
+    const removed = t.run([
+      "worktree", "--root", t.root, "--task", "T7", "--remove", "--force",
+    ]);
+
+    assert.equal(removed.code, 0, JSON.stringify(removed.json));
+    assert.equal(removed.json.removed.worktree, true);
+    assert.equal(fs.existsSync(worktreePath), false);
+    assert.equal(git(t.wsRepo, "worktree", "list", "--porcelain").includes(worktreePath), false);
+    assert.equal(fs.existsSync(recordPath), false);
+  } finally { t.cleanup(); }
+});
+
+test("show --json と resume は記録がある T だけ worktree の 7 欄を最後に返す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const absentShown = t.run(["show", "--root", t.root, "--task", "T7", "--json"]);
+    const absentResume = t.run(["resume", "--root", t.root, "--task", "T7"]);
+
+    assert.equal(Object.hasOwn(absentShown.json, "worktree"), false);
+    assert.equal(Object.hasOwn(absentResume.json, "worktree"), false);
+
+    const { worktreePath } = createCleanRecordedWorktree(t);
+    const shown = t.run(["show", "--root", t.root, "--task", "T7", "--json"]);
+    const resumed = t.run(["resume", "--root", t.root, "--task", "T7"]);
+
+    for (const result of [shown, resumed]) {
+      assert.equal(result.code, 0, JSON.stringify(result.json));
+      assert.deepEqual(Object.keys(result.json.worktree).sort(), [
+        "ahead", "base_ref", "behind", "branch", "dirty", "exists", "path",
+      ]);
+      assert.equal(result.json.worktree.path, fs.realpathSync(worktreePath));
+      assert.equal(Object.keys(result.json).at(-1), "worktree");
+    }
+
+  } finally { t.cleanup(); }
+});
+
+test("show --json と resume は読めない worktree 記録を error にし resume の unexplained_dirty に含めない", () => {
+  for (const unreadable of ["invalid-json", "missing-repo"]) {
+    const t = setup({ workspace: "repo" });
+    try {
+      const { record } = createCleanRecordedWorktree(t);
+      const recordPath = path.join(t.taskDir, "worktree.json");
+      if (unreadable === "invalid-json") {
+        fs.writeFileSync(recordPath, "not json\n");
+      } else {
+        fs.writeFileSync(
+          recordPath,
+          `${JSON.stringify({ ...record, repo: path.join(t.tmp, "deleted-repo") }, null, 2)}\n`,
+        );
+      }
+
+      const worktree = t.run(["worktree", "--root", t.root, "--task", "T7", "--json"]);
+      const shown = t.run(["show", "--root", t.root, "--task", "T7", "--json"]);
+      const resumed = t.run(["resume", "--root", t.root, "--task", "T7"]);
+
+      assert.equal(worktree.code, 2);
+      assert.equal(shown.code, 0);
+      assert.equal(resumed.code, 0);
+      assert.match(shown.json.worktree.error, /.+/);
+      assert.match(resumed.json.worktree.error, /.+/);
+      assert.equal(Object.keys(shown.json).at(-1), "worktree");
+      assert.equal(Object.keys(resumed.json).at(-1), "worktree");
+      assert.equal(resumed.json.unexplained_dirty.some((item) => item.includes("worktree")), false);
+    } finally { t.cleanup(); }
+  }
+});
+
+test("resume は統合済みで記録も作業場所も無い worktree を removed として返す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+    git(t.wsRepo, "add", "src/a/fixture.ts");
+    git(t.wsRepo, "commit", "-qm", "track workspace target");
+    const ran = t.run([...wsArgs(t), "--worktree"], { FAKE_MODE: "ok" });
+    assert.equal(ran.code, 0, JSON.stringify(ran.json));
+    const record = JSON.parse(fs.readFileSync(path.join(t.taskDir, "worktree.json"), "utf8"));
+    const worktreePath = fs.realpathSync(record.path);
+    git(worktreePath, "add", "src/a/impl.ts");
+    git(worktreePath, "commit", "-qm", "supervisor commit");
+
+    const integrated = t.run(["integrate", "--root", t.root, "--task", "T7"]);
+    const resumed = t.run(["resume", "--root", t.root, "--task", "T7"]);
+
+    assert.equal(integrated.code, 0, JSON.stringify(integrated.json));
+    assert.equal(resumed.code, 0, JSON.stringify(resumed.json));
+    assert.ok(resumed.json.workspaces.some((workspace) =>
+      workspace.workspace === worktreePath
+      && workspace.dirty.length === 0
+      && workspace.unexplained_dirty.length === 0
+      && workspace.removed === true
+      && !Object.hasOwn(workspace, "error")));
+    assert.equal(resumed.json.unexplained_dirty.includes(worktreePath), false);
+  } finally { t.cleanup(); }
+});
+
+test("作業場所が消えた run の verify と restore は exit 2 で errors を返す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+    git(t.wsRepo, "add", "src/a/fixture.ts");
+    git(t.wsRepo, "commit", "-qm", "track workspace target");
+    const ran = t.run([...wsArgs(t), "--worktree"], { FAKE_MODE: "ok" });
+    assert.equal(ran.code, 0, JSON.stringify(ran.json));
+    const runDir = ran.json.run_dir;
+    const snapshot = JSON.parse(fs.readFileSync(path.join(runDir, "snapshot.json"), "utf8"));
+    const worktreePath = snapshot.root;
+    git(worktreePath, "add", "src/a/impl.ts");
+    git(worktreePath, "commit", "-qm", "supervisor commit");
+
+    const integrated = t.run(["integrate", "--root", t.root, "--task", "T7"]);
+
+    assert.equal(integrated.code, 0, JSON.stringify(integrated.json));
+    assert.equal(fs.existsSync(worktreePath), false);
+    const verify = t.run(["verify", "--run", runDir]);
+    const statusBeforeRestore = git(t.wsRepo, "status", "--porcelain");
+    const headBeforeRestore = git(t.wsRepo, "rev-parse", "HEAD").trim();
+    const restore = t.run(["restore", "--run", runDir]);
+
+    assert.equal(verify.code, 2, JSON.stringify(verify.json));
+    assert.ok(Array.isArray(verify.json.errors));
+    assert.ok(verify.json.errors.some((error) =>
+      error.includes(worktreePath) && error.includes("作業場所がもう無い")));
+    assert.equal(restore.code, 2, JSON.stringify(restore.json));
+    assert.ok(Array.isArray(restore.json.errors));
+    assert.ok(restore.json.errors.some((error) =>
+      error.includes(worktreePath) && error.includes("作業場所がもう無い")));
+    assert.equal(git(t.wsRepo, "status", "--porcelain"), statusBeforeRestore);
+    assert.equal(git(t.wsRepo, "rev-parse", "HEAD").trim(), headBeforeRestore);
+  } finally { t.cleanup(); }
+});
+
+test("integrate の worktree remove 失敗は残るブランチと記録も伝える", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+    git(t.wsRepo, "add", "src/a/fixture.ts");
+    git(t.wsRepo, "commit", "-qm", "track workspace target");
+    const ran = t.run([...wsArgs(t), "--worktree"], { FAKE_MODE: "ok" });
+    assert.equal(ran.code, 0, JSON.stringify(ran.json));
+    const recordPath = path.join(t.taskDir, "worktree.json");
+    const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+    git(record.path, "add", "src/a/impl.ts");
+    git(record.path, "commit", "-qm", "supervisor commit");
+    git(t.wsRepo, "worktree", "lock", record.path);
+
+    const integrated = t.run(["integrate", "--root", t.root, "--task", "T7"]);
+
+    assert.equal(integrated.code, 0, JSON.stringify(integrated.json));
+    assert.ok(integrated.json.cleanup_errors.some((error) => error.includes(record.branch)));
+    assert.ok(integrated.json.cleanup_errors.some((error) => error.includes(recordPath)));
+  } finally { t.cleanup(); }
+});
+
+test("worktree --remove --force は置き場がシンボリックリンクなら拒否してリンク先を残す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { worktreePath } = createCleanRecordedWorktree(t);
+    const recordPath = path.join(t.taskDir, "worktree.json");
+    const outsidePath = path.join(t.tmp, "outside-worktree");
+    git(t.wsRepo, "worktree", "remove", "--force", worktreePath);
+    fs.mkdirSync(outsidePath);
+    fs.writeFileSync(path.join(outsidePath, "keep.txt"), "keep\n");
+    fs.symlinkSync(outsidePath, worktreePath, "dir");
+
+    const refused = t.run([
+      "worktree", "--root", t.root, "--task", "T7", "--remove", "--force",
+    ]);
+
+    assert.equal(refused.code, 2, JSON.stringify(refused.json));
+    assert.ok(Array.isArray(refused.json.errors));
+    assert.equal(fs.lstatSync(worktreePath).isSymbolicLink(), true);
+    assert.equal(fs.readFileSync(path.join(outsidePath, "keep.txt"), "utf8"), "keep\n");
+    assert.equal(fs.existsSync(recordPath), true);
+  } finally { t.cleanup(); }
+});
+
+test("worktree --remove --force は別の場所で checkout 中のブランチを拒否する", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { record, worktreePath } = createCleanRecordedWorktree(t);
+    const recordPath = path.join(t.taskDir, "worktree.json");
+    const elsewhere = path.join(t.tmp, "elsewhere");
+    git(t.wsRepo, "worktree", "remove", "--force", worktreePath);
+    fs.mkdirSync(worktreePath);
+    fs.writeFileSync(path.join(worktreePath, "keep.txt"), "keep\n");
+    git(t.wsRepo, "worktree", "add", elsewhere, record.branch);
+
+    const refused = t.run([
+      "worktree", "--root", t.root, "--task", "T7", "--remove", "--force",
+    ]);
+
+    assert.equal(refused.code, 2, JSON.stringify(refused.json));
+    assert.ok(Array.isArray(refused.json.errors));
+    assert.equal(fs.existsSync(elsewhere), true);
+    assert.equal(git(elsewhere, "symbolic-ref", "--short", "HEAD").trim(), record.branch);
+    assert.notEqual(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+    assert.equal(fs.readFileSync(path.join(worktreePath, "keep.txt"), "utf8"), "keep\n");
+    assert.deepEqual(JSON.parse(fs.readFileSync(recordPath, "utf8")), record);
+  } finally { t.cleanup(); }
+});
+
+test("worktree --remove --force は本体不明の置き場を消しブランチ未確認の警告を返す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { record, worktreePath } = createCleanRecordedWorktree(t);
+    git(t.wsRepo, "worktree", "remove", "--force", worktreePath);
+    fs.rmSync(path.join(t.taskDir, "worktree.json"));
+    fs.mkdirSync(worktreePath);
+    fs.writeFileSync(path.join(worktreePath, "keep.txt"), "keep\n");
+
+    const removed = t.run([
+      "worktree", "--root", t.root, "--task", "T7", "--remove", "--force",
+    ]);
+
+    assert.equal(removed.code, 0, JSON.stringify(removed.json));
+    assert.equal(removed.json.removed.worktree, true);
+    assert.equal(removed.json.removed.branch, false);
+    assert.equal(removed.json.removed.record, false);
+    assert.deepEqual(removed.json.warnings, [
+      "本体リポジトリが見つからず、ブランチを確認できなかった",
+    ]);
+    assert.equal(fs.existsSync(worktreePath), false);
+    assert.notEqual(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+  } finally { t.cleanup(); }
+});
+
+test("worktree --remove は記録も置き場も無い時に false の report と警告を返す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { worktreePath } = createCleanRecordedWorktree(t);
+    git(t.wsRepo, "worktree", "remove", "--force", worktreePath);
+    fs.rmSync(path.join(t.taskDir, "worktree.json"));
+
+    const removed = t.run(["worktree", "--root", t.root, "--task", "T7", "--remove"]);
+
+    assert.equal(removed.code, 0, JSON.stringify(removed.json));
+    assert.deepEqual(removed.json.removed, { worktree: false, branch: false, record: false });
+    assert.deepEqual(removed.json.warnings, [
+      "本体リポジトリが見つからず、ブランチを確認できなかった",
+    ]);
+    assert.equal(fs.existsSync(worktreePath), false);
+  } finally { t.cleanup(); }
+});
+
+test("worktree --remove は本体不明の置き場がある時に exit 2 で保持する", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { worktreePath } = createCleanRecordedWorktree(t);
+    git(t.wsRepo, "worktree", "remove", "--force", worktreePath);
+    fs.rmSync(path.join(t.taskDir, "worktree.json"));
+    fs.mkdirSync(worktreePath);
+    fs.writeFileSync(path.join(worktreePath, "keep.txt"), "keep\n");
+
+    const refused = t.run(["worktree", "--root", t.root, "--task", "T7", "--remove"]);
+
+    assert.equal(refused.code, 2, JSON.stringify(refused.json));
+    assert.ok(Array.isArray(refused.json.errors));
+    assert.equal(fs.readFileSync(path.join(worktreePath, "keep.txt"), "utf8"), "keep\n");
+    assert.equal(fs.existsSync(path.join(t.taskDir, "worktree.json")), false);
+  } finally { t.cleanup(); }
+});
+
+test("worktree --force は --remove 無しなら exit 2 で何も消さない", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const { record, worktreePath } = createCleanRecordedWorktree(t);
+    const recordPath = path.join(t.taskDir, "worktree.json");
+
+    const refused = t.run(["worktree", "--root", t.root, "--task", "T7", "--force"]);
+
+    assert.equal(refused.code, 2, JSON.stringify(refused.json));
+    assert.ok(Array.isArray(refused.json.errors));
+    assert.equal(fs.existsSync(worktreePath), true);
+    assert.notEqual(git(t.wsRepo, "branch", "--list", record.branch).trim(), "");
+    assert.deepEqual(JSON.parse(fs.readFileSync(recordPath, "utf8")), record);
+  } finally { t.cleanup(); }
+});

@@ -33,6 +33,9 @@ import { worktreeStatus } from "./state.mjs";
 /** @typedef {{ ok: true }} RemoveWorktreeSuccess */
 
 /** @typedef {RemoveWorktreeSuccess | WorktreeRefusal} RemoveWorktreeResult */
+/** @typedef {{ ok: true, removed: { worktree: boolean, branch: boolean, record: boolean },
+ *   warnings?: string[] }} ForceRemoveWorktreeSuccess */
+
 /** Find a safety issue before removing any task worktree state.
  * @param {{ root: string, task: string, repo: string, target: string, branch: string,
  *   record: WorktreeRecord | null, force: boolean }} options
@@ -187,3 +190,48 @@ export function removeWorktree({ root, task, repo, force = false }) {
   return { ok: true };
 }
 
+/** Remove only the task's calculated worktree, branch, and record after force preflight.
+ * @param {{ root: string, task: string, repo: string | null }} options
+ * @returns {ForceRemoveWorktreeSuccess | WorktreeRefusal} Success with prior-state fields,
+ *   an optional warning, or a code 2 refusal.
+ * @throws {Error} If a Git or filesystem operation fails unexpectedly.
+ */
+export function forceRemoveTaskWorktree({ root, task, repo }) {
+  const target = worktreeDir(root, task);
+  const branch = worktreeBranch(root, task);
+  const recordPath = worktreeRecordPath(root, task);
+  if (isSymbolicLink(target)) {
+    return worktreeRefusal("置き場がシンボリックリンクのため破棄できません");
+  }
+
+  const entries = repo === null ? [] : listedWorktrees(repo);
+  const targetCanonical = canonical(target);
+  const targetEntry = entries.find((entry) => entry.path === targetCanonical);
+  const otherCheckout = entries.find(
+    (entry) => entry.branch === `refs/heads/${branch}` && entry.path !== targetCanonical,
+  );
+  if (otherCheckout !== undefined) {
+    return worktreeRefusal("ブランチが別の場所で checkout されています");
+  }
+
+  const removed = {
+    worktree: pathExists(target) || targetEntry !== undefined,
+    branch: repo !== null && localBranchExists(repo, branch),
+    record: pathExists(recordPath),
+  };
+  if (repo === null) {
+    if (removed.worktree) fs.rmSync(target, { recursive: true, force: true });
+    if (removed.record) fs.unlinkSync(recordPath);
+    return { ok: true, removed, warnings: ["本体リポジトリが見つからず、ブランチを確認できなかった"] };
+  }
+
+  removeWorktreeState({
+    repo,
+    target,
+    branch,
+    recordPath,
+    registered: targetEntry !== undefined,
+    force: true,
+  });
+  return { ok: true, removed };
+}

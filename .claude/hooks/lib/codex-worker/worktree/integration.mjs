@@ -6,6 +6,7 @@ import fs from "node:fs";
 import { canonical } from "../../../check-task-scope.mjs";
 import {
   git,
+  hasNodeSystemErrorCode,
   hasProcessExitStatus,
   isMainHeadAncestor,
   listedWorktrees,
@@ -16,6 +17,7 @@ import {
 import { isRealDirectory, isSymbolicLink } from "./paths.mjs";
 import {
   shellArgument,
+  refusal,
   worktreeBranch,
   worktreeDir,
   worktreeRecordPath,
@@ -32,6 +34,7 @@ import {
  * @property {string} branch Integrated task branch.
  * @property {number} commits Number of commits added to main.
  * @property {string} head Main HEAD after integration.
+ * @property {string[]} [cleanup_errors] Failures while removing integrated task state.
  */
 /** @typedef {{ ok: true, report: IntegrationReport }} IntegrateWorktreeSuccess */
 /** @typedef {{ ok: false, code: 1 | 2, errors: string[] }} IntegrateWorktreeRefusal */
@@ -43,6 +46,65 @@ import {
  */
 function integrationFailure(error) {
   return { ok: false, code: 1, errors: [processErrorText(error)] };
+}
+
+/** Describe a failed cleanup step, its remaining state, and the recovery command.
+ * @param {string} root
+ * @param {string} task
+ * @param {string} step
+ * @param {string} remaining
+ * @param {unknown} error
+ * @returns {string[]}
+ */
+function cleanupFailure(root, task, step, remaining, error) {
+  return refusal(
+    root,
+    task,
+    `${step} に失敗しました: ${processErrorText(error)}。${remaining}`,
+  ).errors;
+}
+
+/** Run cleanup in dependency order, stopping at the first expected failure.
+ * @param {{ root: string, task: string, repo: string, record: WorktreeRecord }} options
+ * @returns {string[]}
+ */
+function cleanupIntegration({ root, task, repo, record }) {
+  const recordPath = worktreeRecordPath(root, task);
+  const steps = [
+    {
+      name: "git worktree remove",
+      remaining: [
+        `worktree が残っています: ${record.path}。`,
+        `ブランチも残っています: ${record.branch}。`,
+        `記録も残っています: ${recordPath}`,
+      ].join(" "),
+      run: () => git(repo, ["worktree", "remove", record.path]),
+      catches: hasProcessExitStatus,
+    },
+    {
+      name: "git branch -d",
+      remaining: `ブランチが残っています: ${record.branch}。記録も残っています: ${recordPath}`,
+      run: () => git(repo, ["branch", "-d", record.branch]),
+      catches: hasProcessExitStatus,
+    },
+    {
+      name: "worktree 記録の削除",
+      remaining: `記録が残っています: ${recordPath}`,
+      run: () => fs.unlinkSync(recordPath),
+      catches: hasNodeSystemErrorCode,
+    },
+  ];
+
+  for (const step of steps) {
+    try {
+      step.run();
+    } catch (error) {
+      if (!step.catches(error)) throw error;
+      return cleanupFailure(root, task, step.name, step.remaining, error);
+    }
+  }
+
+  return [];
 }
 
 /** Return a safety issue when the recorded worktree is not ready for Git integration.
@@ -144,9 +206,15 @@ export function integrateWorktree({ root, task }) {
   }
 
   const head = git(repo, ["rev-parse", "HEAD"]).trim();
-  git(repo, ["worktree", "remove", record.path]);
-  git(repo, ["branch", "-d", record.branch]);
-  fs.unlinkSync(worktreeRecordPath(root, task));
+  const cleanupErrors = cleanupIntegration({ root, task, repo, record });
+  const report = {
+    task,
+    repo,
+    branch: record.branch,
+    commits,
+    head,
+    ...(cleanupErrors.length === 0 ? {} : { cleanup_errors: cleanupErrors }),
+  };
 
-  return { ok: true, report: { task, repo, branch: record.branch, commits, head } };
+  return { ok: true, report };
 }

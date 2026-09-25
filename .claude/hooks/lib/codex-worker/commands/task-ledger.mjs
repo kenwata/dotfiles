@@ -2,11 +2,20 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { dirtyWorktree, gitRoot } from "../git.mjs";
+import {
+  dirtyWorktree,
+  gitRoot,
+  hasNodeSystemErrorCode,
+  hasProcessExitStatus,
+  processErrorText,
+} from "../git.mjs";
 import { activeWorkerLock, ALWAYS_ALLOWED, isInside } from "../../../check-task-scope.mjs";
 import { parsePlan } from "../core.mjs";
 import { NOTE_KINDS, appendWorklog, normalizeStep, readPlan, readWorklog, runsDir, taskDir } from "../worklog.mjs";
 import { emit, recordWorklog, runWorkspace, statusWriter } from "../output.mjs";
+import { readWorktreeRecord, worktreeStatus } from "../worktree.mjs";
+
+/** @typedef {{ kind: string, keys: { branch?: string, workspace?: string } }} WorkspaceRunEntry */
 
 // ステップ計画を登録する。切り直した時も同じコマンドで登録し直す(前の計画は残す)
 export function registerPlan(args) {
@@ -95,7 +104,14 @@ export function showTask(args) {
   }
   const states = stepStates(root, task, plan);
   if (args.json) {
-    emit({ task, root, plan_file: plan.file, steps: states }, null, 0);
+    const status = ledgerWorktreeStatus(root, task);
+    emit({
+      task,
+      root,
+      plan_file: plan.file,
+      steps: states,
+      ...(status === null ? {} : { worktree: status }),
+    }, null, 0);
     return;
   }
   const rows = states.map((s) => [`${s.index}/${s.total} s${s.step}`, s.runs > 1 ? `${s.state} ×${s.runs}` : s.state, s.verify, s.purpose]);
@@ -162,6 +178,49 @@ export function workspaceDirt(entries, workspace) {
   return { workspace, dirty, unexplained_dirty: unexplained };
 }
 
+/** Read optional worktree status, converting only known record and Git failures to an error value.
+ * @param {string} root Ledger root.
+ * @param {string} task Task identifier.
+ * @returns {import("../worktree/state.mjs").WorktreeStatus | { error: string } | null}
+ */
+function ledgerWorktreeStatus(root, task) {
+  try {
+    return worktreeStatus(root, task);
+  } catch (error) {
+    if (
+      !(error instanceof SyntaxError)
+      && !(error instanceof TypeError)
+      && !hasNodeSystemErrorCode(error)
+      && !hasProcessExitStatus(error)
+    ) throw error;
+    return { error: processErrorText(error) };
+  }
+}
+
+/** Identify an integrated or discarded logged worktree whose record and directory are gone.
+ * @param {string} root Ledger root.
+ * @param {string} task Task identifier.
+ * @param {Array<WorkspaceRunEntry>} entries Worklog entries for this task.
+ * @param {string} workspace Logged workspace path.
+ * @returns {boolean} Whether this workspace satisfies the removed-worktree contract.
+ */
+function removedWorkspace(root, task, entries, workspace) {
+  const hasBranchRun = entries.some((entry) =>
+    entry.kind === "run" && runWorkspace(entry) === workspace && Boolean(entry.keys.branch));
+  if (!hasBranchRun || fs.existsSync(workspace)) return false;
+
+  try {
+    return readWorktreeRecord(root, task) === null;
+  } catch (error) {
+    if (
+      !(error instanceof SyntaxError)
+      && !(error instanceof TypeError)
+      && !hasNodeSystemErrorCode(error)
+    ) throw error;
+    return false;
+  }
+}
+
 // 同じ T の再開の照合。未コミットの変更が、作業記録で説明できるもの(最初の run の前から未コミットだったパス・
 // 受け入れた run の変更・Codex ホストが step で記録した変更・状態文書)だけかを確かめる
 export function resumeTask(args) {
@@ -183,7 +242,10 @@ export function resumeTask(args) {
   const unexplained = dirty.filter((p) => !explained.some((a) => isInside(p, a, root)));
 
   const workspaceNames = [...new Set(entries.map(runWorkspace).filter(Boolean))];
-  const workspaces = workspaceNames.map((workspace) => workspaceDirt(entries, workspace));
+  const workspaces = workspaceNames.map((workspace) =>
+    removedWorkspace(root, task, entries, workspace)
+      ? { workspace, dirty: [], unexplained_dirty: [], removed: true }
+      : workspaceDirt(entries, workspace));
   // 作業場所の説明できない変更は絶対パスで足す(空でなければ再開しない、という読み手の規則を
   // 変えないため)
   const unexplainedInWorkspaces = workspaces
@@ -193,6 +255,7 @@ export function resumeTask(args) {
 
   const last = (kind) => entries.filter((e) => e.kind === kind).at(-1) ?? null;
   const lock = activeWorkerLock(root);
+  const status = ledgerWorktreeStatus(root, task);
   emit({
     task, root,
     exists: entries.length > 0,
@@ -207,5 +270,6 @@ export function resumeTask(args) {
     dirty,
     unexplained_dirty: [...unexplained, ...unexplainedInWorkspaces],
     workspaces,
+    ...(status === null ? {} : { worktree: status }),
   }, null, 0);
 }

@@ -26,6 +26,10 @@ export function restoreRun(args) {
     emit({ errors: [`run の記録を読めない: ${args.run ?? "(--run が無い)"}: ${error.message}`] }, null, 2);
     return;
   }
+  if (!fs.existsSync(snapshot.root) || !fs.statSync(snapshot.root).isDirectory()) {
+    emit({ errors: [`作業場所がもう無い: ${snapshot.root}`] }, null, 2);
+    return;
+  }
   const keep = (args.keep ?? []).map((a) => a.replace(/^\.\//, ""));
   const within = (p, list) => list.some((a) => isInside(p, a, snapshot.root));
   const targets = changedSince(snapshot).filter((p) => within(p, allow) && !within(p, keep));
@@ -84,6 +88,10 @@ export async function verifyRun(args) {
   }
   // snapshot.root は作業場所(コマンドを打つ場所)、meta.root は帳簿(状態行・計画・作業記録)の root
   const workspace = snapshot.root;
+  if (!fs.existsSync(workspace) || !fs.statSync(workspace).isDirectory()) {
+    emit({ run_dir: args.run, errors: [`作業場所がもう無い: ${workspace}`] }, null, 2);
+    return;
+  }
   const root = meta.root ?? workspace;
   const commands = packetVerifyCommands(packet);
   const errors = [...checkPacketVerify(packet)];

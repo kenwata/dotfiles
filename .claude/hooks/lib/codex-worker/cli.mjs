@@ -67,7 +67,7 @@ import { parseArgs } from "node:util";
 import { emit } from "./output.mjs";
 import { restoreRun, verifyRun } from "./commands/run-review.mjs";
 import { run } from "./commands/run.mjs";
-import { integrateTask } from "./commands/task-worktree.mjs";
+import { integrateTask, worktreeTask } from "./commands/task-worktree.mjs";
 import { noteTask, registerPlan, resumeTask, showTask } from "./commands/task-ledger.mjs";
 
 let parsed;
@@ -82,6 +82,7 @@ try {
       file: { type: "string" }, kind: { type: "string" }, text: { type: "string" }, from: { type: "string" },
       changed: { type: "string" }, json: { type: "boolean" }, workspace: { type: "string" },
       worktree: { type: "boolean" },
+      remove: { type: "boolean" }, force: { type: "boolean" },
     },
   });
 } catch (error) {
@@ -96,12 +97,14 @@ if (parsed) {
   else if (command === "show") showTask(parsed.values);
   else if (command === "note") noteTask(parsed.values);
   else if (command === "integrate") integrateTask(parsed.values);
+  else if (command === "worktree") worktreeTask(parsed.values);
   else if (command === "resume") resumeTask(parsed.values);
   else emit({
     errors: [`usage: cli.mjs ${[
       "plan ...",
       "run ...",
       "integrate --root <root> --task T<n>",
+      "worktree --root <root> --task T<n> [--json] [--remove [--force]]",
       "show ... [--json]",
       "note ...",
       "resume ...",
