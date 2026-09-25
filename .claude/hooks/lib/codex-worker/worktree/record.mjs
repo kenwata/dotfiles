@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { canonical } from "../../../check-task-scope.mjs";
-import { hasErrorCode, processErrorText } from "../git.mjs";
+import { hasErrorCode, hasNodeSystemErrorCode, processErrorText } from "../git.mjs";
 import { rootSlug, stateDir, taskDir } from "../worklog.mjs";
 
 const WORKTREE_STATE_DIR = "worktrees";
@@ -152,5 +152,30 @@ export function readWorktreeRecord(root, task) {
   } catch (error) {
     if (hasErrorCode(error, "ENOENT")) return null;
     throw error;
+  }
+}
+
+/** Convert a malformed or unreadable worktree record into a preflight refusal.
+ * @param {string} root
+ * @param {string} task
+ * @returns {{
+ *   record: { repo: string, path: string, branch: string, base: string, base_ref: string,
+ *     created_at: string } | null,
+ *   errors: string[]
+ * }}
+ */
+export function readWorktreeRecordForRun(root, task) {
+  try {
+    return { record: readWorktreeRecord(root, task), errors: [] };
+  } catch (error) {
+    if (
+      !(error instanceof SyntaxError)
+      && !(error instanceof TypeError)
+      && !hasNodeSystemErrorCode(error)
+    ) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return { record: null, errors: [`worktree の記録を読めない: ${message}`] };
   }
 }

@@ -3,7 +3,9 @@
 // Git 呼び出しと Git・プロセス失敗の分類を持つ。
 
 import { execFileSync } from "node:child_process";
+import path from "node:path";
 import { canonical } from "../../check-task-scope.mjs";
+import { trackedPaths } from "./core.mjs";
 
 const GIT_MAX_BUFFER = 256 * 1024 * 1024;
 
@@ -129,4 +131,80 @@ export function isMainHeadAncestor(repo, mainHead, branch) {
     if (hasExitStatus(error, 1)) return false;
     throw error;
   }
+}
+
+// 未コミットの変更(.gitignore 対象を除く)
+export function dirtyWorktree(root) {
+  return trackedPaths(root).filter((e) => !e.ignored).map((e) => e.path);
+}
+
+export function gitRoot(dir) {
+  try {
+    return execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/** Return a repository's shared Git directory, or null when the path is not a repository.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+export function gitCommonDir(dir) {
+  try {
+    const commonDir = execFileSync("git", ["-C", dir, "rev-parse", "--git-common-dir"], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return canonical(path.resolve(dir, commonDir));
+  } catch {
+    return null;
+  }
+}
+
+/** Check repository identity across linked Git worktrees, preserving unknown when Git cannot tell.
+ * @param {string} left
+ * @param {string} right
+ * @returns {boolean | null}
+ */
+export function sameGitRepository(left, right) {
+  const leftCommon = gitCommonDir(left);
+  const rightCommon = gitCommonDir(right);
+  return leftCommon === null || rightCommon === null ? null : leftCommon === rightCommon;
+}
+
+/** Match a Node.js system error that exposes its stable error code and syscall details.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function hasNodeSystemErrorCode(error) {
+  return error instanceof Error
+    && "code" in error
+    && typeof error.code === "string"
+    && "errno" in error
+    && typeof error.errno === "number"
+    && "syscall" in error
+    && typeof error.syscall === "string";
+}
+
+/** Check whether a recorded workspace resolves inside a repository, including a deleted path.
+ * @param {string} workspace
+ * @param {string} repo
+ * @returns {boolean}
+ */
+export function workspaceIsInsideRepo(workspace, repo) {
+  const relativeWorkspace = path.relative(repo, canonical(path.resolve(workspace)));
+  if (relativeWorkspace === "") return true;
+  if (
+    path.isAbsolute(relativeWorkspace)
+    || relativeWorkspace === ".."
+    || relativeWorkspace.startsWith(`..${path.sep}`)
+  ) return false;
+  return true;
+}
+
+// 実行中ロックの単位。作業場所を含む git リポジトリの最上位にする。作業場所はリポジトリの中の
+// サブディレクトリでもよいので、作業場所そのものを単位にすると、範囲の重なる 2 つの worker(同じ
+// リポジトリの別のサブディレクトリや最上位)が同時に走り、互いの変更をゲートの違反として巻き戻す
+export function lockRoot(workspace) {
+  return gitRoot(workspace) ?? workspace;
 }
