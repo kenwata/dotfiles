@@ -521,23 +521,38 @@ export function buildPrompt({ contract, allow, packet, rules, sizeCheck }) {
   return parts.join("\n\n") + "\n";
 }
 
-// rollout(worker 用 CODEX_HOME の sessions)からピーク使用率と compaction 回数を読む
+// rollout(worker 用 CODEX_HOME の sessions)から使用率・compaction・effort を読む。
+// effort は最後の有効な turn_context.payload.effort を返す。
 export function readRollout(file) {
   let peak = 0;
   let window = null;
   let compacted = 0;
+  let effort = null;
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     if (!line) continue;
     let event;
     try { event = JSON.parse(line); } catch { continue; }
     if (event.type === "compacted") compacted += 1;
+    if (
+      event.type === "turn_context"
+      && typeof event.payload?.effort === "string"
+      && event.payload.effort
+    ) {
+      effort = event.payload.effort;
+    }
+
     const info = event.type === "event_msg" && event.payload?.type === "token_count" ? event.payload.info : null;
     if (info?.last_token_usage && info.model_context_window) {
       window = info.model_context_window;
       peak = Math.max(peak, info.last_token_usage.total_tokens / info.model_context_window);
     }
   }
-  return { peakRatio: Math.round(peak * 1000) / 1000, contextWindow: window, compacted };
+  return {
+    peakRatio: Math.round(peak * 1000) / 1000,
+    contextWindow: window,
+    compacted,
+    effort,
+  };
 }
 
 export function findRollout(sessionsDir, threadId) {

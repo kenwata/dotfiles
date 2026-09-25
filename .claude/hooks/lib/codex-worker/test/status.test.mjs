@@ -125,6 +125,58 @@ test("size_check の違反は timing 行が無ければ finished 行の末尾に
   );
 });
 
+test("model_reasoning_effort は timing 行の model の直後に出す", () => {
+  const report = {
+    metrics: { check_s: 1, other_command_s: 2, model_s: 3 },
+    model_reasoning_effort: "high",
+  };
+
+  assert.equal(
+    renderSummary(report),
+    "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s\n" +
+      "  timing: check=1s other=2s model=3s effort=high",
+  );
+});
+
+test("model_reasoning_effort は timing 行が無ければ finished 行の末尾に出す", () => {
+  const report = { model_reasoning_effort: "high" };
+
+  assert.equal(
+    renderSummary(report),
+    "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s effort=high",
+  );
+});
+
+test("effort は size=NG より前に出す", () => {
+  const timingReport = {
+    metrics: { check_s: 1, other_command_s: 2, model_s: 3 },
+    model_reasoning_effort: "high",
+    size_check: { ok: false },
+  };
+  const finishedReport = {
+    model_reasoning_effort: "high",
+    size_check: { ok: false },
+  };
+
+  assert.equal(
+    renderSummary(timingReport).split("\n")[1],
+    "  timing: check=1s other=2s model=3s effort=high size=NG",
+  );
+  assert.equal(
+    renderSummary(finishedReport),
+    "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s effort=high size=NG",
+  );
+});
+
+test("null の model_reasoning_effort は summary に出さない", () => {
+  const report = { model_reasoning_effort: null };
+
+  assert.equal(
+    renderSummary(report),
+    "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s",
+  );
+});
+
 test("警告だけの size_check は summary に size=NG を出さない", () => {
   const report = { size_check: { ok: true, warnings: ["warning"] } };
 

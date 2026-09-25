@@ -229,7 +229,12 @@ test("rollout からピーク使用率と compaction 回数を読む", () => {
     const file = path.join(dir, "rollout.jsonl");
     const count = (t) => JSON.stringify({ type: "event_msg", payload: { type: "token_count", info: { last_token_usage: { total_tokens: t }, model_context_window: 200000 } } });
     fs.writeFileSync(file, [count(20000), count(150000), JSON.stringify({ type: "compacted", payload: {} }), count(30000), "not json", ""].join("\n"));
-    assert.deepEqual(readRollout(file), { peakRatio: 0.75, contextWindow: 200000, compacted: 1 });
+    assert.deepEqual(readRollout(file), {
+      peakRatio: 0.75,
+      contextWindow: 200000,
+      compacted: 1,
+      effort: null,
+    });
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

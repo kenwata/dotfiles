@@ -16,6 +16,26 @@ import { emit, recordWorklog, runWorkspace, statusWriter } from "../output.mjs";
 import { readWorktreeRecord, worktreeStatus } from "../worktree.mjs";
 
 /** @typedef {{ kind: string, keys: { branch?: string, workspace?: string } }} WorkspaceRunEntry */
+/**
+ * @typedef {Object} WorklogEntry
+ * @property {string} kind Entry kind.
+ * @property {string | null} step Recorded step identifier.
+ * @property {Record<string, string | undefined>} keys Recorded key-value data.
+ */
+/** @typedef {"defect" | "supervisor" | "spec" | "environment" | "unknown"} RerunKind */
+/** @typedef {{ runs: number, seconds: number }} RunTotals */
+/** @typedef {{ runs: number, seconds: number, share: number | null }} SupersededSummary */
+/**
+ * @typedef {Object} RerunSummary
+ * @property {number} runs Repeated run count.
+ * @property {number} seconds Repeated run duration in seconds.
+ * @property {number | null} share Fraction of all run duration.
+ * @property {number} missing_duration Run count without a usable duration.
+ * @property {Record<RerunKind, RunTotals>} by_kind Totals by rerun reason.
+ * @property {string[]} [efforts] Distinct effort values when multiple values occur.
+ */
+
+const RERUN_KINDS = ["defect", "supervisor", "spec", "environment", "unknown"];
 
 // ステップ計画を登録する。切り直した時も同じコマンドで登録し直す(前の計画は残す)
 export function registerPlan(args) {
@@ -89,6 +109,120 @@ export function stepStates(root, task, plan) {
   });
 }
 
+/**
+ * Aggregate rerun and superseded durations from ordered worklog entries.
+ * @param {WorklogEntry[]} entries Parsed entries in worklog order.
+ * @returns {{ reruns: RerunSummary, superseded: SupersededSummary }}
+ */
+function summarizeRunReruns(entries) {
+  const runs = entries.filter((entry) => entry.kind === "run");
+  const lastRunByStep = new Map();
+  for (const [index, entry] of runs.entries()) lastRunByStep.set(entry.step, index);
+
+  const totalSeconds = runs.reduce((sum, entry) => sum + durationSeconds(entry), 0);
+
+  const rerunTotals = { runs: 0, seconds: 0 };
+  const superseded = { runs: 0, seconds: 0 };
+  const byKind = Object.fromEntries(RERUN_KINDS.map((kind) => [kind, { runs: 0, seconds: 0 }]));
+
+  const effortValues = [...new Set(runs.map((entry) => entry.keys.effort).filter(Boolean))];
+  let missingDuration = 0;
+  const priorSteps = new Set();
+
+  for (const [index, entry] of runs.entries()) {
+    const duration = durationValue(entry);
+    const hasPriorRun = priorSteps.has(entry.step);
+    priorSteps.add(entry.step);
+    if (duration === null) missingDuration += 1;
+
+    if (lastRunByStep.get(entry.step) > index) {
+      superseded.runs += 1;
+      superseded.seconds += duration ?? 0;
+    }
+
+    if (!hasPriorRun) continue;
+    if (entry.keys.rerun === "replan") continue;
+
+    const kind = RERUN_KINDS.includes(entry.keys.rerun) ? entry.keys.rerun : "unknown";
+    rerunTotals.runs += 1;
+    rerunTotals.seconds += duration ?? 0;
+    byKind[kind].runs += 1;
+    byKind[kind].seconds += duration ?? 0;
+  }
+
+  const reruns = {
+    ...rerunTotals,
+    share: durationShare(rerunTotals.seconds, totalSeconds),
+    missing_duration: missingDuration,
+    by_kind: byKind,
+    ...(effortValues.length > 1 ? { efforts: effortValues } : {}),
+  };
+
+  return {
+    reruns,
+    superseded: { ...superseded, share: durationShare(superseded.seconds, totalSeconds) },
+  };
+}
+
+/** Read a duration only when its worklog value is a nonnegative integer string.
+ * @param {WorklogEntry} entry Worklog row to inspect.
+ * @returns {number | null} Duration in seconds, or null when it is unusable.
+ */
+function durationValue(entry) {
+  const value = entry.keys.duration;
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
+
+  const seconds = Number(value);
+  return Number.isInteger(seconds) ? seconds : null;
+}
+
+/** Return zero for records without a usable duration.
+ * @param {WorklogEntry} entry Worklog row to inspect.
+ * @returns {number} Usable duration in seconds or zero.
+ */
+function durationSeconds(entry) {
+  return durationValue(entry) ?? 0;
+}
+
+/** Round a duration share to three decimal places, or null for a zero denominator.
+ * @param {number} seconds Numerator duration in seconds.
+ * @param {number} totalSeconds Denominator duration in seconds.
+ * @returns {number | null} Rounded share, or null when the denominator is zero.
+ */
+function durationShare(seconds, totalSeconds) {
+  return totalSeconds === 0 ? null : Math.round((seconds / totalSeconds) * 1000) / 1000;
+}
+
+/** Format the human-readable rerun summary as one Japanese line.
+ * @param {{ reruns: RerunSummary, superseded: SupersededSummary }} summary Aggregated run data.
+ * @returns {string} One-line summary for the show table.
+ */
+function formatRerunsLine({ reruns, superseded }) {
+  const share = reruns.share === null ? "-" : `${(reruns.share * 100).toFixed(1)}%`;
+  const detail = RERUN_KINDS.map((kind) =>
+    `${kind} ${reruns.by_kind[kind].runs} 件 ${reruns.by_kind[kind].seconds}s`).join(", ");
+  const efforts = reruns.efforts ? ` / efforts: ${reruns.efforts.join(",")}` : "";
+  const rerunText = `reruns: ${reruns.runs} 件 ${reruns.seconds}s (${share})`;
+  const supersededText = `${superseded.runs} 件 ${superseded.seconds}s`;
+
+  return `${rerunText} / superseded: ${supersededText} / 内訳: ${detail}${efforts}`;
+}
+
+/** Map each step to the effort on its latest run record.
+ * @param {WorklogEntry[]} entries Parsed worklog entries.
+ * @returns {Map<string, string | null>} Latest run effort by step identifier.
+ */
+function latestEffortsByStep(entries) {
+  const efforts = new Map();
+  for (const entry of entries) {
+    if (entry.kind === "run" && entry.step) {
+      efforts.set(entry.step, entry.keys.effort ?? null);
+    }
+  }
+
+  return efforts;
+}
+
 // 計画の各ステップについて、最新の run の状態と verify の結果を人向けの表(--json なら JSON)で出す
 export function showTask(args) {
   const root = gitRoot(path.resolve(args.root ?? "."));
@@ -102,7 +236,13 @@ export function showTask(args) {
     }
     return;
   }
-  const states = stepStates(root, task, plan);
+  const entries = readWorklog(root, task)?.entries ?? [];
+  const { reruns, superseded } = summarizeRunReruns(entries);
+  const effortsByStep = latestEffortsByStep(entries);
+  const states = stepStates(root, task, plan).map((state) => ({
+    ...state,
+    effort: effortsByStep.get(`s${state.step}`) ?? null,
+  }));
   if (args.json) {
     const status = ledgerWorktreeStatus(root, task);
     emit({
@@ -110,6 +250,8 @@ export function showTask(args) {
       root,
       plan_file: plan.file,
       steps: states,
+      reruns,
+      superseded,
       ...(status === null ? {} : { worktree: status }),
     }, null, 0);
     return;
@@ -121,6 +263,7 @@ export function showTask(args) {
   for (const r of rows) lines.push(`${pad(r[0], widths[0])}  ${pad(r[1], widths[1])}  ${pad(r[2], widths[2])}  ${r[3]}`);
   lines.push(
     "",
+    formatRerunsLine({ reruns, superseded }),
     `packet の写し: ${path.dirname(plan.file)}/s<番号>.packet.md(最新)、s<番号>-<run_id>.packet.md(run ごと)`,
   );
   process.stdout.write(lines.join("\n") + "\n");

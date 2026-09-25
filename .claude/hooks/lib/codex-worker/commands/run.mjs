@@ -369,7 +369,7 @@ export async function run(args) {
   let checked = { changed: [], violations: [], repoChanges: [], ignoredDirs: [], ignoredFiles: [] };
   let restoreResult = { restored: [], unrestorable: [], backups: {} };
   let result = null;
-  let context = { peakRatio: null, contextWindow: null, compacted: null };
+  let context = { peakRatio: null, contextWindow: null, compacted: null, effort: null };
   let rolloutFile = null;
   let usage = {};
   try {
@@ -426,6 +426,7 @@ export async function run(args) {
     ...(worktree ? { worktree } : {}),
     model,
     model_family: resolved.family ?? null,
+    model_reasoning_effort: context.effort,
     accepted: reasons.length === 0,
     reasons,
     size_check: "errors" in sizeCheck ? { ok: false, errors: sizeCheck.errors } : sizeCheck,
@@ -470,6 +471,7 @@ export async function run(args) {
   // 作業場所が root と違えば workspace に残す
   const pastRuns = (readWorklog(root, task)?.entries ?? []).filter((e) => e.kind === "run");
   const firstRun = !pastRuns.some((e) => runWorkspace(e) === loggedWorkspace);
+  const effort = report.model_reasoning_effort;
   recordWorklog(root, task, {
     kind: "run", step, by: "runner",
     keys: {
@@ -478,6 +480,10 @@ export async function run(args) {
       ...(worktree ? { branch: worktree.branch } : {}),
       ...(rerunKind ? { rerun: rerunKind } : {}),
       ...(firstRun ? { baseline: Object.entries(snapshot.files).filter(([, f]) => !f.ignored).map(([p]) => p) } : {}),
+      ...(typeof effort === "string" && effort.length > 0 ? { effort } : {}),
+      ...(typeof report.metrics.duration_s === "number"
+        ? { duration: report.metrics.duration_s }
+        : {}),
     },
     text: report.accepted ? `accepted: ${plan.steps.find((s) => s.step === step).purpose}` : reasons.join(" / "),
   });

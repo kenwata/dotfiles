@@ -12,6 +12,9 @@ import {
   baseArgs,
   assertStatusLogLines,
   readLog,
+  git,
+  waitFor,
+  wsArgs,
 } from "./cli-harness.mjs";
 
 const REWORK_SECTION = `## 直すこと
@@ -120,9 +123,98 @@ test("plan・run・verify は結果を worklog に 1 行ずつ残し、最初の
     assert.match(log, /^- \S+ kind=plan by=runner steps=2 revised=false — s1 impl を書く \/ s2 呼び出し元を直す$/m);
     const runs = log.split("\n").filter((l) => l.includes("kind=run"));
     assert.equal(runs.length, 2);
-    assert.match(runs[0], / step=s1 by=runner run=T7-s1-\S+ accepted=true worker=done changed=src\/a\/impl.ts baseline=other\/y.ts — accepted: impl を書く$/);
+    assert.match(
+      runs[0],
+      new RegExp(
+        " step=s1 by=runner run=T7-s1-\\S+ accepted=true worker=done changed=src/a/impl.ts" +
+          " baseline=other/y.ts duration=\\d+ — accepted: impl を書く$",
+      ),
+    );
     assert.doesNotMatch(runs[1], /baseline=/);
     assert.match(log, new RegExp(`kind=verify step=s1 by=runner run=${path.basename(json.run_dir)} result=fail:1 — 1/2 ok`));
+  } finally { t.cleanup(); }
+});
+
+test(
+  "run は rollout の effort と duration を report・worklog・状態要約に記録する",
+  () => {
+    const t = setup();
+    try {
+      const result = t.run(baseArgs(t.root, t.packet), {
+        FAKE_MODE: "ok",
+        FAKE_EFFORT: "xhigh",
+      });
+      const reportPath = path.join(result.json.run_dir, "report.json");
+      const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+      const runEntry = readLog(t).split("\n").find((line) => line.includes("kind=run"));
+      const statusLog = fs.readFileSync(t.statusLog, "utf8");
+
+      assert.equal(result.code, 0, JSON.stringify(result.json));
+      assert.equal(report.model_reasoning_effort, "xhigh");
+      assert.match(runEntry, / effort=xhigh duration=\d+ — accepted: impl を書く$/);
+      assert.match(statusLog, / effort=xhigh(?: size=|$)/m);
+    } finally { t.cleanup(); }
+  },
+);
+
+test(
+  "effort が無い run は report に null を置き worklog の duration だけを記録する",
+  () => {
+    const t = setup();
+    try {
+      const result = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+      const reportPath = path.join(result.json.run_dir, "report.json");
+      const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+      const runEntry = readLog(t).split("\n").find((line) => line.includes("kind=run"));
+      const statusLog = fs.readFileSync(t.statusLog, "utf8");
+
+      assert.equal(result.code, 0, JSON.stringify(result.json));
+      assert.equal(report.model_reasoning_effort, null);
+      assert.doesNotMatch(runEntry, /effort=/);
+      assert.match(runEntry, / duration=\d+ — accepted: impl を書く$/);
+      assert.doesNotMatch(statusLog, /effort=/);
+    } finally { t.cleanup(); }
+  },
+);
+
+test("--worktree run は通常 run と同じ順で effort と duration を記録する", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    fs.writeFileSync(path.join(t.wsRepo, "src/a/fixture.ts"), "fixture\n");
+    git(t.wsRepo, "add", "src/a/fixture.ts");
+    git(t.wsRepo, "commit", "-qm", "track workspace target");
+    const result = t.run([...wsArgs(t), "--worktree"], {
+      FAKE_MODE: "ok",
+      FAKE_EFFORT: "xhigh",
+    });
+    const reportPath = path.join(result.json.run_dir, "report.json");
+    const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    const runEntry = readLog(t).split("\n").find((line) => line.includes("kind=run"));
+
+    assert.equal(result.code, 0, JSON.stringify(result.json));
+    assert.equal(report.model_reasoning_effort, "xhigh");
+    assert.match(runEntry, / workspace=\S+ branch=\S+ baseline=/);
+    assert.match(runEntry, / effort=xhigh duration=\d+ — accepted: impl を書く$/);
+  } finally { t.cleanup(); }
+});
+
+test("signal で止めた run は effort と duration を worklog に記録しない", async () => {
+  const t = setup();
+  const pidFile = path.join(t.base, "grandchild.pid");
+  try {
+    const child = t.spawnRun(baseArgs(t.root, t.packet), {
+      FAKE_MODE: "sleep",
+      FAKE_PID_FILE: pidFile,
+      FAKE_EFFORT: "xhigh",
+    });
+    await waitFor(() => t.locks().length > 0 && fs.existsSync(pidFile));
+
+    child.kill("SIGTERM");
+    await new Promise((resolve) => child.on("close", resolve));
+    const runEntry = readLog(t).split("\n").find((line) => line.includes("kind=run"));
+
+    assert.match(runEntry, /stage=interrupted/);
+    assert.doesNotMatch(runEntry, /effort=|duration=/);
   } finally { t.cleanup(); }
 });
 

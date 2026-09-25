@@ -52,7 +52,20 @@ console.log(JSON.stringify({ type: "thread.started", thread_id: id }));
 const d = new Date();
 const day = path.join(process.env.CODEX_HOME, "sessions", String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0"));
 fs.mkdirSync(day, { recursive: true });
-fs.writeFileSync(path.join(day, "rollout-x-" + id + ".jsonl"), JSON.stringify({ type: "event_msg", payload: { type: "token_count", info: { last_token_usage: { total_tokens: 20000 }, model_context_window: 200000 } } }) + "\\n");
+const rolloutPath = path.join(day, "rollout-x-" + id + ".jsonl");
+const effortLine = process.env.FAKE_EFFORT
+  ? JSON.stringify({ type: "turn_context", payload: { effort: process.env.FAKE_EFFORT } }) + "\\n"
+  : "";
+fs.writeFileSync(
+  rolloutPath,
+  JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: { last_token_usage: { total_tokens: 20000 }, model_context_window: 200000 },
+    },
+  }) + "\\n" + effortLine,
+);
 if (mode === "sleep") {
   const grandchild = spawn("sleep", ["30"], { stdio: "ignore" });
   fs.writeFileSync(process.env.FAKE_PID_FILE, String(grandchild.pid));
