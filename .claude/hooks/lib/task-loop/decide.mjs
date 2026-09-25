@@ -170,6 +170,162 @@ export function nextStep(root) {
   return match ? { command: match[1], arg: match[2]?.replace(/\.+$/, "") || null } : null;
 }
 
+const ACCOUNTING_PATHS = new Set(["TODO.md", "HANDOFF.md", "docs/decisions.md"]);
+
+// 対象が未宣言・散文あり・帳簿だけなら排他タスクとして扱う。
+function isExclusiveTask(scope) {
+  return scope.prose.length > 0 || !scope.paths.some((target) => !ACCOUNTING_PATHS.has(target));
+}
+
+// パス区切り単位で親子関係を比べ、文字列の単純な前方一致を避ける。
+function pathsOverlap(left, right) {
+  const normalize = (value) => value.replace(/\/+$/, "");
+  const a = normalize(left);
+  const b = normalize(right);
+  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+}
+
+// 排他でない T の対象パス。排他タスクには競合検査をしない。
+function taskPaths(root, task) {
+  const scope = findTask(root, task);
+  return scope && !isExclusiveTask(scope) ? scope.paths : [];
+}
+
+// 起動対象の候補と、除外指定で止める T を分ける。
+function readyCandidates(root, running, excluded, limit) {
+  const allowed = limit === null ? null : new Set(limit);
+  const open = openTasks(root).filter((task) =>
+    !running.includes(task) && (!allowed || allowed.has(task)),
+  );
+
+  return {
+    excluded: open.filter((task) => excluded.includes(task)),
+    candidates: open.filter((task) => !excluded.includes(task)),
+  };
+}
+
+// 候補を番号順に並べ、次の一手を優先し、古い次の一手を記録する。
+function prioritizeReadyCandidates(root, candidates, running, limit) {
+  const allowed = limit === null ? null : new Set(limit);
+  const step = nextStep(root);
+  const nextInfo = step?.command === "execute-task" && step.arg
+    ? { task: step.arg, scope: findTask(root, step.arg) }
+    : null;
+  const staleStep = nextInfo && nextInfo.scope?.state !== " " &&
+    !running.includes(nextInfo.task) && (!allowed || allowed.has(nextInfo.task))
+    ? {
+        task: nextInfo.task,
+        reason: "next_step_not_open",
+        detail: [nextInfo.scope?.state ?? "missing"],
+      }
+    : null;
+  const ordered = [...candidates].sort(
+    (left, right) => Number(left.slice(1)) - Number(right.slice(1)),
+  );
+  const prioritized = nextInfo && nextInfo.scope?.state === " " && ordered.includes(nextInfo.task)
+    ? [nextInfo.task, ...ordered.filter((task) => task !== nextInfo.task)]
+    : ordered;
+
+  return { prioritized, staleStep };
+}
+
+// 未完了依存があれば、その候補を止める理由を返す。
+function dependencyBlock(root, task) {
+  const dependencies = openDependencies(root, task);
+  return dependencies.length > 0
+    ? { task, reason: "dependencies_open", detail: dependencies }
+    : null;
+}
+
+// 並行中または今回選択済みの排他 T があれば候補を止める。
+function exclusiveWaitBlock(task, { readyExclusive, activeExclusive }) {
+  if (activeExclusive.length > 0 || readyExclusive) {
+    return {
+      task,
+      reason: "waits_for_exclusive",
+      detail: [...activeExclusive, ...(readyExclusive ? [readyExclusive] : [])],
+    };
+  }
+  return null;
+}
+
+// 排他候補には、他の走行中または今回選択済みの T がないことを求める。
+function exclusiveIdleBlock(task, { running, ready, activeExclusive }) {
+  const active = running.filter((runningTask) => !activeExclusive.includes(runningTask));
+  return active.length > 0 || ready.length > 0
+    ? { task, reason: "exclusive_needs_idle", detail: [...active, ...ready] }
+    : null;
+}
+
+// 走行中・今回選択済みの T と対象パスが重なる候補を止める。
+function overlapBlock(root, task, { running, ready }) {
+  const paths = taskPaths(root, task);
+  const overlapTasks = [...running, ...ready].filter((other) =>
+    paths.some((left) => taskPaths(root, other).some((right) => pathsOverlap(left, right))),
+  );
+  return overlapTasks.length > 0
+    ? { task, reason: "overlap", detail: overlapTasks }
+    : null;
+}
+
+// 依存、排他、パス重複の順に 1 件の起動可否を判定する。
+function readyCandidateDecision(root, task, state) {
+  const dependency = dependencyBlock(root, task);
+  if (dependency) return { block: dependency };
+
+  const scope = findTask(root, task);
+  const exclusive = !scope || isExclusiveTask(scope);
+  const exclusiveWait = exclusiveWaitBlock(task, state);
+  if (exclusiveWait) return { block: exclusiveWait };
+
+  if (exclusive) {
+    return { block: exclusiveIdleBlock(task, state), exclusive };
+  }
+
+  return { block: overlapBlock(root, task, state), exclusive };
+}
+
+// 起動できる T を順序付きで返し、候補外になった理由も返す。
+// 引数: root は主ルート。running と excluded は T の配列(省略時 [])、
+// limit は T の配列か null(省略時 null)。
+// 戻り値: { ready: string[], blocked: { task, reason, detail }[] }。
+// reason は dependencies_open / exclusive_needs_idle / waits_for_exclusive / overlap /
+// excluded / next_step_not_open。detail は依存・競合 T・次の一手の状態。
+export function readySet(root, { running = [], excluded = [], limit = null } = {}) {
+  const { excluded: excludedTasks, candidates } = readyCandidates(root, running, excluded, limit);
+  const { prioritized, staleStep } = prioritizeReadyCandidates(root, candidates, running, limit);
+  const activeExclusive = running.filter((task) => isExclusiveTask(findTask(root, task) ?? {
+    prose: [], paths: [],
+  }));
+  const ready = [];
+  const blocked = excludedTasks.map((task) => ({ task, reason: "excluded", detail: [] }));
+  let readyExclusive = null;
+
+  for (const task of prioritized) {
+    const decision = readyCandidateDecision(root, task, {
+      running,
+      ready,
+      readyExclusive,
+      activeExclusive,
+    });
+    if (decision.block) {
+      blocked.push(decision.block);
+      continue;
+    }
+
+    if (decision.exclusive) {
+      ready.push(task);
+      readyExclusive = task;
+      continue;
+    }
+    ready.push(task);
+  }
+
+  if (staleStep) blocked.push(staleStep);
+
+  return { ready, blocked };
+}
+
 // /breakdown の引数(設計書の相対パス)と、/execute-task・/amend の引数(タスクID)の形
 const DESIGN_PATH = /^docs\/design\/\S+\.md$/;
 const TASK_ID = /^T\d+$/;

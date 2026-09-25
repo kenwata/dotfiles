@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { parseDependencies, readTaskScope } from "../../../check-task-scope.mjs";
 import {
   amendCount, amendOutcome, breakdownOutcome, breakdownTarget, committedSince, completedSinceCheckpoint, dirtyPaths, findTask, handoffSignals, headOf, judge, loopStep, nextStep,
-  openDependencies, openTasks, parseTaskList, planSlug,
+  openDependencies, openTasks, parseTaskList, planSlug, readySet,
 } from "../decide.mjs";
 
 const TODO = `| # | T | タスク | 実 | 状態 |
@@ -43,6 +43,163 @@ function fixture() {
   const commit = (message) => git(root, "commit", "-q", "--allow-empty", "-m", message);
   return { root, commit, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
 }
+
+function readyFixture(tasks) {
+  const t = fixture();
+  const rows = tasks.map(({ task, scope = `\`src/${task}.js\``, deps = "なし" }) => {
+    const n = Number(task.slice(1));
+    const completion = scope === null
+      ? ""
+      : `**#2-${n} / ${task}** — 完了条件: 対象: ${scope}。依存: ${deps}。`;
+    return `| #2-${n} | ${task} | ${task} | — | [ ] |\n\n${completion}`;
+  });
+  fs.writeFileSync(path.join(t.root, "TODO.md"), rows.join("\n"));
+  return t;
+}
+
+test("readySet は未完了の依存がある T を外し理由を返す", () => {
+  const t = readyFixture([
+    { task: "T20", scope: "`src/a.js`", deps: "T21" },
+    { task: "T21", scope: "`src/b.js`" },
+  ]);
+  try {
+    assert.deepEqual(readySet(t.root, {}).blocked, [
+      { task: "T20", reason: "dependencies_open", detail: ["T21 が未完了"] },
+    ]);
+  } finally { t.cleanup(); }
+});
+
+test("readySet は廃止の依存を置き換え先まで辿る", () => {
+  const t = readyFixture([
+    { task: "T20", scope: "`src/a.js`", deps: "T22" },
+    { task: "T22", scope: "`src/old.js`" },
+  ]);
+  try {
+    const todo = fs.readFileSync(path.join(t.root, "TODO.md"), "utf8")
+      .replace("| #2-22 | T22 | T22 | — | [ ] |", "| #2-22 | T22 | 廃止 (→T23) | — | [-] |")
+      + "\n| #2-23 | T23 | 置換先 | — | [x] |\n";
+    fs.writeFileSync(path.join(t.root, "TODO.md"), todo);
+    assert.ok(readySet(t.root, {}).ready.includes("T20"));
+  } finally { t.cleanup(); }
+});
+
+test("readySet は対象に散文がある T を排他として扱う", () => {
+  const t = readyFixture([{ task: "T20", scope: "`src/a.js` と確認" }, { task: "T21" }]);
+  try {
+    assert.deepEqual(readySet(t.root, {}).ready, ["T20"]);
+    assert.deepEqual(readySet(t.root, {}).blocked[0], {
+      task: "T21", reason: "waits_for_exclusive", detail: ["T20"],
+    });
+  } finally { t.cleanup(); }
+});
+
+test("readySet は対象未宣言と帳簿だけの T を排他にする", () => {
+  const t = readyFixture([{ task: "T20", scope: null }, { task: "T21", scope: "`TODO.md`" }]);
+  try {
+    const result = readySet(t.root, {});
+    assert.deepEqual(result.ready, ["T20"]);
+    assert.deepEqual(result.blocked[0].detail, ["T20"]);
+    assert.deepEqual(readySet(t.root, {}).blocked[0].reason, "waits_for_exclusive");
+  } finally { t.cleanup(); }
+});
+
+test("readySet は排他 T を running が空の時だけ単独で起動する", () => {
+  const t = readyFixture([
+    { task: "T20", scope: "`TODO.md`" },
+    { task: "T21", scope: "`src/T21.js`" },
+  ]);
+  try {
+    const exclusiveOnly = readySet(t.root, {});
+    assert.deepEqual(exclusiveOnly.ready, ["T20"]);
+    assert.deepEqual(exclusiveOnly.blocked, [
+      { task: "T21", reason: "waits_for_exclusive", detail: ["T20"] },
+    ]);
+
+    const parallelRunning = readySet(t.root, { running: ["T21"] });
+    assert.deepEqual(parallelRunning.ready, []);
+    assert.deepEqual(parallelRunning.blocked, [
+      { task: "T20", reason: "exclusive_needs_idle", detail: ["T21"] },
+    ]);
+  } finally { t.cleanup(); }
+});
+
+test("readySet は running の排他 T がある間、全候補を待たせる", () => {
+  const t = readyFixture([
+    { task: "T20" },
+    { task: "T21" },
+    { task: "T22", scope: "`src/T22.js` と確認" },
+  ]);
+  try {
+    const result = readySet(t.root, { running: ["T22"] });
+    assert.deepEqual(result.ready, []);
+    assert.deepEqual(result.blocked, [
+      { task: "T20", reason: "waits_for_exclusive", detail: ["T22"] },
+      { task: "T21", reason: "waits_for_exclusive", detail: ["T22"] },
+    ]);
+  } finally { t.cleanup(); }
+});
+
+test("readySet は同じディレクトリを含むパスだけを重なりと判定する", () => {
+  const t = readyFixture([
+    { task: "T20", scope: "`src/`" },
+    { task: "T21", scope: "`src/a/b.py`" },
+  ]);
+  try {
+    const result = readySet(t.root, {});
+    assert.deepEqual(result.ready, ["T20"]);
+    assert.deepEqual(result.blocked.find(({ task }) => task === "T21").detail, ["T20"]);
+  } finally { t.cleanup(); }
+});
+
+test("readySet は src/a と src/ab を重なりと判定しない", () => {
+  const t = readyFixture([
+    { task: "T20", scope: "`src/a`" },
+    { task: "T21", scope: "`src/ab`" },
+  ]);
+  try {
+    assert.deepEqual(readySet(t.root, {}).ready, ["T20", "T21"]);
+  } finally { t.cleanup(); }
+});
+
+test("readySet は次の一手を先頭にし、残りを番号順に並べる", () => {
+  const t = readyFixture([{ task: "T30" }, { task: "T10" }, { task: "T20" }]);
+  try {
+    fs.writeFileSync(
+      path.join(t.root, "HANDOFF.md"),
+      "## 次セッションの最初の一手\n- `/execute-task T30`\n",
+    );
+    assert.deepEqual(readySet(t.root, {}).ready, ["T30", "T10", "T20"]);
+  } finally { t.cleanup(); }
+});
+
+test("readySet は済んだ・見つからない次の一手を理由に残し、優先しない", () => {
+  const t = readyFixture([{ task: "T20" }]);
+  try {
+    const todoPath = path.join(t.root, "TODO.md");
+    const todo = fs.readFileSync(todoPath, "utf8") + "\n| #2-10 | T10 | 完了 | — | [x] |\n";
+    fs.writeFileSync(todoPath, todo);
+    const handoffPath = path.join(t.root, "HANDOFF.md");
+    const nextT10 = "## 次セッションの最初の一手\n- `/execute-task T10`\n";
+    fs.writeFileSync(handoffPath, nextT10);
+    assert.deepEqual(readySet(t.root, {}).blocked, [
+      { task: "T10", reason: "next_step_not_open", detail: ["x"] },
+    ]);
+    const nextT99 = "## 次セッションの最初の一手\n- `/execute-task T99`\n";
+    fs.writeFileSync(handoffPath, nextT99);
+    assert.deepEqual(readySet(t.root, {}).blocked.at(-1), {
+      task: "T99", reason: "next_step_not_open", detail: ["missing"],
+    });
+  } finally { t.cleanup(); }
+});
+
+test("readySet は excluded と limit の範囲外を候補に入れない", () => {
+  const t = readyFixture([{ task: "T20" }, { task: "T21" }, { task: "T22" }]);
+  try {
+    assert.deepEqual(readySet(t.root, { excluded: ["T20"], limit: ["T20", "T21"] }), {
+      ready: ["T21"], blocked: [{ task: "T20", reason: "excluded", detail: [] }],
+    });
+  } finally { t.cleanup(); }
+});
 
 test("--tasks は範囲・列挙・混在を書かれた順に展開し、誤りを返す", () => {
   assert.deepEqual(parseTaskList("T12..T14,T20, T13").tasks, ["T12", "T13", "T14", "T20"]);
