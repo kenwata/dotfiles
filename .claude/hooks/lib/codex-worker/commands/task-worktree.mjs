@@ -215,8 +215,30 @@ function resolveMainRepository({ root, task, record }) {
     if (recordedRepo !== null) return canonical(recordedRepo);
   }
 
-  const commonDir = gitCommonDir(worktreeDir(root, task));
+  const target = worktreeDir(root, task);
+  const gitFile = path.join(target, ".git");
+  if (!fs.existsSync(gitFile) || !fs.lstatSync(gitFile).isFile()) return null;
+
+  const commonDir = gitCommonDir(target);
   return commonDir === null ? null : path.dirname(commonDir);
+}
+
+/** Find a live worker lock in the calculated worktree or the resolved main repository.
+ * @param {string} target Calculated worktree path.
+ * @param {string | null} repository Resolved main repository path, if known.
+ * @returns {ReturnType<typeof activeWorkerLock>} Live worker metadata, or null.
+ */
+function activeRemovalWorker(target, repository) {
+  return activeWorkerLock(lockRoot(target))
+    ?? (repository === null ? null : activeWorkerLock(lockRoot(repository)));
+}
+
+/** Emit the standard refusal report for a live worker lock.
+ * @param {NonNullable<ReturnType<typeof activeWorkerLock>>} running Live worker metadata.
+ * @returns {void} Emits a code 2 refusal.
+ */
+function refuseRunningRemoval(running) {
+  emit({ errors: [`別の worker が実行中: ${running.task} ステップ ${running.step}`] }, null, 2);
 }
 
 /** Remove one task worktree after validating its record and collecting the result fields.
@@ -238,6 +260,12 @@ function removeTaskWorktree(root, task) {
   const repository = record === null
     ? resolveMainRepository({ root, task, record })
     : gitRoot(record.repo);
+
+  const running = activeRemovalWorker(target, record?.repo ?? repository);
+  if (running) {
+    refuseRunningRemoval(running);
+    return;
+  }
 
   if (record === null && repository === null) {
     if (!targetExists) {
@@ -282,6 +310,11 @@ function removeTaskWorktree(root, task) {
 function removeTaskWorktreeForce(root, task) {
   const { record } = readWorktreeRecordForRun(root, task);
   const repository = resolveMainRepository({ root, task, record });
+  const running = activeRemovalWorker(worktreeDir(root, task), repository);
+  if (running) {
+    refuseRunningRemoval(running);
+    return;
+  }
 
   try {
     const result = forceRemoveTaskWorktree({ root, task, repo: repository });

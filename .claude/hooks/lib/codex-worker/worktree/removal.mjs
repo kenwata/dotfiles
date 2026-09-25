@@ -128,13 +128,14 @@ function recordedRemovalProblem(root, task, target, targetEntry) {
 }
 
 /** Remove the registered or forced orphaned worktree, branch, and record.
+ * Forced removal passes --force twice so Git removes locked worktrees as well.
  * @param {{ repo: string, target: string, branch: string, recordPath: string,
  *   registered: boolean, force: boolean }} options
  * @returns {void}
  */
 function removeWorktreeState({ repo, target, branch, recordPath, registered, force }) {
   if (registered) {
-    git(repo, ["worktree", "remove", ...(force ? ["--force"] : []), target]);
+    git(repo, ["worktree", "remove", ...(force ? ["--force", "--force"] : []), target]);
   } else if (force && pathExists(target)) {
     fs.rmSync(target, { recursive: true, force: true });
   }
@@ -146,7 +147,8 @@ function removeWorktreeState({ repo, target, branch, recordPath, registered, for
 }
 
 /** Remove a task worktree and its branch, refusing unsafe state unless force is enabled.
- * Force also cleans orphaned task state, but never removes a branch checked out elsewhere.
+ * Force also removes locked worktrees and cleans orphaned task state, but never removes a branch
+ * checked out elsewhere.
  * @param {{ root: string, task: string, repo: string, force?: boolean }} options
  * @returns {RemoveWorktreeResult} Success or a code 2 refusal.
  * @throws {Error} If a Git or filesystem operation fails unexpectedly.
@@ -191,6 +193,7 @@ export function removeWorktree({ root, task, repo, force = false }) {
 }
 
 /** Remove only the task's calculated worktree, branch, and record after force preflight.
+ * Registered worktrees are removed even when Git has locked them.
  * @param {{ root: string, task: string, repo: string | null }} options
  * @returns {ForceRemoveWorktreeSuccess | WorktreeRefusal} Success with prior-state fields,
  *   an optional warning, or a code 2 refusal.
