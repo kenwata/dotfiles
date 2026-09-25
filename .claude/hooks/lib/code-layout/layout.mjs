@@ -37,6 +37,24 @@ const CONTINUES_NEXT_LINE = /([([,=+\-*/%&|?\\]|=>)$/;
 // `|` `&` は論理演算に加えて、TypeScript の union・intersection 型の続きの行
 const LEADING_OPERATOR = /^(\.|\?\.|[|&]|\+|-(?!-)|\*|\/(?!\/)|\?|:)/;
 
+// 開きの括弧と、対応する閉じ。`(` `[` の中の行は複数行の式の続きで、文ではない。
+// `{` は brace / end の言語ではブロックかリテラルの開きなので、中の行を文として数える
+// (コールバックの本体など)。インデントの言語(Python)の `{` は辞書・集合の括弧で、中に文は無い
+const BRACKET_PAIRS = new Map([
+  ["(", ")"],
+  ["[", "]"],
+  ["{", "}"],
+]);
+
+// 括弧を追う言語の blockStyle(markBracketContinuations)
+const BRACKET_TRACKED_STYLES = ["brace", "indent"];
+
+// 括弧を数える前に除く、1 行の中で閉じた文字列リテラル
+const QUOTED_LITERAL = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/g;
+
+// 行頭に並ぶ閉じの括弧(`)` `})` `]);` の先頭など)
+const LEADING_CLOSERS = /^[)\]}]*/;
+
 // メンバーの並び(型・クラスのフィールド、リテラルの要素)を囲む見出し。中の行は手順の文ではない
 const CONTAINER_KEYWORDS = [
   "interface",
@@ -130,8 +148,15 @@ function classifyLines(source, language) {
     }
 
     if (stringDelimiter !== null) {
-      if (countOccurrences(text, stringDelimiter) % 2 === 1) stringDelimiter = null;
-      return { ...line, kind: "string" };
+      const delimiter = stringDelimiter;
+
+      if (countOccurrences(text, delimiter) % 2 === 0) return { ...line, kind: "string" };
+
+      // 文字列を閉じた行の残り(`` `).then(() => { `` の `).then(() => {`)。括弧の追跡が読む
+      const afterString = text.slice(text.lastIndexOf(delimiter) + delimiter.length).trim();
+
+      stringDelimiter = null;
+      return { ...line, kind: "string", afterString };
     }
 
     if (trimmed === "") return { ...line, kind: "blank" };
@@ -335,8 +360,10 @@ function countStatementsAt(lines, from, to, indent) {
 
 // 空行なしで MAX_RUN_STATEMENTS 文以上続く箇所
 function findLongRuns(lines, language) {
-  return splitRuns(lines).flatMap(({ start, end }) => {
-    const count = countRunStatements(lines, start, end, language);
+  const marked = markBracketContinuations(lines, language);
+
+  return splitRuns(marked).flatMap(({ start, end }) => {
+    const count = countRunStatements(marked, start, end, language);
 
     if (count < MAX_RUN_STATEMENTS) return [];
 
@@ -344,6 +371,109 @@ function findLongRuns(lines, language) {
 
     return [issue("long-run", start, end, message)];
   });
+}
+
+// code の各行に continued(開いたまま閉じていない括弧の中の行か)を付ける。`and` `or` で始まる
+// Python の条件の続きや、括弧の中で連結する文字列の行は、前の行の記号だけでは続きと分からないため。
+// 整形後のコードでは、括弧の中身は開いた行より深く、閉じの行は開いた行の深さ以下に戻る。そこで、
+// 行頭の閉じを処理した後に、その行より浅い行で開いた括弧だけを囲みとみなす。行を読み終えた後は、
+// 前の行でその行と同じ深さ以上で開き、まだ閉じていない括弧を捨てる。正規表現リテラルなどの括弧で
+// 対応が崩れても、開いた行の深さに戻った所で読み直せる。複数行の文字列を閉じた行は、閉じの後ろ
+// (`` `); `` の `);`)だけを読む。`end` の言語(シェル・Ruby・Lua)は括弧の中に
+// `function() ... end` の本体(文の並び)を置けるので、括弧を追わない
+function markBracketContinuations(lines, language) {
+  if (!BRACKET_TRACKED_STYLES.includes(language.blockStyle)) return lines;
+
+  let open = [];
+
+  return lines.map((line, index) => {
+    const code = line.kind === "code" ? line.trimmed : line.afterString;
+
+    if (code === undefined) return line;
+
+    const read = readBrackets(code, open, { indent: line.indent, line: index }, language);
+
+    open = read.open;
+
+    return line.kind === "code" ? { ...line, continued: read.continued } : line;
+  });
+}
+
+// 1 行(code)の括弧を読み、{ continued, open } を返す。continued はその行が囲みの括弧の中か、
+// open は次の行へ渡す開きの並び。opener はその行の深さ indent と行番号 line
+function readBrackets(code, open, opener, language) {
+  const text = bracketText(code, language);
+  const [leading] = LEADING_CLOSERS.exec(text);
+  const afterLeading = closeLeading(leading, open, opener.indent);
+  const innermost = afterLeading.filter((bracket) => bracket.indent < opener.indent).at(-1);
+  const continued =
+    innermost !== undefined && (language.blockStyle === "indent" || innermost.char !== "{");
+
+  const scanned = scanBrackets(text.slice(leading.length), afterLeading, opener);
+  const settled = settleBlockHeader(scanned, code, opener, language);
+
+  const carried = settled.filter(
+    (bracket) => bracket.line === opener.line || bracket.indent < opener.indent,
+  );
+
+  return { continued, open: carried };
+}
+
+// 文字列リテラルと行末のコメントを除いた、括弧を数える部分
+function bracketText(trimmed, language) {
+  const code = trimmed.replace(QUOTED_LITERAL, "");
+  const cuts = language.comments.line.map((marker) => code.indexOf(marker)).filter((i) => i >= 0);
+
+  return cuts.length === 0 ? code : code.slice(0, Math.min(...cuts));
+}
+
+// 行頭の閉じで開きを外す。外せるのは、まずその行の深さ以上で開いた直近の開き。Prettier が
+// `as Array<{` の中身を開いた行と同じ深さに置き、閉じ `}>;` を浅い行に置くと、`{` は中身の行で
+// 捨て済みで、行頭の `}` が外側のブロックの `{` を外してしまうため。`)` `]` は、それが無ければ
+// 浅い行の開きも外す(手書きで本体と同じ深さに置いた条件の閉じ `) {`)
+function closeLeading(leading, open, indent) {
+  return [...leading].reduce((stack, char) => {
+    const closed = closeBracket(stack, char, indent);
+
+    return closed !== stack || char === "}" ? closed : closeBracket(stack, char, 0);
+  }, open);
+}
+
+// text の括弧を open(開いたままの括弧の並び。下ほど浅い行で開いた)に積み、閉じで開きを外した並びを
+// 返す。開きは opener を記録する。行の途中の閉じ(`|| b) {`)は、開いた行の深さを問わない
+function scanBrackets(text, open, opener) {
+  return [...text].reduce((stack, char) => {
+    if (BRACKET_PAIRS.has(char)) return [...stack, { char, ...opener }];
+
+    return closeBracket(stack, char, 0);
+  }, open);
+}
+
+// closableFrom 以上の深さで開いた直近の同じ種類の開きを、間に残った開き(対応が崩れたもの)ごと外す。
+// 外せる開きが無い(閉じでない文字を含む)時は、stack をそのまま返す
+function closeBracket(stack, char, closableFrom) {
+  const match = stack.findLastIndex(
+    (bracket) => BRACKET_PAIRS.get(bracket.char) === char && bracket.indent >= closableFrom,
+  );
+
+  return match === -1 ? stack : stack.slice(0, match);
+}
+
+// ブロックの見出しの行(brace の言語で `{` で終わる行、Python で `:` で終わる行)の後には本体の文が
+// 続く。正規表現の `//` をコメントと読んで行末の `{` を切り落とした時などに、見出しの行で開いたまま
+// 残った括弧を捨て、brace の言語ではブロックの `{` を積む
+function settleBlockHeader(stack, code, opener, language) {
+  const isIndent = language.blockStyle === "indent";
+
+  if (!code.endsWith(isIndent ? ":" : "{")) return stack;
+
+  const top = stack.at(-1);
+
+  if (!isIndent && top?.char === "{" && top.line === opener.line) return stack;
+
+  const kept = stack.filter((bracket) => bracket.line !== opener.line);
+
+  return isIndent ? kept : [...kept, { char: "{", ...opener }];
 }
 
 function splitRuns(lines) {
@@ -376,7 +506,8 @@ function countRunStatements(lines, start, end, language) {
 
     const isGuard = SINGLE_LINE_GUARD.test(line.trimmed);
 
-    const counts = isStatement(line, previous, language) && !isMember(lines, i, language);
+    const counts =
+      !line.continued && isStatement(line, previous, language) && !isMember(lines, i, language);
 
     if (counts && !(isGuard && previousWasGuard)) count++;
 

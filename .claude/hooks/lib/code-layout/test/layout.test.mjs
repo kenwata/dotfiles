@@ -393,3 +393,190 @@ test("glued-block: `export default {` はリテラルの開きとみなす", () 
 
   assert.deepEqual(kinds(source, ts), []);
 });
+
+test("long-run: Python の括弧の中の `and`・`or` で始まる継続行は文として数えない", () => {
+  const clause = (name) => [
+    "        or (",
+    `            values.purpose is Purpose.${name}`,
+    "            and (values.run_id is None or values.question_version is not None)",
+    "        )",
+  ];
+  const assigned = [
+    "def f(values):",
+    "    invalid = (",
+    "        (",
+    "            values.purpose is Purpose.PREJUDGE",
+    "            and (values.run_id is None or values.question_version is not None)",
+    "        )",
+    ...clause("CALIBRATION"),
+    ...clause("REMEASURE"),
+    "    )",
+  ].join("\n");
+  const conditions = Array.from({ length: 10 }, (_, i) => `        or value${i} is None`);
+  const condition = ["def g():", "    if (", "        status is None", ...conditions, "    ):"]
+    .join("\n");
+
+  assert.deepEqual(kinds(assigned, py), []);
+  assert.deepEqual(kinds(`${condition}\n        return None`, py), []);
+});
+
+test("long-run: Python の括弧の中で連結する文字列の行は文として数えない", () => {
+  const source = [
+    "def test_x():",
+    "    response_text = (",
+    ...Array.from({ length: 10 }, (_, i) => `        '{"key${i}":"value${i}",'`),
+    "    )",
+  ].join("\n");
+
+  assert.deepEqual(kinds(source, py), []);
+});
+
+test("long-run: 括弧の中のコールバックの本体(`=> {`)の文は数える", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `    step${i}(item);`);
+  const source = ["items.forEach((item) => {", ...body, "});"].join("\n");
+
+  assert.deepEqual(kinds(source, ts), ["long-run"]);
+});
+
+test("long-run: 対応しない括弧(正規表現リテラル)の後も、同じ深さの文は数える", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `  step${i}();`);
+  const source = ["function f() {", "  const PATTERN = /([([,=]/;", ...body, "}"].join("\n");
+
+  assert.deepEqual(kinds(source, ts), ["long-run"]);
+});
+
+test("long-run: `end` の言語(シェル)は括弧を追わず、`[ $# ... ]` の後の本体の文を数える", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `    step${i} "$1"`);
+  const loop = '  while [ $# -gt 0 ] && [ "${#args[@]}" -lt 9 ]; do';
+  const source = ["f() {", loop, ...body, "  done", "}"].join("\n");
+
+  assert.deepEqual(kinds(source, languageFor("a.sh")), ["long-run"]);
+});
+
+test("long-run: 同じ深さで閉じた内側のクロージャの後も、外側のブロックの文を数える", () => {
+  const tail = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `    step${i}();`);
+  const source = [
+    "function f() {",
+    "  return new Promise((resolve) => {",
+    "    const onAbort = (): void => {",
+    "      resolve();",
+    "    };",
+    ...tail,
+    "  });",
+    "}",
+  ].join("\n");
+
+  assert.deepEqual(kinds(source, ts), ["long-run", "glued-block"]);
+});
+
+test("long-run: 複数行の文字列の閉じ `` `); `` と浅い行の閉じ `}>;` の後も文を数える", () => {
+  const checks = Array.from({ length: 6 }, (_, i) => `    expect(rows[${i}]).toBe(${i});`);
+  const source = [
+    'it("stores rows", () => {',
+    "    database.exec(`",
+    "      INSERT INTO t VALUES (1);",
+    "    `);",
+    "    const rows = database",
+    "      .prepare(`SELECT id FROM t`)",
+    "      .all() as Array<{",
+    "      id: string;",
+    "    }>;",
+    ...checks,
+    "});",
+  ].join("\n");
+
+  assert.deepEqual(kinds(source, ts), ["long-run"]);
+});
+
+test("long-run: Lua の括弧の中の `function() ... end` の本体の文は数える", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `    step${i}()`);
+  const source = ['describe("x", function()', ...body, "end)"].join("\n");
+
+  assert.deepEqual(kinds(source, lua), ["long-run"]);
+});
+
+test("long-run: 深い行の途中で閉じた条件 `|| b) {` の後、ブロックの本体の文を数える", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS - 1 }, (_, i) => `    step${i}();`);
+  const source = [
+    "function f(a, b) {",
+    "  if (typeof a !== 'object'",
+    "    || typeof b !== 'object') {",
+    '    throw new Error("bad");',
+    ...body,
+    "  }",
+    "}",
+  ].join("\n");
+
+  assert.deepEqual(kinds(source, ts), ["long-run"]);
+});
+
+test("long-run: 行頭の閉じに続けて同じ行でリテラルを閉じた `] };` の後も文を数える", () => {
+  const checks = Array.from({ length: MAX_RUN_STATEMENTS - 1 }, (_, i) => `  check(${i});`);
+  const source = [
+    'test("resolves", () => {',
+    "  const catalog = { models: [",
+    '    { slug: "a" },',
+    "  ] };",
+    ...checks,
+    "});",
+  ].join("\n");
+
+  assert.deepEqual(kinds(source, ts), ["long-run"]);
+});
+
+test("long-run: 正規表現の `//` を含むブロックの見出しの後も、本体の文を数える", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `    step${i}();`);
+  const source = ["function f(url) {", "  if (/^https?:\\/\\//.test(url)) {", ...body, "  }", "}"]
+    .join("\n");
+
+  assert.deepEqual(kinds(source, ts), ["long-run"]);
+});
+
+test("long-run: 文字列を閉じた行で開いたブロック `` `).then(() => { `` の本体を数える", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `    step${i}(rows);`);
+  const source = [
+    "function f() {",
+    "  return db.query(`",
+    "    SELECT 1",
+    "  `).then((rows) => {",
+    ...body,
+    "  });",
+    "}",
+  ].join("\n");
+
+  assert.deepEqual(kinds(source, ts), ["long-run"]);
+});
+
+test("long-run: 手書きで本体と同じ深さに置いた条件の閉じ `) {` の後も、本体の文を数える", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `    step${i}();`);
+  const header = ["function f(a, b) {", "  if (", "    a &&", "    b", "    ) {"];
+  const source = [...header, ...body, "  }", "}"].join("\n");
+
+  assert.deepEqual(kinds(source, ts), ["long-run"]);
+});
+
+test("long-run: Python の見出しの行で対応が崩れた括弧は、本体の文を隠さない", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `        step${i}()`);
+  const source = ["def f(x):", '    if x == f"{g("(")}":', ...body].join("\n");
+
+  assert.deepEqual(kinds(source, py), ["long-run"]);
+});
+
+test("long-run: 閉じを読めなかった括弧は、開いた行と同じ深さの行で捨てる", () => {
+  const body = Array.from({ length: MAX_RUN_STATEMENTS }, (_, i) => `        step${i}()`);
+  const source = ["def f():", '    x = foo("""', "        text", '    """)', "    if x:", ...body]
+    .join("\n");
+  const regex = Array.from({ length: MAX_RUN_STATEMENTS - 1 }, (_, i) => `  step${i}();`);
+  const unbalanced = ["function f() {", "  const PATTERN = /\\(/;", ...regex, "}"].join("\n");
+
+  assert.deepEqual(kinds(source, py), ["long-run"]);
+  assert.deepEqual(kinds(unbalanced, ts), ["long-run"]);
+});
+
+test("long-run: `return (` の中の JSX の属性の行は文として数えない", () => {
+  const attributes = Array.from({ length: 9 }, (_, i) => `      data-field${i}={value${i}}`);
+  const element = ["  return (", "    <div", ...attributes, "    />", "  );"];
+  const source = ["function View() {", ...element, "}"].join("\n");
+
+  assert.deepEqual(kinds(source, languageFor("a.tsx")), []);
+});
