@@ -16,9 +16,10 @@ import {
   gate, readRollout, restore, selectRules, takeSnapshot,
   validateResult, normalizeAllow, workspaceErrors,
 } from "../core.mjs";
+import { checkPacketDesignRefs, checkPacketUserVisibleText } from "../packet.mjs";
 import { renderSummary } from "../status.mjs";
 import { timingMetrics } from "../timing.mjs";
-import { readPlan, readWorklog, runsDir, taskDir } from "../worklog.mjs";
+import { normalizeStep, readPlan, readWorklog, runsDir, taskDir } from "../worklog.mjs";
 import { ensureWorktree } from "../worktree.mjs";
 import { ensureStepWorktree } from "../worktree/steps.mjs";
 import { DEFAULT_MAX_PARALLEL, parallelLockErrors } from "../parallel.mjs";
@@ -208,7 +209,17 @@ export async function run(args) {
   if (packetBytes > maxPacket) {
     errors.push(`packet が ${packetBytes} バイトで上限 ${maxPacket} を超える。ステップを小さく切り、意図の層(背景・兄弟タスク・将来計画)を削る`);
   }
-  if (args.packet && packet !== "") errors.push(...checkPacketCrossCheck(packet), ...checkPacketVerify(packet));
+  if (args.packet && packet !== "") {
+    errors.push(...checkPacketCrossCheck(packet), ...checkPacketVerify(packet));
+    if (root && /^T\d+$/.test(task ?? "") && step) {
+      const stepKey = normalizeStep(step);
+      const hasRunForStep = (readWorklog(root, task)?.entries ?? []).some((entry) =>
+        entry.kind === "run" && normalizeStep(entry.step) === stepKey);
+      if (!hasRunForStep) errors.push(...checkPacketUserVisibleText(packet));
+    }
+    errors.push(...checkPacketDesignRefs(packet, (relativePath) =>
+      fs.existsSync(path.join(workspace, relativePath))));
+  }
   errors.push(...workerHomeErrors(home));
   const workspaceProblems = root && args.workspace ? workspaceErrors(root, workspace) : [];
   errors.push(...workspaceProblems);

@@ -8,6 +8,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { canonical, isInside, readTaskScope } from "../../check-task-scope.mjs";
+export { checkPacketCrossCheck, checkPacketVerify, packetVerifyCommands } from "./packet.mjs";
 
 // worker の変更先として許さないパス(状態文書と設計書は監督だけが書く)
 export const FORBIDDEN_FOR_WORKER = ["TODO.md", "HANDOFF.md", "docs/decisions.md", "docs/architecture.md", "docs/design/", "plan.md"];
@@ -265,55 +266,6 @@ export function parsePlan(text) {
     errors.push("ステップが 1 つも無い。1 ステップ 1 行で「- s<番号>: <目的 1 文>」と書く(例: - s1: 恒久の検査を先に書き、失敗を確かめる)");
   }
   return { steps, errors };
-}
-
-// packet の必須の節。監督がステップをまたぐ決定を現物で確かめたかを、worker を起動する前に機械で問う
-// (2026-09-23 の T55 で、確かめていない決定を packet に書いて手戻りを 4 回生んだため。/ruleize)
-const PACKET_CROSS_CHECK_HEADING = "## 横断の確認";
-
-const PACKET_CROSS_CHECK_REASON = `packet に「${PACKET_CROSS_CHECK_HEADING}」節が無いか空。次に当たる項目だけ中身を書き、どれにも当たらなければ「該当なし: <理由1文>」と書く。
-1. packet が関数名・型・値の置き場・戻り値の種類を指定し、それを許可パスの外のファイルが作る・使う → 書く前に作り手と呼び出し元を検索し、「<識別子>: 作り手 <path:行> / 呼び出し元 <path:行>」と、呼び出し元の扱いをどのステップで指示するかを書く。
-2. packet が不具合・遅さの原因を断定している → 根拠(計測の結果、または仮説3つ以上と棄却の理由)を書く。観測から直接読めないなら、先に「測って報告するだけ」のステップを起動する。
-3. 複数ステップが共有する型・データ形式に触れる → 共有の一覧のどれに当たるかを書く。設計書が決めていない大きな共有形式を新たに固める時は、裁量で固めず穴の記録の経路へ戻す。`;
-
-// packet の「## 横断の確認」節を検査する。節が無いか、次の同じ深さの見出しまでが空白だけなら理由を 1 件返す
-export function checkPacketCrossCheck(packet) {
-  const body = packetSection(packet, PACKET_CROSS_CHECK_HEADING);
-  return body?.some((line) => line.trim() !== "") ? [] : [PACKET_CROSS_CHECK_REASON];
-}
-
-// packet の節の本文(見出しの次の行から、次の同じ深さの見出しの前まで)。節が無ければ null
-function packetSection(packet, heading) {
-  const lines = packet.split("\n");
-  const start = lines.findIndex((line) => line.trimEnd() === heading);
-  if (start === -1) return null;
-  const rest = lines.slice(start + 1);
-  const end = rest.findIndex((line) => /^## /.test(line));
-  return end === -1 ? rest : rest.slice(0, end);
-}
-
-// packet の「## 検証」節のコマンド。監督が受け入れ前に `cli.mjs verify` で 1 本ずつ打つ対象になる
-// (2026-09-23、監督が検証コマンドを束ねて打ち、lint と型検査を省いたまま受け入れていたため)。
-// 1 項目 1 コマンドの箇条書きで、バッククォートがあれば最初の囲みの中身、無ければ項目の全文をコマンドとする
-const PACKET_VERIFY_HEADING = "## 検証";
-
-export function packetVerifyCommands(packet) {
-  const body = packetSection(packet, PACKET_VERIFY_HEADING) ?? [];
-  const commands = [];
-  for (const line of body) {
-    const item = /^\s*[-*]\s+(.*\S)\s*$/.exec(line)?.[1];
-    if (!item) continue;
-    const command = (/`([^`]+)`/.exec(item)?.[1] ?? item).trim();
-    if (command) commands.push(command);
-  }
-  return commands;
-}
-
-export function checkPacketVerify(packet) {
-  return packetVerifyCommands(packet).length > 0 ? [] : [
-    `packet に「${PACKET_VERIFY_HEADING}」節が無いか、コマンドの箇条書きが無い。受け入れ前に監督が \`cli.mjs verify\` で 1 本ずつ打つコマンドを、`
-    + "1 項目 1 コマンドで書く(例: - `uv run pytest tests/x -q`)。試験だけでなく、プロジェクト規約が求める lint・型検査も入れる",
-  ];
 }
 
 function gitTopLevel(dir) {

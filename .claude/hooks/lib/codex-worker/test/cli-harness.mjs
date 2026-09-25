@@ -220,7 +220,7 @@ export function setup({ workspace = null } = {}) {
   fs.writeFileSync(path.join(base, "auth.json"), "{}");
   fs.symlinkSync(path.join(base, "auth.json"), path.join(home, "auth.json"));
   const packet = path.join(base, "packet.md");
-  fs.writeFileSync(packet, `## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 許可パス内で閉じる試験用の変更\n\n${VERIFY_SECTION}`);
+  fs.writeFileSync(packet, `## 目的\nimpl を書く\n\n## 利用者に見える文\n該当なし: 許可パス内で閉じる試験用の変更\n\n## 横断の確認\n該当なし: 許可パス内で閉じる試験用の変更\n\n${VERIFY_SECTION}`);
   const tmp = path.join(base, "tmp");
   fs.mkdirSync(tmp);
   const env = {

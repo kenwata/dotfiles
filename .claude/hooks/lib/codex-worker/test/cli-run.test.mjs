@@ -80,7 +80,7 @@ test("起動前の拒否は exit 2 で JSON を出し、worker を起動しな�
     result = t.run(["run", "--root", t.base, "--task", "T7", "--step", "1", "--packet", t.packet, "--allow", "x"]);
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /git のリポジトリではない/);
-    fs.writeFileSync(t.packet, `## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 試験用\n\n${VERIFY_SECTION}`);
+    fs.writeFileSync(t.packet, `## 目的\nimpl を書く\n\n## 利用者に見える文\n該当なし: 試験用\n\n## 横断の確認\n該当なし: 試験用\n\n${VERIFY_SECTION}`);
     result = t.run([...baseArgs(t.root, t.packet), "--model-family", "nova"]);
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /系統 nova/);
@@ -196,6 +196,61 @@ test("verify は sandbox が loopback だけを通すと確かめられない時
     assert.equal(result.code, 2);
     assert.match(result.json.errors.join(), /外部/);
     assert.equal(fs.existsSync(path.join(json.run_dir, "verify.json")), false);
+  } finally { t.cleanup(); }
+});
+
+test("最初の run は利用者に見える文の節が無いか空白なら拒否する", () => {
+  for (const section of ["", "   \n\t", null]) {
+    const t = setup();
+    try {
+      const visibleSection = section === null ? "" : `## 利用者に見える文\n${section}\n\n`;
+      fs.writeFileSync(t.packet, `## 目的\nimpl を書く\n\n${visibleSection}## 横断の確認\n該当なし: 試験用\n\n${VERIFY_SECTION}`);
+      const result = t.run(baseArgs(t.root, t.packet));
+      assert.equal(result.code, 2);
+      assert.match(result.json.errors.join(), /形式.*文体.*記号/);
+      assert.match(result.json.errors.join(), /倣う文: <path:行>/);
+      assert.match(result.json.errors.join(), /該当なし: <理由 1 文>/);
+      assert.equal(t.execEnv(), null, "worker を起動していない");
+    } finally { t.cleanup(); }
+  }
+});
+
+test("最初の run は利用者に見える文の節があれば通る", () => {
+  const t = setup();
+  try {
+    const result = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    assert.equal(result.code, 0, JSON.stringify(result.json));
+  } finally { t.cleanup(); }
+});
+
+test("同じ step の run 記録があれば利用者に見える文の節を要求しない", () => {
+  const t = setup();
+  try {
+    const first = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    assert.equal(first.code, 0, JSON.stringify(first.json));
+    fs.writeFileSync(t.packet, `## 目的\nimpl を書く\n\n## 横断の確認\n該当なし: 試験用\n\n${VERIFY_SECTION}`);
+    const retry = t.run(baseArgs(t.root, t.packet), { FAKE_MODE: "ok" });
+    assert.equal(retry.code, 0, JSON.stringify(retry.json));
+  } finally { t.cleanup(); }
+});
+
+test("完了基準と守る契約の存在しない設計書参照を拒否し、存在する参照と節外の参照は通す", () => {
+  const t = setup({ workspace: "repo" });
+  try {
+    const missing = `## 目的\ndocs/design/outside.md\n\n## 利用者に見える文\n該当なし: 試験用\n\n## 完了の基準\ndocs/design/missing.md\n\n## 守る契約\ndocs/design/also-missing.md\n\n## 横断の確認\n該当なし: 試験用\n\n${VERIFY_SECTION}`;
+    fs.writeFileSync(t.packet, missing);
+    let result = t.run([...baseArgs(t.root, t.packet), "--workspace", t.ws]);
+    assert.equal(result.code, 2);
+    assert.match(result.json.errors.join(), /docs\/design\/missing\.md/);
+    assert.match(result.json.errors.join(), /docs\/design\/also-missing\.md/);
+    assert.doesNotMatch(result.json.errors.join(), /docs\/design\/outside\.md/);
+
+    fs.mkdirSync(path.join(t.ws, "docs/design"), { recursive: true });
+    fs.writeFileSync(path.join(t.ws, "docs/design/present.md"), "design\n");
+    fs.writeFileSync(t.packet, missing.replace("docs/design/missing.md", "docs/design/present.md")
+      .replace("docs/design/also-missing.md", "docs/design/present.md"));
+    result = t.run([...baseArgs(t.root, t.packet), "--workspace", t.ws], { FAKE_MODE: "ok" });
+    assert.equal(result.code, 0, JSON.stringify(result.json));
   } finally { t.cleanup(); }
 });
 
