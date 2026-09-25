@@ -214,8 +214,12 @@ test("規約は許可パスに当てはまるものと paths の無いものだ�
 test("プロンプトは契約・許可パス・packet・規約の順に組み立てる", () => {
   const prompt = buildPrompt({
     contract: "CONTRACT", allow: ["src/a/"], packet: "## 目的\nPACKET", rules: [{ file: ".claude/rules/t.md", text: "RULE" }],
+    sizeCheck: { cli: "/runner/cli.mjs", runDir: "/runs/run-1" },
   });
-  const order = ["CONTRACT", "- `src/a/`", "PACKET", "### .claude/rules/t.md", "RULE"].map((s) => prompt.indexOf(s));
+  const order = [
+    "CONTRACT", "- `src/a/`", "## 終える前の機械検査", "PACKET",
+    "### .claude/rules/t.md", "RULE",
+  ].map((s) => prompt.indexOf(s));
   assert.ok(order.every((i, n) => i >= 0 && (n === 0 || i > order[n - 1])), prompt);
 });
 

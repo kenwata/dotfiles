@@ -22,6 +22,7 @@ import { readPlan, readWorklog, runsDir, taskDir } from "../worklog.mjs";
 import { ensureWorktree } from "../worktree.mjs";
 import { ensureStepWorktree } from "../worktree/steps.mjs";
 import { DEFAULT_MAX_PARALLEL, parallelLockErrors } from "../parallel.mjs";
+import { sizeCheckRun } from "./size-check.mjs";
 import {
   emit, recordWorklog, runWorkspace, statusWriter, stepLabel,
 } from "../output.mjs";
@@ -144,6 +145,9 @@ export async function run(args) {
   const maxPacket = Number(args["max-packet"] ?? DEFAULTS.maxPacket);
   const maxAllow = Number(args["max-allow"] ?? DEFAULTS.maxAllow);
   const peakThreshold = Number(args["peak-threshold"] ?? DEFAULTS.peakThreshold);
+  const maxFileLines = args["max-file-lines"] === undefined
+    ? undefined
+    : Number(args["max-file-lines"]);
 
   const parallel = Boolean(args.parallel);
   const maxParallel = Number(args["max-parallel"] ?? DEFAULT_MAX_PARALLEL);
@@ -192,6 +196,9 @@ export async function run(args) {
   if (!root) errors.push(`git のリポジトリではない: ${requestedRoot}`);
   if (!validTask) errors.push("--task は T<n>");
   if (!step) errors.push("--step が無い");
+  if (maxFileLines !== undefined && (!Number.isInteger(maxFileLines) || maxFileLines <= 0)) {
+    errors.push("--max-file-lines は正の整数");
+  }
   if (!args.packet) errors.push("--packet が無い");
   let packet = "";
   if (args.packet) {
@@ -258,7 +265,13 @@ export async function run(args) {
   const ruleRoots = [...new Set([workspace, gitRoot(workspace) ?? workspace, root])];
   const { rules, conservative } = selectRules(workspace, allow, ruleRoots);
   const contract = fs.readFileSync(path.join(here, "worker-contract.md"), "utf8");
-  const prompt = buildPrompt({ contract, allow, packet, rules });
+  const prompt = buildPrompt({
+    contract, allow, packet, rules,
+    sizeCheck: {
+      cli: path.join(here, "cli.mjs"), runDir,
+      ...(maxFileLines === undefined ? {} : { maxFileLines }),
+    },
+  });
   fs.writeFileSync(path.join(runDir, "prompt.md"), prompt);
 
   const status = statusWriter(root, task, stepLabel(plan, step));
@@ -367,6 +380,17 @@ export async function run(args) {
     reasons.push(`runner の事後処理で例外(作業ツリーは戻し切れていない可能性がある。restore --run で戻す): ${error.message}`);
   }
 
+  const sizeCheck = sizeCheckRun(
+    runDir,
+    maxFileLines === undefined ? {} : { maxFileLines },
+  );
+  const sizeCheckWarnings = "errors" in sizeCheck
+    ? [`size-check を実行できない: ${sizeCheck.errors.join("; ")}`]
+    : [...sizeCheck.violations, ...sizeCheck.warnings].map((finding) =>
+      `ファイルが ${sizeCheck.max_file_lines} 行を超えた: ${finding.path}(${finding.lines} 行、snapshot 時 ${
+        finding.snapshot_lines === null ? "新規" : finding.snapshot_lines
+      })`);
+
   const report = {
     run_id: id,
     run_dir: runDir,
@@ -378,6 +402,7 @@ export async function run(args) {
     model_family: resolved.family ?? null,
     accepted: reasons.length === 0,
     reasons,
+    size_check: "errors" in sizeCheck ? { ok: false, errors: sizeCheck.errors } : sizeCheck,
     warnings: [
       ...allowCheck.warnings,
       ...(conservative ? ["許可パスに中身の無いディレクトリがあり、paths 付きの規約も全部付けた"] : []),
@@ -386,6 +411,7 @@ export async function run(args) {
         ? [`.gitignore 対象のファイルが変わった(違反にも復元もしていない): ${
           checked.ignoredFiles.join(", ")}`]
         : []),
+      ...sizeCheckWarnings,
     ],
     slice_too_large: context.peakRatio !== null && context.peakRatio > peakThreshold,
     worker: result,

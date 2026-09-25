@@ -532,7 +532,8 @@ export function selectRules(root, allow, ruleRoots = [root]) {
   return { rules, conservative };
 }
 
-// worker に渡すプロンプト: 固定の契約 → 許可パス(runner が --allow から生成)→ 監督の packet → 規約の全文
+// worker に渡すプロンプト: 固定の契約 → 許可パス(runner が --allow から生成) →
+// run 固有の機械検査 → 監督の packet → 規約の全文
 //
 // 文脈の取捨の意図: 「意図」の層(設計の背景・理由、兄弟タスク、将来計画)は worker に渡さない。与えるほど
 // worker は構想を先回りして完成させようとし、範囲の外へ実装を広げる(2026-09-22 の T43 は設計の意図を読んだ上で
@@ -541,8 +542,27 @@ export function selectRules(root, allow, ruleRoots = [root]) {
 // 担うので、許可パスに当てはまるものを監督の判断に依らず runner が全文で付ける(worker が読み飛ばせないように)。
 // packet には、そのステップが満たす契約(シグネチャ・形式)と完了の基準の該当項目だけを逐語で入れる
 // (正は ~/.claude/templates/codex-worker.md)。
-export function buildPrompt({ contract, allow, packet, rules }) {
-  const parts = [contract.trim(), "## 変更してよいパス\n" + allow.map((a) => `- \`${a}\``).join("\n"), packet.trim()];
+/**
+ * Build the worker prompt in contract, path, check, packet, and rules order.
+ * The options provide the prompt sections and required run-specific size-check details.
+ * @param {{ contract: string, allow: string[], packet: string,
+ *   rules: { file: string, text: string }[],
+ *   sizeCheck: { cli: string, runDir: string, maxFileLines?: number } }} options
+ * @returns {string} The complete worker prompt, including its run-specific size check.
+ */
+export function buildPrompt({ contract, allow, packet, rules, sizeCheck }) {
+  /** @param {string} value @returns {string} POSIX single-quoted shell argument. */
+  const quoteForShell = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+  const sizeCheckCommand = [
+    `- \`node ${quoteForShell(sizeCheck.cli)} size-check --run ${quoteForShell(sizeCheck.runDir)}`,
+    ...(sizeCheck.maxFileLines === undefined ? [] : [`--max-file-lines ${sizeCheck.maxFileLines}`]),
+  ].join(" ") + "`";
+  const parts = [
+    contract.trim(),
+    "## 変更してよいパス\n" + allow.map((a) => `- \`${a}\``).join("\n"),
+    `## 終える前の機械検査\n${sizeCheckCommand}`,
+    packet.trim(),
+  ];
   if (rules.length > 0) {
     parts.push("## 適用される規約\n\n" + rules.map((r) => `### ${r.file}\n\n${r.text}`).join("\n\n"));
   }

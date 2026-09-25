@@ -76,6 +76,7 @@ export function renderSummary(report) {
   const worker = report.worker;
   const tests = worker?.tests_run ?? [];
   const failedTests = tests.filter((t) => t.exit_code !== 0).length;
+  const sizeCheckFailed = report.size_check?.ok === false;
   const parts = [
     report.accepted ? "accepted" : "rejected",
     `worker=${worker?.status ?? "none"}`,
@@ -89,8 +90,11 @@ export function renderSummary(report) {
       `  timing: check=${report.metrics.check_s}s`,
       `other=${report.metrics.other_command_s}s`,
       `model=${report.metrics.model_s}s`,
+      ...(sizeCheckFailed ? ["size=NG"] : []),
     ].join(" ");
     lines.push(timing);
+  } else if (sizeCheckFailed) {
+    lines[0] += " size=NG";
   }
   if (!report.accepted && report.reasons?.length) lines.push(`  reason: ${clip(report.reasons[0], 160)}`);
   return lines.join("\n");

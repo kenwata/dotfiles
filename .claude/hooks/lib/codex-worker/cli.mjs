@@ -14,6 +14,7 @@
 //        [--workspace <リポジトリ>] [--worktree [--parallel [--max-parallel <件数>]]]
 //        [--model-family <luna|terra|sol ...> | --model <モデル ID>] [--timeout <秒>]
 //        [--max-packet <バイト>] [--max-allow <件数>] [--peak-threshold <0〜1>]
+//        [--max-file-lines <n>]
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs integrate --root <root> --task T<n>
 //   node ~/.claude/hooks/lib/codex-worker/cli.mjs integrate-step --root <root> --task T<n>
 //        --step <番号>

@@ -127,6 +127,9 @@ if (mode === "step-file") {
 console.log(JSON.stringify({ type: "item.started", item: { type: "command_execution", command: "/bin/zsh -lc 'npm test'" } }));
 console.log(JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "/bin/zsh -lc 'npm test'", exit_code: 0 } }));
 fs.writeFileSync(path.join(root, "src/a/impl.ts"), "impl\\n");
+if (process.env.FAKE_LINES) {
+  fs.writeFileSync(path.join(root, "src/a/impl.ts"), "line\\n".repeat(Number(process.env.FAKE_LINES)));
+}
 console.log(JSON.stringify({ type: "item.completed", item: { type: "file_change", changes: [{ path: path.join(root, "src/a/impl.ts"), kind: "add" }] } }));
 if (mode === "violate") fs.writeFileSync(path.join(root, "other/y.ts"), "changed by worker\\n");
 if (mode === "outside") {

@@ -102,3 +102,31 @@ test("check_s が null の summary は timing を出さず従来の出力を保�
 
   assert.equal(renderSummary(report), "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s");
 });
+
+test("size_check の違反は timing 行の末尾に size=NG を出す", () => {
+  const report = {
+    metrics: { check_s: 1.5, other_command_s: 2, model_s: 3 },
+    size_check: { ok: false },
+  };
+
+  assert.equal(
+    renderSummary(report),
+    "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s\n" +
+      "  timing: check=1.5s other=2s model=3s size=NG",
+  );
+});
+
+test("size_check の違反は timing 行が無ければ finished 行の末尾に出す", () => {
+  const report = { size_check: { ok: false } };
+
+  assert.equal(
+    renderSummary(report),
+    "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s size=NG",
+  );
+});
+
+test("警告だけの size_check は summary に size=NG を出さない", () => {
+  const report = { size_check: { ok: true, warnings: ["warning"] } };
+
+  assert.equal(renderSummary(report), "finished: rejected worker=none changed=0 tests(申告)=0/0 ok ?s");
+});
