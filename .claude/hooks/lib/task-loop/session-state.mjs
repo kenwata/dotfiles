@@ -17,13 +17,19 @@
 //     入れないのは、PostToolUse で並行に走る予算停止の hook と読み書きが競合し、互いの書き込みを消すため
 //     (2026-09-24 のレビューで、並行 40 回のうち budget が 21 回・turn が 10 回消えることを確認)。このファイルは
 //     loop-turn だけが丸ごと置き換える
+//   worktrees/<basename>-<rootKey>/T<n>  レーンごとの worktree。rootKey は canonical root の
+//     SHA-1 先頭 8 桁
+//   runs/<basename>-<rootKey>-<YYYYMMDDTHHmmss>.json  レーン実行の計測記録
 //
 // 閾値は ${XDG_CONFIG_HOME:-~/.config}/claude-task-loop/config.json(無ければ既定値)。動いているセッションに
 // 環境変数は届かないので、恒常の設定はファイルだけで持つ。CONTEXT_BUDGET_STAGE1/2 は試験用の上書き。
+// config.json の lanes は正の整数のレーン数。無い・無効なら直列実行(既定値は DEFAULT_CONFIG に置かない)
 
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { canonical } from "../../check-task-scope.mjs";
 
 export const SWEEP_AGE_MS = 48 * 60 * 60 * 1000;
 // 既定の閾値の根拠(2026-09-23 の実測): Claude(1M 窓)は compact なしで 83% まで到達した例があり、1 ターンの
@@ -130,12 +136,83 @@ export function configFile() {
   return path.join(base, "claude-task-loop", "config.json");
 }
 
+/**
+ * ルートディレクトリの実パスから、配置先の識別に使うキーを作る。
+ * @param {string} root 主ルート
+ * @returns {string} canonical な実パスの SHA-1(hex)先頭 8 桁
+ */
+export function rootKey(root) {
+  return rootIdentity(root).key;
+}
+
+/** 2 種類のレーン用パスで共用する basename と key を返す。
+ * @param {string} root 主ルート
+ * @returns {{ basename: string, key: string }} 実パスのディレクトリ名と SHA-1 の先頭 8 桁
+ */
+function rootIdentity(root) {
+  const realRoot = canonical(path.resolve(root));
+
+  return {
+    basename: path.basename(realRoot),
+    key: createHash("sha1").update(realRoot).digest("hex").slice(0, 8),
+  };
+}
+
+/**
+ * タスクの worktree の置き場を返す。ファイルシステムは変更しない。
+ * @param {string} root 主ルート
+ * @param {string} task T<n> 形式のタスク ID
+ * @returns {string} loop 状態ディレクトリ内の worktree パス
+ * @throws {RangeError} task が T<n> 形式でない場合
+ */
+export function laneWorktreePath(root, task) {
+  if (typeof task !== "string" || !/^T\d+$/.test(task)) {
+    throw new RangeError(`Invalid task: ${task}`);
+  }
+
+  const { basename, key } = rootIdentity(root);
+
+  return path.join(loopStateDir(), "worktrees", `${basename}-${key}`, task);
+}
+
+/**
+ * 開始時刻とルートに対応する計測記録の置き場を返す。
+ * ファイルシステムは変更しない。
+ * @param {string} root 主ルート
+ * @param {number} startedAt エポックからの開始時刻(ミリ秒)
+ * @returns {string} loop 状態ディレクトリ内の JSON 記録パス
+ * @throws {RangeError} startedAt が有限の数でない場合
+ */
+export function runRecordPath(root, startedAt) {
+  if (typeof startedAt !== "number" || !Number.isFinite(startedAt)) {
+    throw new RangeError(`Invalid startedAt: ${startedAt}`);
+  }
+
+  const date = new Date(startedAt);
+  const pad = (value) => String(value).padStart(2, "0");
+  const timestamp = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`
+    + `T${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+  const { basename, key } = rootIdentity(root);
+
+  return path.join(
+    loopStateDir(),
+    "runs",
+    `${basename}-${key}-${timestamp}.json`,
+  );
+}
+
 export function readConfig() {
   const file = readJson(configFile()) ?? {};
+  const lanesValue = file.lanes;
+  const lanes = typeof lanesValue === "number" || typeof lanesValue === "string"
+    ? Number(lanesValue)
+    : NaN;
+
   return {
     claude: { ...DEFAULT_CONFIG.claude, ...(file.claude ?? {}) },
     codex: { ...DEFAULT_CONFIG.codex, ...(file.codex ?? {}) },
     retry_max: Number(file.retry_max ?? DEFAULT_CONFIG.retry_max),
+    lanes: Number.isInteger(lanes) && lanes > 0 ? lanes : null,
   };
 }
 
