@@ -19,6 +19,7 @@
 | 規約配置の一般原則 | `rules/growing-docs.md`「Placement of durable rules」 | 本書 §10(再発ミス時のルーティングに限定) |
 | ディレクトリ配置規約 | `rules/coding-principles.md` §13 | `skeletons/architecture.md` 冒頭コメント(ポインタのみ・転記しない) |
 | plan mode 粒度の判定基準(計画粒度 / タスク粒度) | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用 |
+| 新しい施策の経路(直接実装 / 委譲) | 本書 §6「新しい施策の経路」 | `skeletons/CLAUDE.project.md` セッション運用・`commands/elaborate.md`(実行時機の原則) |
 | タスク実行・軽量終了・総点検の三層 | `skeletons/todo.md` §0 | 本書 §6・`skeletons/CLAUDE.project.md` セッション運用・`commands/execute-task.md`・`commands/follow-up.md` |
 | 変更の三段分類(参照の訂正 / 部分改訂 / 再計画)と経路 | 本書 §6「変更の三段分類」 | `skeletons/todo.md` 冒頭コメント「書き換え」と §0・`skeletons/CLAUDE.project.md` セッション運用・`skeletons/handoff.md`(穴の記録の書式)・`skeletons/design.md`(更新の分岐)・`commands/{execute-task,amend,elaborate,breakdown,follow-up}.md`・`model-routing.md`・`README.md`(ライフサイクル)・Codex同名skill・`.codex/AGENTS.md` |
 | タスク状態の値域(`[ ]` / `[x]` / `[-]`)・未着手タスクの書き換え・由来タグ | `skeletons/todo.md` 冒頭コメント | 本書 §6・`rules/growing-docs.md`・`skeletons/CLAUDE.project.md` セッション運用・`commands/{execute-task,amend,breakdown,follow-up}.md`(`follow-up` 機械チェック⑧は検査のため規則を逐語で参照する)・`README.md`・Codex同名skill・`.codex/AGENTS.md` |
@@ -363,6 +364,21 @@ TODO.md の実体(§0 の文言・タスクID規約を含む)は `skeletons/todo
 - **追加の歯止め**: `/amend` の 1 回の実行で追加できるタスクは 3 件まで。超えるなら利用者に
   「続行 / スコープ削減 / 廃止」を選ばせる。後から足したタスクは完了条件ブロックの `[由来: …]`
   タグで数えられる
+
+### 新しい施策の経路(直接実装 / 委譲)
+
+計画粒度の新しい施策(既存のどの `T<n>` の完了条件にも収まらないもの)は、大きさで経路を分ける(本節が正)。
+
+- **直接実装**: 監督が 1 セッションで設計・実装・テスト・コミットまで書き切れる大きさ(目安: 変更するファイル
+  10 本前後、テストを含めて AI で数時間以内)。手順: 利用者にしか決められない要点だけを 1 回確認 → テストを先に
+  書く → 実装 → コミット → `docs/decisions.md` に 1 行 → 設計書を実装から書き起こす(冒頭に「実装の後に書き起こした」
+  と書く)。索引と `plan.md` の該当フェーズに状態の行を足す
+- **委譲**: 複数のセッションにまたがる作業、無人で回す作業(task-loop)、1 セッションで閉じない大きさの作業。
+  手順: `/elaborate` → `/breakdown` → `/execute-task`(Codex worker への委譲)
+- 経路は監督が大きさで判断し、着手前に経路と理由を 1 文で利用者に伝える。直接実装の途中で 1 セッションで閉じないと
+  分かったら、そこまでの成果をコミットし、残りを設計書に書き起こして `/breakdown` へ回す
+- 理由: 委譲の手続きが元を取るのは、別のセッションが記録だけを頼りに続ける時である(2026-09-25 のあるプロジェクトでは、
+  約 18.5 時間のうち worker の実装は 5.1 時間だった)
 
 ### 上下流の分業と自走できるタスク記述
 
